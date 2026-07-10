@@ -1,4 +1,7 @@
-//! Interfaces required by application use cases.
-//!
-//! Ports are added only when a concrete use case needs them. D0 avoids empty
-//! abstractions for future Git, AI, GitHub, or Codex integrations.
+//! Persistence interfaces required by ForgeOS application use cases.
+
+mod repositories;
+
+pub use repositories::{
+    ProjectKernelRepository, ProjectRepository, RepositoryError, WorkspaceRepository,
+};

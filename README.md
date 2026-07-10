@@ -20,18 +20,19 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 
 ## 当前阶段
 
-当前处于 **D0：工程基础初始化**。
+当前处于 **D1.1：Project Identity Kernel**。
 
 本阶段只负责：
 
-- 建立 React、TypeScript、Vite 前端基础
-- 建立 Tauri 2 桌面壳
-- 建立 Rust 模块边界
-- 验证 SQLite 连接与迁移
-- 建立工程文档和开发记录
-- 验证 Windows 构建链路
+- 初始化单用户本地 Workspace
+- 创建、查看和更新软件项目身份
+- 管理 Project 状态与研发生命周期阶段
+- 通过 Dashboard、Projects 和 Project Overview 查看项目
+- 使用乐观并发版本保护正式 Project 事实
+- 软归档 Project，并保留只读项目身份
 
-本阶段不实现业务页面、AI、Git/GitHub、Codex MCP 或任务系统。
+本阶段不实现 Current Snapshot、Development Session、Decision、Problem、Evidence、AI、
+Git/GitHub、Codex Context Pack、Search、Timeline 或任务系统。
 
 ## 技术栈
 
@@ -54,7 +55,8 @@ ForgeOS
 │  ├─ database-design.md
 │  ├─ development-log.md
 │  └─ adr
-│     └─ ADR-001-tauri-rust-sqlite.md
+│     ├─ ADR-001-tauri-rust-sqlite.md
+│     └─ ADR-002-project-identity-model.md
 ├─ frontend
 ├─ src-tauri
 ├─ database
@@ -131,22 +133,25 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 ## 数据库
 
-D0 只创建：
+D1.1 使用两个业务表：
 
 - `workspaces`
 - `projects`
 
-数据库迁移位于 `database/migrations`。当前不创建 Snapshot、Session、Decision、Problem、Evidence 等业务表。
+数据库迁移位于 `database/migrations`。`0002_project_identity_kernel.sql` 在不修改
+D0 Migration 的前提下完善 Project 身份、产品上下文、技术信息、状态、生命周期、
+优先级与版本字段。当前不创建 Snapshot、Session、Decision、Problem 或 Evidence 表。
 
 ## 文档
 
 - `docs/product-design.md`：冻结后的产品边界
 - `docs/architecture.md`：总体架构和模块职责
-- `docs/database-design.md`：D0 数据库设计
+- `docs/database-design.md`：D1.1 数据库设计
 - `docs/development-guide.md`：开发与 Git 规范
 - `docs/adr`：架构决策记录
 - `docs/development-log.md`：项目开发日志
 
 ## 项目状态
 
-ForgeOS 尚处于工程基础阶段，不应用于正式项目数据管理。
+ForgeOS 已可在本地管理 Workspace、Project 身份和生命周期，并通过乐观并发保护正式事实。
+Current Snapshot、Development Session 及其他后续领域仍需按阶段实现、冻结和验收。

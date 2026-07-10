@@ -113,3 +113,65 @@ D0.5：工程收尾与冻结验收
 等待用户确认 D0.5 冻结结果。
 
 确认前不提交 Git，不进入 D1，不实现 Project、Current Snapshot 或其他业务功能。
+
+## 2026-07-10 — ForgeOS D1.1 Project Identity Kernel
+
+### 当前阶段
+
+D1.1：Project Identity Kernel 完成与冻结验收
+
+### 目标
+
+让 ForgeOS 首次具备管理真实软件项目的能力，建立单 Workspace 下稳定、隔离、
+可持久化的 Project 身份与生命周期内核，同时保持在 Project Overview 边界内。
+
+### 完成内容
+
+- 新增前向 Migration `0002_project_identity_kernel.sql`，未修改 D0 Migration。
+- 通过重建 `projects` 表补齐产品信息、技术信息、状态、生命周期、优先级和
+  乐观并发版本，并保留已有 D0 数据。
+- 为 Workspace 增加数据库级单例保护，为 Project 保留外键、Workspace 内
+  不区分大小写的 Slug 唯一约束和列表查询索引。
+- 实现 Workspace、Project Entity，以及状态、生命周期、Slug、优先级、归档、
+  版本与时间单调性规则。
+- 实现 Workspace 获取/创建，以及 Project 创建、列表、详情、更新和归档用例。
+- 实现 Repository Ports、SQLite Repository、`ProjectKernel` Application Service
+  和 Bootstrap 依赖组装。
+- 新增 7 个 camelCase 类型安全 Tauri Commands；IPC 只调用 Application Service，
+  不直接访问 SQLite。
+- 实现单 Workspace 首次初始化、Dashboard、Projects 和 Project Overview 页面。
+- 实现专用软归档入口；普通更新不能归档，归档后的 Project 在 D1.1 中只读。
+- 实现版本冲突保护与重新载入入口，避免陈旧页面静默覆盖正式事实。
+- 新增 `react-router-dom`、`async-trait`、`chrono`、`uuid` 和测试依赖
+  `tempfile`。
+- 更新数据库设计文档并新增 `ADR-002-project-identity-model.md`。
+- 更新 README 的当前阶段、现有能力和数据库范围说明。
+- 未实现 Current Snapshot、Development Session、Decision、Problem、Evidence、
+  AI、Codex、Git、GitHub、Search 或 Timeline。
+- 未执行 Git commit 或 push。
+
+### 验证结果
+
+- `npm run typecheck`：通过。
+- `npm run build`：通过，Vite 转换 36 个模块。
+- `cargo fmt --check`：通过。
+- `cargo check`：通过。
+- `cargo test`：6 个单元/迁移测试和 1 个集成测试通过，0 个失败。
+- D0 → D1.1 Migration：旧 Project 保留，空描述与新增字段默认值回填通过。
+- 集成测试：CodeLens-Pro、ForgeOS、测试项目均创建成功，列表、详情、更新、
+  版本冲突、归档、归档只读和数据库重开持久化全部通过。
+- 实际 Tauri 桌面验收：成功创建 1 个 Workspace 和上述 3 个 Project。
+- 实际页面更新：CodeLens-Pro 更新为 `active / implementation / priority 90 / v2`。
+- 实际页面归档：测试项目更新为 `archived / v2`，表单进入只读状态。
+- Tauri 完整重启后：Dashboard 仍显示 3 个项目，其中 Active 2、Archived 1。
+- 验收数据库：`integrity_check = ok`，`foreign_key_check` 无错误，2 个 Migration
+  均成功。
+- 验收数据位于被 Git 忽略的 `.data/d11-acceptance-live`，未写入生产默认数据目录。
+- 验收结束后，ForgeOS、Cargo、Vite、WebView2 子进程均已关闭，端口 1420 和
+  9333 已释放。
+
+### 下一步计划
+
+等待用户确认 D1.1 Project Identity Kernel 的实现与冻结结果。
+
+确认前不提交 Git，不进入 Current Snapshot 或任何后续领域开发。

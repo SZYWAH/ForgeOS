@@ -1,4 +1,13 @@
 //! ForgeOS domain model and invariants.
 //!
-//! This module intentionally has no dependency on Tauri, SQLx, the file system,
-//! or AI providers. D0 does not introduce business aggregates yet.
+//! This module has no dependency on Tauri, SQLx, the file system, or external
+//! integrations. Workspace and Project identity rules live here so every
+//! delivery surface observes the same invariants.
+
+mod error;
+mod project;
+mod workspace;
+
+pub use error::DomainError;
+pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
+pub use workspace::Workspace;

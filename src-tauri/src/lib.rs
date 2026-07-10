@@ -13,11 +13,21 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let database = bootstrap::initialize(app.handle())?;
-            app.manage(database);
+            let state = bootstrap::initialize(app.handle())?;
+            app.manage(state.database);
+            app.manage(state.project_kernel);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![ipc::health::get_system_status])
+        .invoke_handler(tauri::generate_handler![
+            ipc::health::get_system_status,
+            ipc::workspaces::get_current_workspace,
+            ipc::workspaces::create_workspace,
+            ipc::projects::create_project,
+            ipc::projects::list_projects,
+            ipc::projects::get_project,
+            ipc::projects::update_project,
+            ipc::projects::archive_project,
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run ForgeOS");
 }

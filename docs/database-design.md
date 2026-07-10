@@ -2,87 +2,147 @@
 
 ## 当前范围
 
-D0 数据库仅用于验证：
+D1.1 数据库承载 ForgeOS 的 Project Identity Kernel，包含：
 
-- SQLite 连接
-- Migration 执行
-- Rust 数据访问
-- Workspace 与 Project 的最小归属关系
+- 单用户的唯一 `Workspace`
+- 归属于该 Workspace 的多个 `Project`
 
-当前只建立：
-
-- `workspaces`
-- `projects`
-
-不创建 Snapshot、Session、Decision、Problem、Evidence、AI、Git 或 Codex 表。
+本阶段不创建 Current Snapshot、Development Session、Decision、Problem、Evidence、AI、
+Git、GitHub、Codex Context Pack、Search 或 Timeline 相关表。
 
 ## 技术选择
 
 - 数据库：SQLite
-- 访问层：Rust
+- 访问层：Rust + SQLx
 - Migration：由应用启动流程执行
-- 前端访问：禁止
+- 前端访问：禁止，React 必须通过类型化 Tauri IPC 调用 Rust
 - Migration 源文件：`database/migrations`
-- 运行时数据库：默认位于 Tauri 应用数据目录，也可通过
-  `FORGEOS_DATA_DIR` 指定；D0 验证使用被 Git 忽略的 `.data/forgeos.db`
+- 运行时数据库：默认位于 Tauri 应用数据目录，也可通过 `FORGEOS_DATA_DIR` 指定；本地验证可使用被 Git 忽略的 `.data/forgeos.db`
 
 ## 通用约定
 
 - 表名和列名使用 `snake_case`
-- ID 使用 `TEXT`
-- ID 由 Rust 生成
+- ID 使用 `TEXT`，由 Rust 生成
 - 时间使用 UTC RFC 3339 文本
-- 开启外键约束
-- 使用参数化查询
-- Migration 只向前追加
+- SQLite 连接开启外键约束
+- 所有查询使用参数化 SQL
+- Migration 只向前追加，已经应用的 Migration 不得修改
 - 开发数据库和 Migration 源文件必须分离
-- SQLite 文件不提交到 Git
+- SQLite 数据库及 WAL/SHM 文件不提交到 Git
+- 删除与归档是不同语义；Project 归档通过状态变更完成，不删除记录
 
 ## `workspaces`
 
-表示 ForgeOS 的顶层单用户工作空间。
+表示 ForgeOS 当前的顶层工作空间。
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `id` | TEXT | PRIMARY KEY | Workspace ID |
 | `name` | TEXT | NOT NULL | Workspace 名称 |
-| `timezone` | TEXT | NOT NULL | 显示时区 |
+| `timezone` | TEXT | NOT NULL | 用户显示时区 |
 | `created_at` | TEXT | NOT NULL | UTC 创建时间 |
 | `updated_at` | TEXT | NOT NULL | UTC 更新时间 |
 
-D0 不实现多用户或 Workspace 权限。
+### Workspace 规则
+
+- D1.1 只支持单个 Workspace，不实现多用户、Workspace 切换或权限。
+- `name` 和 `timezone` 必须是去除首尾空白后的非空文本。
+- 创建 Workspace 时，应用用例先检查当前 Workspace；已存在时拒绝再次创建。
+- 数据库通过唯一常量表达式索引提供第二层单例保护，避免并发请求插入第二条 Workspace。
+- Workspace 已被 Project 引用时不得静默删除；D1.1 不提供删除 Workspace 的用例。
 
 ## `projects`
 
-表示受 ForgeOS 管理的软件项目身份。
+Project 表示 ForgeOS 管理的软件项目身份，也是后续研发记录的归属边界。
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `id` | TEXT | PRIMARY KEY | Project ID |
 | `workspace_id` | TEXT | NOT NULL, FOREIGN KEY | 所属 Workspace |
-| `slug` | TEXT | NOT NULL | Workspace 内稳定标识 |
+| `slug` | TEXT | NOT NULL | Workspace 内稳定的机器可读标识 |
 | `name` | TEXT | NOT NULL | 项目名称 |
-| `description` | TEXT | NULL | 简短描述 |
+| `description` | TEXT | NOT NULL | 项目简短描述 |
+| `vision` | TEXT | NOT NULL | 项目长期愿景 |
+| `target_user` | TEXT | NOT NULL | 目标用户 |
+| `scope` | TEXT | NOT NULL | 当前产品范围 |
+| `non_goals` | TEXT | NOT NULL | 明确排除的目标 |
+| `tech_stack` | TEXT | NOT NULL | 技术栈说明 |
+| `status` | TEXT | NOT NULL, CHECK | 项目生命周期状态 |
+| `lifecycle_stage` | TEXT | NOT NULL, CHECK | 当前研发阶段 |
+| `priority` | INTEGER | NOT NULL, CHECK | Workspace 内的相对优先级，范围 `0..100` |
 | `created_at` | TEXT | NOT NULL | UTC 创建时间 |
 | `updated_at` | TEXT | NOT NULL | UTC 更新时间 |
+| `version` | INTEGER | NOT NULL, CHECK | 从 `1` 开始的乐观并发版本号 |
 
-约束：
+### Project 状态枚举
 
-- `workspace_id` 引用 `workspaces.id`
-- `workspace_id + slug` 唯一
-- 删除 Workspace 时不得静默丢失 Project
-- D0 不实现 Project 业务页面和完整状态机
+`status` 只允许：
+
+- `idea`
+- `planned`
+- `active`
+- `paused`
+- `maintenance`
+- `archived`
+
+`lifecycle_stage` 只允许：
+
+- `discovery`
+- `definition`
+- `design`
+- `implementation`
+- `validation`
+- `release`
+- `operation`
+- `retrospective`
+
+枚举值同时由 Domain 类型和数据库 `CHECK` 约束保护。数据库约束负责阻止非法持久化，具体业务校验由 Domain 负责。
+
+### Project 约束与索引
+
+- `workspace_id` 引用 `workspaces.id`。
+- 删除 Workspace 时采用 `RESTRICT` 语义，避免静默丢失 Project。
+- `workspace_id + slug` 使用不区分大小写的唯一索引；不同 Workspace 的同名 slug 为未来扩展保留语义，但 D1.1 仍只有一个 Workspace。
+- `slug` 由小写 ASCII 字母、数字和连字符组成，长度为 `2..64`，由 Domain 校验。
+- `name` 必须是去除首尾空白后的非空文本。
+- `priority` 取值 `0..100`，默认值为 `50`。
+- `version` 初始值为 `1`；每次成功更新或归档后递增。
+- 为 `workspace_id + updated_at` 建立列表查询索引，支持 Dashboard 和 Projects 页面按最近更新时间读取。
+- 为 `workspace_id + status` 建立状态过滤索引，为后续受控查询扩展保留基础。
+
+### 更新与归档
+
+Project 更新使用乐观并发控制：
+
+```text
+读取 Project(version = N)
+→ 用户提交更新并携带 expected_version = N
+→ UPDATE ... WHERE id = ? AND version = N
+→ 成功时 version = N + 1
+→ 未更新任何行时返回并发冲突，不覆盖较新的事实
+```
+
+归档是将 `status` 改为 `archived` 的专用用例，同样检查预期版本并递增 `version`。普通更新用例不接受目标状态 `archived`，已归档 Project 也不能通过普通更新继续编辑。归档不会删除 Project，也不会破坏未来研发记录的归属与审计链。
 
 ## Migration 设计
 
-首个 Migration 负责：
+### `0001_create_workspaces_and_projects.sql`
 
-1. 创建 `workspaces`
-2. 创建 `projects`
-3. 创建必要唯一索引
-4. 创建 Project 外键
+D0 Migration，负责创建 Workspace、Project 的最小表结构和初始外键关系。该文件保持不变。
 
-Migration 文件是数据库结构的执行事实源，本文件负责解释设计意图。
+### `0002_project_identity_kernel.sql`
+
+D1.1 通过新的向前 Migration：
+
+1. 为 Workspace 增加数据库级单例约束。
+2. 重建并完善 Project 表，增加产品信息、技术信息、状态、优先级和版本字段。
+3. 为 Project 状态、生命周期、优先级和版本增加约束。
+4. 保留 `workspace_id` 外键和 Workspace 内 slug 唯一约束。
+5. 增加列表查询与状态查询所需索引。
+6. 将已有 D0 Project 行迁移到 D1.1 默认值，不丢弃既有数据。
+
+Migration 文件是数据库结构的执行事实源。后续结构变化必须增加新 Migration，
+不得回写 `0001` 或 `0002`。
 
 ## 启动流程
 
@@ -91,42 +151,34 @@ Migration 文件是数据库结构的执行事实源，本文件负责解释设�
 → 创建父目录
 → 打开 SQLite
 → 开启 foreign_keys
-→ 设置连接超时
+→ 设置连接超时与 WAL
 → 执行未应用 Migration
 → 查询数据库健康状态
-→ 返回启动结果
+→ 组装 Repository 与 Application Service
+→ 注册 Tauri Commands
 ```
 
-D0 的 Rust 访问验证可以读取：
+Migration 失败时应用必须报告明确错误，不得继续以正常状态运行。
 
-- 当前 Migration 状态
-- Workspace 数量
-- Project 数量
+## 数据访问与事务规则
 
-不应为了验证连接自动插入虚假业务数据。
-
-## 事务规则
-
-D0 的 Migration 在启动阶段执行。
-
-后续业务写入必须满足：
-
-- 相关记录在同一事务中提交
-- 网络、AI、大文件复制不得发生在数据库事务内
-- 失败时必须完整回滚
-- UI 不管理事务
+- React 不直接读写 SQLite，也不在 `localStorage` 保存正式 Project 事实。
+- IPC 不执行 SQL，写入必须经过 Application 用例、Domain 校验和 Repository 端口。
+- Repository 负责 SQLx 查询、行映射和持久化错误转换。
+- 相关写入失败时必须完整回滚。
+- 网络、AI 和大文件复制不得发生在数据库事务内。
+- D1.1 测试数据仅由测试或人工验收流程创建，不在生产启动时自动插入。
 
 ## 后续演进
 
-以下概念已在产品设计中冻结，但不在 D0 建表：
+以下概念已冻结，但不在 D1.1 建表：
 
-- Project Snapshot
+- Current Snapshot
 - Development Session
 - Decision
 - Problem 与 Investigation Attempt
 - Evidence
-- Record Revision
-- Activity Event
 - Context Export
 
-它们应在进入相应开发阶段时通过新 Migration 增加，不提前创建空表。
+它们必须在对应阶段通过新的 Migration 增加，并以 `project_id` 建立清晰归属。
+D1.1 不提前创建空表，也不实现通用 Task 数据模型。
