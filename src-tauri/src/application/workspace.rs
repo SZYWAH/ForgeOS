@@ -2,7 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
-    domain::Workspace,
+    domain::{DomainError, Workspace},
     ports::{RepositoryError, WorkspaceRepository},
 };
 
@@ -67,6 +67,9 @@ pub(crate) fn map_read_error(error: RepositoryError) -> ApplicationError {
     match error {
         RepositoryError::CorruptData(message) => ApplicationError::CorruptData(message),
         RepositoryError::Storage(message) => ApplicationError::Storage(message),
+        RepositoryError::ProjectArchived => {
+            ApplicationError::Validation(DomainError::ArchivedProjectCannotAcceptSnapshots)
+        }
         RepositoryError::Conflict | RepositoryError::OptimisticConflict => {
             ApplicationError::Storage(error.to_string())
         }

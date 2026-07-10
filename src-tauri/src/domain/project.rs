@@ -281,6 +281,12 @@ impl Project {
         }
     }
 
+    pub fn ensure_accepts_snapshot_changes(&self) -> Result<(), DomainError> {
+        if self.status == ProjectStatus::Archived {
+            return Err(DomainError::ArchivedProjectCannotAcceptSnapshots);
+        }
+        Ok(())
+    }
 }
 
 fn validate_slug(value: String) -> Result<String, DomainError> {
@@ -393,6 +399,10 @@ mod tests {
         assert!(project.archive(now));
         assert_eq!(project.status, ProjectStatus::Archived);
         assert_eq!(project.version, 2);
+        assert_eq!(
+            project.ensure_accepts_snapshot_changes(),
+            Err(DomainError::ArchivedProjectCannotAcceptSnapshots)
+        );
         assert_eq!(
             project.update(ProjectUpdate(details(ProjectStatus::Active)), now),
             Err(DomainError::ArchivedProjectCannotBeEdited)

@@ -3,6 +3,7 @@
 mod error;
 mod kernel;
 pub mod project;
+pub mod snapshot;
 pub mod workspace;
 
 pub use error::ApplicationError;

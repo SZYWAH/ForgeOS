@@ -1,7 +1,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Project, Workspace};
+use crate::domain::{Project, ProjectSnapshot, Workspace};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,6 +145,67 @@ impl From<Project> for ProjectSummaryDto {
             priority: project.priority,
             updated_at: timestamp(project.updated_at),
             version: project.version,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSnapshotRequest {
+    pub current_goal: String,
+    pub status_summary: String,
+    #[serde(default)]
+    pub achievements: Vec<String>,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub next_steps: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSnapshotRequest {
+    pub current_goal: String,
+    pub status_summary: String,
+    #[serde(default)]
+    pub achievements: Vec<String>,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub next_steps: Vec<String>,
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSnapshotDto {
+    pub id: String,
+    pub project_id: String,
+    pub version: i64,
+    pub current_goal: String,
+    pub status_summary: String,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+    pub confirmed_at: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<ProjectSnapshot> for ProjectSnapshotDto {
+    fn from(snapshot: ProjectSnapshot) -> Self {
+        Self {
+            id: snapshot.id().to_owned(),
+            project_id: snapshot.project_id().to_owned(),
+            version: snapshot.version(),
+            current_goal: snapshot.current_goal().to_owned(),
+            status_summary: snapshot.status_summary().to_owned(),
+            achievements: snapshot.achievements().to_vec(),
+            blockers: snapshot.blockers().to_vec(),
+            next_steps: snapshot.next_steps().to_vec(),
+            confirmed_at: timestamp(snapshot.confirmed_at()),
+            created_at: timestamp(snapshot.created_at()),
+            updated_at: timestamp(snapshot.updated_at()),
         }
     }
 }

@@ -33,4 +33,22 @@ pub enum DomainError {
 
     #[error("an archived project cannot be edited")]
     ArchivedProjectCannotBeEdited,
+
+    #[error("an archived project cannot accept Snapshot changes")]
+    ArchivedProjectCannotAcceptSnapshots,
+
+    #[error("Snapshot version must be at least 1")]
+    InvalidSnapshotVersion,
+
+    #[error("Snapshot timestamps are not chronologically valid")]
+    InvalidSnapshotTimestamps,
+
+    #[error("a Snapshot cannot be versioned for a different Project")]
+    SnapshotProjectMismatch,
+
+    #[error("Snapshot version cannot be incremented")]
+    SnapshotVersionOverflow,
+
+    #[error("next steps must contain at most {max} items")]
+    TooManyNextSteps { max: usize },
 }

@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { Link, useParams } from "react-router-dom";
+import { CurrentSnapshotCard } from "../components/CurrentSnapshotCard";
 import {
   getErrorCode,
   getErrorMessage,
@@ -207,6 +208,11 @@ export function ProjectOverviewPage() {
         </button>
       </header>
 
+      <CurrentSnapshotCard
+        archived={isArchived}
+        projectId={project.id}
+        projectName={project.name}
+      />
 
 
       <form className="project-form overview-form" onSubmit={handleSave}>

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::{Project, Workspace};
+use crate::domain::{Project, ProjectSnapshot, Workspace};
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -10,6 +10,9 @@ pub enum RepositoryError {
 
     #[error("the record changed after it was read")]
     OptimisticConflict,
+
+    #[error("the Project is archived and cannot accept Snapshot changes")]
+    ProjectArchived,
 
     #[error("persisted ForgeOS data is invalid: {0}")]
     CorruptData(String),
@@ -43,6 +46,27 @@ pub trait ProjectRepository: Send + Sync {
     ) -> Result<(), RepositoryError>;
 }
 
-pub trait ProjectKernelRepository: WorkspaceRepository + ProjectRepository {}
+#[async_trait]
+pub trait SnapshotRepository: Send + Sync {
+    async fn insert_snapshot(&self, snapshot: &ProjectSnapshot) -> Result<(), RepositoryError>;
 
-impl<T> ProjectKernelRepository for T where T: WorkspaceRepository + ProjectRepository {}
+    async fn get_current_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, RepositoryError>;
+
+    async fn list_snapshot_history(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectSnapshot>, RepositoryError>;
+}
+
+pub trait ProjectKernelRepository:
+    WorkspaceRepository + ProjectRepository + SnapshotRepository
+{
+}
+
+impl<T> ProjectKernelRepository for T where
+    T: WorkspaceRepository + ProjectRepository + SnapshotRepository
+{
+}

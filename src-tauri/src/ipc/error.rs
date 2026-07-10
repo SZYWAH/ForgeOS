@@ -19,6 +19,11 @@ impl From<ApplicationError> for IpcError {
             ApplicationError::ProjectNotFound => ("project_not_found", false),
             ApplicationError::ProjectSlugConflict => ("project_slug_conflict", false),
             ApplicationError::VersionConflict { .. } => ("version_conflict", false),
+            ApplicationError::SnapshotAlreadyExists => ("snapshot_already_exists", false),
+            ApplicationError::SnapshotNotFound => ("snapshot_not_found", false),
+            ApplicationError::SnapshotVersionConflict { .. } => {
+                ("snapshot_version_conflict", false)
+            }
             ApplicationError::CorruptData(_) => ("corrupt_data", false),
             ApplicationError::Storage(_) => ("storage_error", true),
         };
@@ -45,6 +50,7 @@ fn validation_code(error: &DomainError) -> &'static str {
     match error {
         DomainError::ArchiveRequiresDedicatedOperation => "archive_requires_dedicated_operation",
         DomainError::ArchivedProjectCannotBeEdited => "archived_project_read_only",
+        DomainError::ArchivedProjectCannotAcceptSnapshots => "archived_project_read_only",
         _ => "validation_error",
     }
 }

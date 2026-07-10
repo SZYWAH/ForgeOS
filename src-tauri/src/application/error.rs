@@ -22,6 +22,15 @@ pub enum ApplicationError {
     #[error("project version conflict: expected {expected}, current {actual}")]
     VersionConflict { expected: i64, actual: i64 },
 
+    #[error("this Project already has a Current Snapshot; update it to create a new version")]
+    SnapshotAlreadyExists,
+
+    #[error("Current Snapshot not found")]
+    SnapshotNotFound,
+
+    #[error("Snapshot version conflict: expected {expected}, current {actual}")]
+    SnapshotVersionConflict { expected: i64, actual: i64 },
+
     #[error("stored ForgeOS data is invalid: {0}")]
     CorruptData(String),
 

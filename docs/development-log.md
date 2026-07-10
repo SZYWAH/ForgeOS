@@ -175,3 +175,68 @@ D1.1：Project Identity Kernel 完成与冻结验收
 等待用户确认 D1.1 Project Identity Kernel 的实现与冻结结果。
 
 确认前不提交 Git，不进入 Current Snapshot 或任何后续领域开发。
+
+## 2026-07-10 — ForgeOS D1.2 Current Snapshot Kernel
+
+### 当前阶段
+
+D1.2：Current Snapshot Kernel 完成与冻结验收
+
+### 目标
+
+让 ForgeOS 能够回答“这个项目现在真实处于什么状态”，通过人工确认的当前目标、
+状态总结、成果、阻塞、最多三个下一步和确认时间，支持暂停项目后快速恢复上下文。
+
+### 完成内容
+
+- 新增前向 Migration `0003_current_snapshot.sql`，未修改 `0001` 或 `0002`。
+- 新增 `project_snapshots` 表、Project 外键、`project_id + version` 唯一约束、
+  JSON 列表校验和历史查询索引。
+- 实现不可原地更新的 `ProjectSnapshot` Entity；首次创建 v1，后续修改只追加
+  vN+1，Current 由 Project 内最高版本确定。
+- 实现 `current_goal`、`status_summary`、`achievements`、`blockers`、
+  `next_steps`、确认时间、项目归属、时间单调和最多三个下一步规则。
+- 实现 Snapshot Repository Port、SQLite 只追加 Repository、Application Use Cases
+  和 `expectedVersion` 并发保护。
+- 新增 `create_snapshot`、`get_current_snapshot`、`get_snapshot_history` 和
+  `update_snapshot` 四个 camelCase 类型安全 Tauri Commands。
+- Project Overview 首屏增加 Current Snapshot Card，优先展示项目当前可信状态。
+- 新增人工 Snapshot 编辑与历史页面，支持创建、追加版本、倒序查看完整历史、
+  冲突后重新载入和归档项目只读。
+- 路由切换时清空 Project 范围状态，避免短暂显示其他项目的 Snapshot。
+- 更新 README、数据库设计文档并新增
+  `ADR-003-current-snapshot-versioning.md`。
+- 未实现 Development Session、AI 生成/总结、Git/GitHub、Codex Context Pack、
+  Timeline、Evidence 或 Task 系统。
+- 未执行 Git commit 或 push。
+
+### 验证结果
+
+- `npm run typecheck`：通过。
+- `npm run build`：通过，Vite 转换 39 个模块。
+- `cargo fmt --check`：通过。
+- `cargo check`：通过。
+- `cargo test`：10 个领域/迁移测试、1 个 D1.2 集成测试和 1 个 D1.1 回归测试
+  全部通过，0 个失败。
+- D1.1 → D1.2 Migration：已有 Project 保留，Snapshot 表初始化成功；JSON、版本
+  唯一和 Project 外键约束验证通过。
+- 集成测试：三个项目的 Snapshot 创建、Current、历史、并发冲突、Next Steps
+  上限、项目归属、归档只读和数据库重开持久化全部通过。
+- 实际 Tauri 桌面验收：CodeLens-Pro、ForgeOS、测试项目均成功创建 v1 Snapshot。
+- 实际版本验收：CodeLens-Pro 追加 v2；History 同时保留 v2 和 v1，Current 为 v2。
+- Project Overview 首屏正确显示 CodeLens-Pro v2 的目标、状态、成果、阻塞、
+  三个下一步和最后确认时间。
+- Next Steps 输入第 4 项时，界面显示 `4/3` 并禁用保存。
+- Tauri 完整重启后：三个项目的 Current Snapshot 与 CodeLens-Pro 两个历史版本
+  均保持不变。
+- 验收数据库：`integrity_check = ok`、`foreign_key_check = 0`、3 个 Migration、
+  1 个 Workspace、3 个 Project、4 条 Snapshot 记录。
+- 验收数据位于被 Git 忽略的 `.data/d12-acceptance-live`，未写入生产默认数据目录。
+- 验收结束后，ForgeOS、Cargo、Vite、WebView2 子进程均已关闭，端口 1420 和
+  9334 已释放。
+
+### 下一步计划
+
+等待用户确认 D1.2 Current Snapshot Kernel 的实现与冻结结果。
+
+确认前不提交 Git，不进入 Development Session 或任何后续领域开发。

@@ -13,7 +13,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
           <span className="brand-mark">F</span>
           <div>
             <strong>ForgeOS</strong>
-            <span>D1.1 Project Kernel</span>
+            <span>D1.2 Snapshot Kernel</span>
           </div>
         </div>
 
@@ -34,7 +34,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
       <div className="app-main">
         <header className="topbar">
           <span>Personal Engineering Workspace</span>
-          <span className="kernel-state">Project Kernel · Local</span>
+          <span className="kernel-state">Project + Snapshot Kernels · Local</span>
         </header>
         <main className="content">
           <Outlet />

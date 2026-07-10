@@ -3,5 +3,6 @@
 mod repositories;
 
 pub use repositories::{
-    ProjectKernelRepository, ProjectRepository, RepositoryError, WorkspaceRepository,
+    ProjectKernelRepository, ProjectRepository, RepositoryError, SnapshotRepository,
+    WorkspaceRepository,
 };

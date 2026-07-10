@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    domain::{Project, Workspace},
+    domain::{Project, ProjectSnapshot, Workspace},
     ports::ProjectKernelRepository,
 };
 
 use super::{
     project::{self, CreateProjectInput, UpdateProjectInput},
+    snapshot::{self, CreateSnapshotInput, UpdateSnapshotInput},
     workspace::{self, CreateWorkspaceInput},
     ApplicationError,
 };
@@ -63,4 +64,33 @@ impl ProjectKernel {
         project::archive_project(self.repository.as_ref(), project_id, expected_version).await
     }
 
+    pub async fn create_snapshot(
+        &self,
+        project_id: &str,
+        input: CreateSnapshotInput,
+    ) -> Result<ProjectSnapshot, ApplicationError> {
+        snapshot::create_snapshot(self.repository.as_ref(), project_id, input).await
+    }
+
+    pub async fn get_current_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, ApplicationError> {
+        snapshot::get_current_snapshot(self.repository.as_ref(), project_id).await
+    }
+
+    pub async fn get_snapshot_history(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectSnapshot>, ApplicationError> {
+        snapshot::get_snapshot_history(self.repository.as_ref(), project_id).await
+    }
+
+    pub async fn update_snapshot(
+        &self,
+        project_id: &str,
+        input: UpdateSnapshotInput,
+    ) -> Result<ProjectSnapshot, ApplicationError> {
+        snapshot::update_snapshot(self.repository.as_ref(), project_id, input).await
+    }
 }
