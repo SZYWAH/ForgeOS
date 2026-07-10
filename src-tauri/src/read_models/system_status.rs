@@ -21,7 +21,7 @@ pub async fn load(pool: &SqlitePool) -> Result<SystemStatus, sqlx::Error> {
 
     Ok(SystemStatus {
         app_name: "ForgeOS",
-        stage: "D1.2 Current Snapshot Kernel",
+        stage: "D1.3 Development Session Kernel",
         database_connected: true,
         workspace_count,
         project_count,

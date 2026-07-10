@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CurrentSnapshotCard } from "../components/CurrentSnapshotCard";
+import { CurrentSessionCard } from "../components/CurrentSessionCard";
 import {
   getErrorCode,
   getErrorMessage,
@@ -214,6 +215,11 @@ export function ProjectOverviewPage() {
         projectName={project.name}
       />
 
+      <CurrentSessionCard
+        archived={isArchived}
+        projectId={project.id}
+        projectName={project.name}
+      />
 
       <form className="project-form overview-form" onSubmit={handleSave}>
         {isArchived ? (

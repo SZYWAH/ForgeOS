@@ -31,6 +31,12 @@ pub fn run() {
             ipc::snapshots::get_current_snapshot,
             ipc::snapshots::get_snapshot_history,
             ipc::snapshots::update_snapshot,
+            ipc::sessions::start_session,
+            ipc::sessions::get_current_session,
+            ipc::sessions::list_sessions,
+            ipc::sessions::update_session,
+            ipc::sessions::complete_session,
+            ipc::sessions::abandon_session,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run ForgeOS");

@@ -31,6 +31,15 @@ pub enum ApplicationError {
     #[error("Snapshot version conflict: expected {expected}, current {actual}")]
     SnapshotVersionConflict { expected: i64, actual: i64 },
 
+    #[error("this Project already has an open Development Session")]
+    SessionAlreadyOpen,
+
+    #[error("Development Session not found")]
+    SessionNotFound,
+
+    #[error("Development Session version conflict: expected {expected}, current {actual}")]
+    SessionVersionConflict { expected: i64, actual: i64 },
+
     #[error("stored ForgeOS data is invalid: {0}")]
     CorruptData(String),
 

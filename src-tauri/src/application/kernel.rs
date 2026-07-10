@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
 use crate::{
-    domain::{Project, ProjectSnapshot, Workspace},
+    domain::{DevelopmentSession, Project, ProjectSnapshot, Workspace},
     ports::ProjectKernelRepository,
 };
 
 use super::{
     project::{self, CreateProjectInput, UpdateProjectInput},
+    session::{
+        self, AbandonSessionInput, CompleteSessionInput, StartSessionInput, UpdateSessionInput,
+    },
     snapshot::{self, CreateSnapshotInput, UpdateSnapshotInput},
     workspace::{self, CreateWorkspaceInput},
     ApplicationError,
@@ -92,5 +95,54 @@ impl ProjectKernel {
         input: UpdateSnapshotInput,
     ) -> Result<ProjectSnapshot, ApplicationError> {
         snapshot::update_snapshot(self.repository.as_ref(), project_id, input).await
+    }
+
+    pub async fn start_session(
+        &self,
+        project_id: &str,
+        input: StartSessionInput,
+    ) -> Result<DevelopmentSession, ApplicationError> {
+        session::start_session(self.repository.as_ref(), project_id, input).await
+    }
+
+    pub async fn get_current_session(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DevelopmentSession>, ApplicationError> {
+        session::get_current_session(self.repository.as_ref(), project_id).await
+    }
+
+    pub async fn list_sessions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<DevelopmentSession>, ApplicationError> {
+        session::list_sessions(self.repository.as_ref(), project_id).await
+    }
+
+    pub async fn update_session(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        input: UpdateSessionInput,
+    ) -> Result<DevelopmentSession, ApplicationError> {
+        session::update_session(self.repository.as_ref(), project_id, session_id, input).await
+    }
+
+    pub async fn complete_session(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        input: CompleteSessionInput,
+    ) -> Result<DevelopmentSession, ApplicationError> {
+        session::complete_session(self.repository.as_ref(), project_id, session_id, input).await
+    }
+
+    pub async fn abandon_session(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        input: AbandonSessionInput,
+    ) -> Result<DevelopmentSession, ApplicationError> {
+        session::abandon_session(self.repository.as_ref(), project_id, session_id, input).await
     }
 }

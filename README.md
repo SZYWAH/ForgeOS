@@ -20,7 +20,7 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 
 ## 当前阶段
 
-当前处于 **D1.2：Current Snapshot Kernel**。
+当前处于 **D1.3：Development Session Kernel**。
 
 本阶段只负责：
 
@@ -33,8 +33,13 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 - 人工创建和确认 Project 的 Current Snapshot
 - 以只追加版本保留 Snapshot 历史，并阻止陈旧页面静默覆盖
 - 在 Project Overview 优先展示当前目标、状态、成果、阻塞、最多三个下一步和确认时间
+- 开始并维护每个 Project 唯一的 Open Development Session
+- 使用 `open → completed | abandoned` 单向状态机保留研发过程
+- 记录 Goal、Markdown Notes、Outcome、Validation 和 Handoff
+- 使用 `expectedVersion` 保护 Session 并发写入，并将终态 Session 保持只读
+- 在 Project Overview 显示 Current Development Session，并提供 Session History
 
-本阶段不实现 Development Session、Decision、Problem、Evidence、AI、自动总结、
+本阶段不实现 Decision、Problem、Evidence、AI、自动总结、
 Git/GitHub、Codex Context Pack、Search、Timeline 或任务系统。
 
 ## 技术栈
@@ -60,7 +65,8 @@ ForgeOS
 │  └─ adr
 │     ├─ ADR-001-tauri-rust-sqlite.md
 │     ├─ ADR-002-project-identity-model.md
-│     └─ ADR-003-current-snapshot-versioning.md
+│     ├─ ADR-003-current-snapshot-versioning.md
+│     └─ ADR-004-development-session-lifecycle.md
 ├─ frontend
 ├─ src-tauri
 ├─ database
@@ -137,22 +143,25 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 ## 数据库
 
-D1.2 使用三个业务表：
+D1.3 只使用四个业务表：
 
 - `workspaces`
 - `projects`
 - `project_snapshots`
+- `development_sessions`
 
 数据库迁移位于 `database/migrations`。`0002_project_identity_kernel.sql` 在不修改
 D0 Migration 的前提下完善 Project 身份、产品上下文、技术信息、状态、生命周期、
 优先级与版本字段；`0003_current_snapshot.sql` 增加按 Project 隔离、只追加版本的
-Current Snapshot。当前不创建 Session、Decision、Problem、Evidence 等业务表。
+Current Snapshot；`0004_development_session.sql` 增加 Session 状态机、Project 归属、
+单 Open Session 部分唯一索引和历史查询索引。当前不创建 Decision、Problem、
+Evidence、Timeline 或 AI 相关业务表。
 
 ## 文档
 
 - `docs/product-design.md`：冻结后的产品边界
 - `docs/architecture.md`：总体架构和模块职责
-- `docs/database-design.md`：D1.2 数据库设计
+- `docs/database-design.md`：D1.3 数据库设计
 - `docs/development-guide.md`：开发与 Git 规范
 - `docs/adr`：架构决策记录
 - `docs/development-log.md`：项目开发日志
@@ -160,5 +169,6 @@ Current Snapshot。当前不创建 Session、Decision、Problem、Evidence 等�
 ## 项目状态
 
 ForgeOS 已可在本地管理 Project 身份、生命周期和人工确认的 Current Snapshot，
-并保留可追溯的 Snapshot 历史。进入 Development Session 等后续领域前仍需按阶段
-冻结和验收。
+保留可追溯的 Snapshot 历史，并以 Development Session 记录一次研发活动的目标、
+过程、结果、验证和接手信息。进入 Decision、Problem、Evidence、Context Pack 或 AI
+能力前仍需按阶段冻结和验收。

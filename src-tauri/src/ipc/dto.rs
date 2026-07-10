@@ -1,7 +1,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Project, ProjectSnapshot, Workspace};
+use crate::domain::{DevelopmentSession, Project, ProjectSnapshot, Workspace};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -206,6 +206,77 @@ impl From<ProjectSnapshot> for ProjectSnapshotDto {
             confirmed_at: timestamp(snapshot.confirmed_at()),
             created_at: timestamp(snapshot.created_at()),
             updated_at: timestamp(snapshot.updated_at()),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartSessionRequest {
+    pub goal: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSessionRequest {
+    pub goal: String,
+    #[serde(default)]
+    pub notes: String,
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteSessionRequest {
+    pub outcome: String,
+    pub validation: String,
+    #[serde(default)]
+    pub handoff: String,
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AbandonSessionRequest {
+    #[serde(default)]
+    pub handoff: String,
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevelopmentSessionDto {
+    pub id: String,
+    pub project_id: String,
+    pub status: String,
+    pub goal: String,
+    pub notes: String,
+    pub outcome: String,
+    pub validation: String,
+    pub handoff: String,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub version: i64,
+}
+
+impl From<DevelopmentSession> for DevelopmentSessionDto {
+    fn from(session: DevelopmentSession) -> Self {
+        Self {
+            id: session.id().to_owned(),
+            project_id: session.project_id().to_owned(),
+            status: session.status().as_str().to_owned(),
+            goal: session.goal().to_owned(),
+            notes: session.notes().to_owned(),
+            outcome: session.outcome().to_owned(),
+            validation: session.validation().to_owned(),
+            handoff: session.handoff().to_owned(),
+            started_at: timestamp(session.started_at()),
+            completed_at: session.completed_at().map(timestamp),
+            created_at: timestamp(session.created_at()),
+            updated_at: timestamp(session.updated_at()),
+            version: session.version(),
         }
     }
 }

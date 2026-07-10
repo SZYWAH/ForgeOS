@@ -240,3 +240,62 @@ D1.2：Current Snapshot Kernel 完成与冻结验收
 等待用户确认 D1.2 Current Snapshot Kernel 的实现与冻结结果。
 
 确认前不提交 Git，不进入 Development Session 或任何后续领域开发。
+
+## 2026-07-11 — ForgeOS D1.3 Development Session Kernel
+
+### 当前阶段
+
+D1.3：Development Session Kernel 完成与冻结验收
+
+### 目标
+
+让 ForgeOS 能够回答“一次研发活动发生了什么”，以 Project 为归属记录开始目标、
+过程 Notes、结果、验证和下一次接手信息，并使进行中会话与只读历史保持明确边界。
+
+### 完成内容
+
+- 新增前向 Migration `0004_development_session.sql`，未修改 `0001`、`0002` 或 `0003`。
+- 新增 `development_sessions` 表、Project 外键、状态与生命周期约束、历史索引和
+  每 Project 唯一 Open Session 的部分唯一索引。
+- 实现 `DevelopmentSession` 和 `SessionStatus`，并将状态机限定为
+  `open → completed | abandoned`。
+- 实现 Goal 必填、Markdown Notes、版本递增、时间单调、Project 归属和终态不可变规则。
+- Complete 时必须人工确认 Outcome、Validation 和 Handoff；Abandon 时不伪造结果与验证，
+  但必须保留 Handoff。
+- 实现 `start_session`、`get_current_session`、`list_sessions`、`update_session`、
+  `complete_session` 和 `abandon_session` 六个 Application Use Case 与类型化 IPC Command。
+- 所有 Session mutation 都使用 `expectedVersion` 保护；陈旧页面不能覆盖较新内容或终态事实。
+- 已归档 Project 不能开始新 Session 或继续编辑 Goal/Notes；归档前遗留的 Open Session
+  仅允许 Complete 或 Abandon 收尾，避免永久悬空。
+- Project Overview 增加 Current Development Session 区域，展示 Goal、开始时间、Open 状态和版本。
+- 新增 Session 页面，支持 Start、Update、Complete、Abandon、Current Session 和只读 History。
+- 路由切换和所有异步写操作均使用 generation guard，防止迟到响应污染其他 Project 页面。
+- 更新 README 和数据库设计文档，并新增 `ADR-004-development-session-lifecycle.md`。
+- 未实现 AI 总结、自动 Session、Git/GitHub、Commit 关联、Codex Context Pack、Evidence、
+  Timeline 或时间统计。
+- 未执行 Git commit 或 push。
+
+### 验证结果
+
+- `npm run typecheck`：通过。
+- `npm run build`：通过，Vite 转换 42 个模块。
+- `cargo fmt --check`：通过。
+- `cargo check`：通过。
+- `cargo test`：15 个单元/迁移测试和 D1.1、D1.2、D1.3 各 1 个集成测试全部通过，0 失败。
+- D1.3 集成测试覆盖唯一/并发 Open Session、Project 归属、版本冲突、终态不可变、
+  归档写保护、收尾例外和数据库重开持久化。
+- 实际 Tauri 桌面验收：CodeLens-Pro、ForgeOS 和测试项目均成功创建 Session。
+- CodeLens-Pro：Open v1 → 更新 v2 → Completed v3，Outcome、Validation、Handoff 在 History 中完整保留。
+- ForgeOS：Open v1 → Abandoned v2，不伪造 Outcome/Validation，Handoff 完整保留。
+- 测试项目：Open v1 → 更新 v2，保持为唯一 Current Session。
+- Tauri 完整停止并使用同一数据库重启后，上述三种状态、版本、Notes 和收尾字段均保持不变。
+- 验收数据库：`integrity_check = ok`、`foreign_key_check = 0`、4 个 Migration、
+  1 个 Workspace、3 个 Project、3 条 Session 记录；仅测试项目保留 1 条 Open Session。
+- 验收数据位于被 Git 忽略的 `.data/d13-acceptance-live`，未写入生产默认数据目录。
+- 额外 Clippy 检查因本机未安装 `cargo-clippy` 而未执行；未自动安装，且它不属于本阶段规定验收项。
+
+### 下一步计划
+
+等待用户确认 D1.3 Development Session Kernel 的实现与冻结结果。
+
+确认前不提交 Git，不进入 Context Pack、AI 或任何后续领域开发。

@@ -51,4 +51,28 @@ pub enum DomainError {
 
     #[error("next steps must contain at most {max} items")]
     TooManyNextSteps { max: usize },
+
+    #[error("unsupported Development Session status: {0}")]
+    InvalidSessionStatus(String),
+
+    #[error("Development Session version must be at least 1")]
+    InvalidSessionVersion,
+
+    #[error("Development Session timestamps are not chronologically valid")]
+    InvalidSessionTimestamps,
+
+    #[error("stored Development Session fields do not match its lifecycle status")]
+    InvalidSessionLifecycle,
+
+    #[error("a Development Session cannot be used through a different Project")]
+    SessionProjectMismatch,
+
+    #[error("a completed or abandoned Development Session cannot be modified")]
+    TerminalSessionCannotBeModified,
+
+    #[error("Development Session version cannot be incremented")]
+    SessionVersionOverflow,
+
+    #[error("an archived Project cannot start or edit Development Sessions")]
+    ArchivedProjectCannotAcceptSessionChanges,
 }

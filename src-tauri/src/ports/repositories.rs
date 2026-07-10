@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::{Project, ProjectSnapshot, Workspace};
+use crate::domain::{DevelopmentSession, Project, ProjectSnapshot, Workspace};
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -11,7 +11,7 @@ pub enum RepositoryError {
     #[error("the record changed after it was read")]
     OptimisticConflict,
 
-    #[error("the Project is archived and cannot accept Snapshot changes")]
+    #[error("the Project is archived and cannot accept this change")]
     ProjectArchived,
 
     #[error("persisted ForgeOS data is invalid: {0}")]
@@ -61,12 +61,44 @@ pub trait SnapshotRepository: Send + Sync {
     ) -> Result<Vec<ProjectSnapshot>, RepositoryError>;
 }
 
+#[async_trait]
+pub trait SessionRepository: Send + Sync {
+    async fn insert_session(&self, session: &DevelopmentSession) -> Result<(), RepositoryError>;
+
+    async fn get_current_session(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError>;
+
+    async fn list_sessions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<DevelopmentSession>, RepositoryError>;
+
+    async fn get_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError>;
+
+    async fn update_open_session(
+        &self,
+        session: &DevelopmentSession,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+
+    async fn finish_session(
+        &self,
+        session: &DevelopmentSession,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
 pub trait ProjectKernelRepository:
-    WorkspaceRepository + ProjectRepository + SnapshotRepository
+    WorkspaceRepository + ProjectRepository + SnapshotRepository + SessionRepository
 {
 }
 
 impl<T> ProjectKernelRepository for T where
-    T: WorkspaceRepository + ProjectRepository + SnapshotRepository
+    T: WorkspaceRepository + ProjectRepository + SnapshotRepository + SessionRepository
 {
 }

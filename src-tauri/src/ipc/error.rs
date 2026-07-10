@@ -24,6 +24,9 @@ impl From<ApplicationError> for IpcError {
             ApplicationError::SnapshotVersionConflict { .. } => {
                 ("snapshot_version_conflict", false)
             }
+            ApplicationError::SessionAlreadyOpen => ("session_already_open", false),
+            ApplicationError::SessionNotFound => ("session_not_found", false),
+            ApplicationError::SessionVersionConflict { .. } => ("session_version_conflict", false),
             ApplicationError::CorruptData(_) => ("corrupt_data", false),
             ApplicationError::Storage(_) => ("storage_error", true),
         };
@@ -51,6 +54,9 @@ fn validation_code(error: &DomainError) -> &'static str {
         DomainError::ArchiveRequiresDedicatedOperation => "archive_requires_dedicated_operation",
         DomainError::ArchivedProjectCannotBeEdited => "archived_project_read_only",
         DomainError::ArchivedProjectCannotAcceptSnapshots => "archived_project_read_only",
+        DomainError::ArchivedProjectCannotAcceptSessionChanges => "archived_project_read_only",
+        DomainError::TerminalSessionCannotBeModified => "session_terminal_read_only",
+        DomainError::SessionProjectMismatch => "session_project_mismatch",
         _ => "validation_error",
     }
 }

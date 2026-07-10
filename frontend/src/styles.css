@@ -733,6 +733,266 @@ button:disabled {
   font-size: 0.67rem;
 }
 
+.session-card {
+  border-color: #d4dbe5;
+}
+
+.session-card-header,
+.session-editor-header {
+  align-items: flex-start;
+  gap: 20px;
+  background: #fbfcfe;
+}
+
+.session-card-header > div,
+.session-editor-header > div {
+  min-width: 0;
+}
+
+.session-kicker {
+  margin: 0 0 5px !important;
+  color: #526886 !important;
+  font-size: 0.66rem !important;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.session-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.session-card-goal {
+  min-width: 0;
+  padding: 20px;
+}
+
+.session-card-goal > span,
+.session-card-meta dt {
+  color: #707b8a;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.session-card-goal p {
+  margin: 9px 0 0;
+  color: #252d39;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.session-card-meta {
+  display: grid;
+  min-width: 310px;
+  grid-template-columns: repeat(3, auto);
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  border-left: 1px solid #e4e8ee;
+  background: #f8f9fb;
+}
+
+.session-card-meta > div {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding: 16px 18px;
+}
+
+.session-card-meta dd {
+  margin: 0;
+  color: #4f5a69;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.session-empty-state {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 20px;
+}
+
+.session-empty-state strong {
+  color: #333c49;
+  font-size: 0.9rem;
+}
+
+.session-empty-state p {
+  margin: 6px 0 0;
+  color: #778190;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.session-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid #c7d0dc;
+  border-radius: 999px;
+  color: #556173;
+  background: #f5f7fa;
+  font-size: 0.67rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.session-status--open {
+  border-color: #a9c3e4;
+  color: #315f96;
+  background: #f0f5fb;
+}
+
+.session-status--completed {
+  border-color: #a9d2bc;
+  color: #226544;
+  background: #eff9f3;
+}
+
+.session-status--abandoned {
+  border-color: #d9c3a7;
+  color: #775c36;
+  background: #faf6ef;
+}
+
+.sessions-page {
+  padding-bottom: 24px;
+}
+
+.session-page-message {
+  margin: 0;
+}
+
+.session-editor,
+.session-finish-form {
+  gap: 14px;
+}
+
+.session-editor-header h2 {
+  line-height: 1.45;
+}
+
+.session-form-grid textarea {
+  min-height: 104px;
+}
+
+.session-form-grid .session-notes-input {
+  min-height: 230px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.markdown-hint {
+  margin-left: 5px;
+  color: #7a8798;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 500;
+}
+
+.session-inline-actions,
+.session-start-actions {
+  padding: 0 2px;
+}
+
+.session-start-actions {
+  padding: 0 20px 20px;
+}
+
+.session-close-actions .danger-button {
+  min-height: 38px;
+}
+
+.session-history {
+  display: grid;
+}
+
+.session-history-item {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.session-history-item + .session-history-item {
+  border-top: 1px solid #e2e7ed;
+}
+
+.session-history-item > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.session-version {
+  margin-left: 8px;
+  color: #7f8996;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.67rem;
+}
+
+.session-history-times {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 4px;
+  color: #808a98;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.66rem;
+}
+
+.session-history-item h3 {
+  margin: 0 0 8px;
+  color: #596474;
+  font-size: 0.7rem;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.session-history-item p {
+  margin: 0;
+  color: #414c5c;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.session-history-goal p {
+  color: #252d39;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.session-history-field,
+.session-result-grid {
+  padding-top: 16px;
+  border-top: 1px solid #eef0f3;
+}
+
+.session-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.session-handoff-field {
+  padding: 14px;
+  border: 1px solid #e1e6ec;
+  border-radius: 5px;
+  background: #fafbfc;
+}
+
 .snapshot-empty-state {
   display: flex;
   align-items: center;
@@ -1034,7 +1294,10 @@ button:disabled {
 
   .snapshot-card-header,
   .snapshot-editor-header,
-  .snapshot-history-item > header {
+  .snapshot-history-item > header,
+  .session-card-header,
+  .session-editor-header,
+  .session-history-item > header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -1055,5 +1318,33 @@ button:disabled {
   .snapshot-meta {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .session-card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .session-card-meta {
+    min-width: 0;
+    grid-template-columns: 1fr;
+    border-top: 1px solid #e4e8ee;
+    border-left: 0;
+  }
+
+  .session-card-meta > div + div {
+    border-top: 1px solid #e4e8ee;
+  }
+
+  .session-empty-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .session-history-times {
+    align-items: flex-start;
+  }
+
+  .session-result-grid {
+    grid-template-columns: 1fr;
   }
 }

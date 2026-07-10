@@ -6,10 +6,13 @@ use sqlx::{FromRow, SqlitePool};
 
 use crate::{
     domain::{
-        LifecycleStage, Project, ProjectDetails, ProjectSnapshot, ProjectStatus, SnapshotDetails,
-        Workspace,
+        DevelopmentSession, LifecycleStage, Project, ProjectDetails, ProjectSnapshot,
+        ProjectStatus, SessionStatus, SnapshotDetails, Workspace,
     },
-    ports::{ProjectRepository, RepositoryError, SnapshotRepository, WorkspaceRepository},
+    ports::{
+        ProjectRepository, RepositoryError, SessionRepository, SnapshotRepository,
+        WorkspaceRepository,
+    },
 };
 
 #[derive(Clone)]
@@ -135,6 +138,50 @@ impl SnapshotRow {
 
 const SNAPSHOT_COLUMNS: &str = "id, project_id, version, current_goal, status_summary, \
     achievements, blockers, next_steps, confirmed_at, created_at, updated_at";
+
+#[derive(FromRow)]
+struct SessionRow {
+    id: String,
+    project_id: String,
+    status: String,
+    goal: String,
+    notes: String,
+    outcome: String,
+    validation: String,
+    handoff: String,
+    started_at: String,
+    completed_at: Option<String>,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl SessionRow {
+    fn into_domain(self) -> Result<DevelopmentSession, RepositoryError> {
+        DevelopmentSession::restore(
+            self.id,
+            self.project_id,
+            SessionStatus::from_str(&self.status).map_err(corrupt)?,
+            self.goal,
+            self.notes,
+            self.outcome,
+            self.validation,
+            self.handoff,
+            parse_timestamp("development_sessions.started_at", &self.started_at)?,
+            self.completed_at
+                .as_deref()
+                .map(|value| parse_timestamp("development_sessions.completed_at", value))
+                .transpose()?,
+            parse_timestamp("development_sessions.created_at", &self.created_at)?,
+            parse_timestamp("development_sessions.updated_at", &self.updated_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const SESSION_COLUMNS: &str = "id, project_id, status, goal, notes, outcome, validation, \
+    handoff, started_at, completed_at, created_at, updated_at, version";
 
 #[async_trait]
 impl WorkspaceRepository for SqliteProjectRepository {
@@ -330,6 +377,182 @@ impl SnapshotRepository for SqliteProjectRepository {
             .map_err(storage)?;
 
         rows.into_iter().map(SnapshotRow::into_domain).collect()
+    }
+}
+
+#[async_trait]
+impl SessionRepository for SqliteProjectRepository {
+    async fn insert_session(&self, session: &DevelopmentSession) -> Result<(), RepositoryError> {
+        if session.status() != SessionStatus::Open || session.version() != 1 {
+            return Err(RepositoryError::CorruptData(
+                "insert_session requires a new open Development Session".to_owned(),
+            ));
+        }
+
+        let result = sqlx::query(
+            "INSERT INTO development_sessions (id, project_id, status, goal, notes, outcome, \
+             validation, handoff, started_at, completed_at, created_at, updated_at, version) \
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
+             WHERE NOT EXISTS (SELECT 1 FROM projects WHERE id = ? AND status = 'archived')",
+        )
+        .bind(session.id())
+        .bind(session.project_id())
+        .bind(session.status().as_str())
+        .bind(session.goal())
+        .bind(session.notes())
+        .bind(session.outcome())
+        .bind(session.validation())
+        .bind(session.handoff())
+        .bind(timestamp(session.started_at()))
+        .bind(session.completed_at().map(timestamp))
+        .bind(timestamp(session.created_at()))
+        .bind(timestamp(session.updated_at()))
+        .bind(session.version())
+        .bind(session.project_id())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        Ok(())
+    }
+
+    async fn get_current_session(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError> {
+        let query = format!(
+            "SELECT {SESSION_COLUMNS} FROM development_sessions \
+             WHERE project_id = ? AND status = 'open' \
+             ORDER BY started_at DESC, created_at DESC, id DESC LIMIT 1"
+        );
+        let row = sqlx::query_as::<_, SessionRow>(&query)
+            .bind(project_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        row.map(SessionRow::into_domain).transpose()
+    }
+
+    async fn list_sessions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<DevelopmentSession>, RepositoryError> {
+        let query = format!(
+            "SELECT {SESSION_COLUMNS} FROM development_sessions \
+             WHERE project_id = ? \
+             ORDER BY started_at DESC, created_at DESC, id DESC"
+        );
+        let rows = sqlx::query_as::<_, SessionRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        rows.into_iter().map(SessionRow::into_domain).collect()
+    }
+
+    async fn get_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError> {
+        let query = format!("SELECT {SESSION_COLUMNS} FROM development_sessions WHERE id = ?");
+        let row = sqlx::query_as::<_, SessionRow>(&query)
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        row.map(SessionRow::into_domain).transpose()
+    }
+
+    async fn update_open_session(
+        &self,
+        session: &DevelopmentSession,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        if session.status() != SessionStatus::Open || session.completed_at().is_some() {
+            return Err(RepositoryError::CorruptData(
+                "update_open_session requires an open Development Session".to_owned(),
+            ));
+        }
+
+        let result = sqlx::query(
+            "UPDATE development_sessions SET goal = ?, notes = ?, updated_at = ?, version = ? \
+             WHERE id = ? AND project_id = ? AND status = 'open' AND version = ? \
+             AND NOT EXISTS (SELECT 1 FROM projects WHERE id = ? AND status = 'archived')",
+        )
+        .bind(session.goal())
+        .bind(session.notes())
+        .bind(timestamp(session.updated_at()))
+        .bind(session.version())
+        .bind(session.id())
+        .bind(session.project_id())
+        .bind(expected_version)
+        .bind(session.project_id())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+
+        if result.rows_affected() == 1 {
+            return Ok(());
+        }
+        if self.project_is_archived(session.project_id()).await? {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        Err(RepositoryError::OptimisticConflict)
+    }
+
+    async fn finish_session(
+        &self,
+        session: &DevelopmentSession,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        if !session.status().is_terminal() || session.completed_at().is_none() {
+            return Err(RepositoryError::CorruptData(
+                "finish_session requires a terminal Development Session".to_owned(),
+            ));
+        }
+
+        let result = sqlx::query(
+            "UPDATE development_sessions SET status = ?, outcome = ?, validation = ?, \
+             handoff = ?, completed_at = ?, updated_at = ?, version = ? \
+             WHERE id = ? AND project_id = ? AND status = 'open' AND version = ?",
+        )
+        .bind(session.status().as_str())
+        .bind(session.outcome())
+        .bind(session.validation())
+        .bind(session.handoff())
+        .bind(session.completed_at().map(timestamp))
+        .bind(timestamp(session.updated_at()))
+        .bind(session.version())
+        .bind(session.id())
+        .bind(session.project_id())
+        .bind(expected_version)
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+}
+
+impl SqliteProjectRepository {
+    async fn project_is_archived(&self, project_id: &str) -> Result<bool, RepositoryError> {
+        let archived: Option<i64> = sqlx::query_scalar(
+            "SELECT 1 FROM projects WHERE id = ? AND status = 'archived' LIMIT 1",
+        )
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(archived.is_some())
     }
 }
 

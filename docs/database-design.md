@@ -2,15 +2,14 @@
 
 ## 当前范围
 
-D1.2 数据库承载 ForgeOS 的 Project Identity Kernel 与 Current Snapshot Kernel，包含：
+D1.3 数据库承载 ForgeOS 的 Project Identity Kernel、Current Snapshot Kernel 与 Development Session Kernel，包含：
 
 - 单用户的唯一 `Workspace`
 - 归属于该 Workspace 的多个 `Project`
 - 归属于 Project、按版本只追加保存的 `ProjectSnapshot`
+- 归属于 Project、记录一次研发活动及其交接信息的 `DevelopmentSession`
 
-Current Snapshot 只表达“项目现在真实处于什么状态”，不是 Todo、Task、进度百分比或看板。
-本阶段不创建 Development Session、Decision、Problem、Evidence、AI、Git、GitHub、
-Codex Context Pack、Search 或 Timeline 相关表。
+Current Snapshot 只表达“项目现在真实处于什么状态”，Development Session 只表达“一次研发活动发生了什么”。二者都不是 Todo、Task、进度百分比、看板或时间追踪。本阶段不创建 Decision、Problem、Evidence、AI、Git、GitHub、Codex Context Pack、Search 或 Timeline 相关表。
 
 ## 技术选择
 
@@ -180,6 +179,83 @@ Snapshot 更新采用追加版本与乐观并发检查：
 - 为 `project_id + version DESC` 的 Current 与历史读取提供索引能力；具体索引由 Migration 定义，避免扫描其他 Project 的历史。
 - Snapshot 写入只通过 Application 用例执行，并且只能追加 `INSERT`；Repository 不向前端暴露 SQL 或 JSON 存储细节。
 
+## `development_sessions`
+
+DevelopmentSession 是一次有明确开始原因和结束结果的研发活动，是 ForgeOS 记录研发过程的最小单位。它围绕目标、过程、结果、验证与接手信息形成闭环，但不承担任务分解、工时统计或进度管理职责。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Session ID |
+| `project_id` | TEXT | NOT NULL, FOREIGN KEY | 所属 Project |
+| `status` | TEXT | NOT NULL, CHECK | `open`、`completed` 或 `abandoned` |
+| `goal` | TEXT | NOT NULL | 本次研发活动的目标 |
+| `notes` | TEXT | NOT NULL, DEFAULT `''` | 研发过程中的 Markdown 文本 |
+| `outcome` | TEXT | NOT NULL, DEFAULT `''` | 完成时确认的结果 |
+| `validation` | TEXT | NOT NULL, DEFAULT `''` | 完成结果如何被验证 |
+| `handoff` | TEXT | NOT NULL, DEFAULT `''` | 下一次继续开发所需的接手信息 |
+| `started_at` | TEXT | NOT NULL | Session 开始的 UTC 时间 |
+| `completed_at` | TEXT | NULL | 离开 `open` 状态的 UTC 时间；Open 时为空 |
+| `created_at` | TEXT | NOT NULL | 记录创建的 UTC 时间 |
+| `updated_at` | TEXT | NOT NULL | 最近一次合法状态变更的 UTC 时间 |
+| `version` | INTEGER | NOT NULL, CHECK | 从 `1` 开始的乐观并发版本号 |
+
+### Session 生命周期与内容规则
+
+Session 使用单向状态机：
+
+```text
+             ┌─────────── completed
+open ────────┤
+             └─────────── abandoned
+```
+
+- 新建 Session 必须从 `open` 开始；不允许直接创建终态记录。
+- `open` 可以更新目标和过程 Notes，也可以通过专用用例变为 `completed` 或 `abandoned`。
+- `completed` 与 `abandoned` 都是终态：不能重新打开、相互转换或继续修改目标、过程、结果、验证和 Handoff。
+- `completed_at` 表示 Session 离开 `open` 的时间，因此完成和放弃时都必须写入；Open Session 必须保持为空。字段名沿用产品模型，业务语义由状态共同解释。
+- `goal` 去除首尾空白后必须非空，最长 2,000 个字符。`notes` 使用 Markdown 文本保存，不在数据库中解析为任务或其他子实体；Notes 最长 20,000 个字符。
+- Open Session 的 `outcome`、`validation` 与 `handoff` 必须为空，避免在尚未结束时把草稿误认为已确认结果。
+- 完成 Session 时，`outcome`、`validation` 与 `handoff` 去除首尾空白后都必须非空；三个收尾文本字段分别最长 20,000 个字符。
+- 放弃 Session 不声称取得或验证了结果，因此 `outcome` 与 `validation` 必须为空；`handoff` 去除首尾空白后必须非空且最长 20,000 个字符，用于保存再次尝试或转向其他方案时需要知道的上下文。
+- 以上状态内容规则由 Domain 与数据库约束共同保护，React 只提交类型化意图。
+- `project_id` 必须引用真实存在的 `projects.id`；外键使用 `ON UPDATE CASCADE` 与 `ON DELETE RESTRICT`，不得产生孤立 Session 或因删除 Project 静默丢失研发历史。
+- Project 首次开始研发活动前可以没有 Session。Session 历史永久保留，终态记录不会因开始下一次 Session 被覆盖。
+- 已归档 Project 不能开始新 Session，也不能继续编辑既有 Open Session 的 Goal 或 Notes。若 Project 归档前遗留 Open Session，仍允许通过专用用例完成或放弃，以免留下无法收尾的永久 Open 记录。
+- Session 不包含 Task、截止日期、负责人、工时、Commit、Git 分支或 Evidence 关联。
+
+### 每个 Project 最多一个 Open Session
+
+数据库使用带条件的唯一索引作为并发安全边界：
+
+```sql
+CREATE UNIQUE INDEX ...
+ON development_sessions(project_id)
+WHERE status = 'open';
+```
+
+该约束只限制 `open` 状态，因此同一 Project 可以保留任意数量的 `completed` 和 `abandoned` 历史记录。Application 会先查询 Current Session 并返回清晰的领域错误；即使多个窗口同时发起开始请求，SQLite 部分唯一索引仍只允许一个请求成功。
+
+### Session 更新与乐观并发
+
+`version` 初始为 `1`。所有 Open Session 编辑和终态转换都必须携带 `expected_version`：
+
+```text
+读取 Open Session(version = N)
+→ 用户提交 expected_version = N
+→ Domain 校验允许的状态转换与内容
+→ UPDATE ... WHERE id = ? AND status = 'open' AND version = N
+→ 成功时 version = N + 1，updated_at 同步更新
+→ 未更新任何行时回读记录，区分不存在、已进入终态与版本冲突
+```
+
+完成与放弃必须在同一条受状态和版本保护的写入中更新终态、收尾字段、`completed_at` 和 `version`，不能先保存结果再单独改变状态。终态 Session 只有读取能力，不提供普通更新或再次转换入口。
+
+### Session 索引
+
+- 条件唯一索引 `(project_id) WHERE status = 'open'` 保证一个 Project 最多一个 Open Session，并直接支持 Current Session 查询。
+- Project 历史索引按 `project_id` 与开始时间倒序组织，支持 Session History 在不扫描其他 Project 的前提下返回最近活动。
+- Session 写入只能通过 Application 用例执行；React 不接触 SQL、状态机或版本更新细节。
+
 ## Migration 设计
 
 ### `0001_create_workspaces_and_projects.sql`
@@ -208,8 +284,18 @@ D1.2 通过新的向前 Migration：
 5. 将成果、阻塞和下一步以 JSON 文本数组持久化，并使用 SQLite JSON CHECK 拒绝非法或非数组 JSON；列表含义与数量规则由 Domain 负责。
 6. 不增加可变 Current 指针、Task 表或生产测试数据。
 
-Migration 文件是数据库结构的执行事实源。后续结构变化必须增加新 Migration，
-不得回写 `0001`、`0002` 或 `0003`。
+### `0004_development_session.sql`
+
+D1.3 通过新的向前 Migration：
+
+1. 创建 `development_sessions` 表，保存 Session 的目标、过程 Notes、结果、验证、Handoff、生命周期状态、时间和并发版本。
+2. 通过 `project_id` 外键将 Session 严格归属于 Project，并以 `ON DELETE RESTRICT` 保留研发历史。
+3. 使用数据库 `CHECK` 限制 `status` 为 `open`、`completed` 或 `abandoned`，并约束版本为正整数。
+4. 创建 `development_sessions_one_open_per_project_index` 条件唯一索引，仅作用于 `status = 'open'`，在并发情况下仍保证一个 Project 最多一个 Open Session。
+5. 创建 `development_sessions_project_started_index (project_id, started_at DESC, created_at DESC)`，支持 Current Session 与历史记录读取。
+6. 不修改 `0001`、`0002` 或 `0003`，不创建 Task、Git、Evidence、Timeline、AI 或 Context Pack 数据结构，也不注入生产测试数据。
+
+Migration 文件是数据库结构的执行事实源，本文件解释设计意图。任何后续结构变化必须增加新 Migration，不得回写 `0001` 或已经发布的 Migration。
 
 ## 启动流程
 
@@ -232,20 +318,19 @@ Migration 失败时应用必须报告明确错误，不得继续以正常状态�
 - React 不直接读写 SQLite，也不在 `localStorage` 保存正式 Project 事实。
 - IPC 不执行 SQL，写入必须经过 Application 用例、Domain 校验和 Repository 端口。
 - Repository 负责 SQLx 查询、行映射和持久化错误转换。
-- 相关写入失败时必须完整回滚。
+- 相关写入在同一数据库事务中提交；失败时完整回滚。
 - 网络、AI 和大文件复制不得发生在数据库事务内。
-- D1.2 测试数据仅由测试或人工验收流程创建，不在生产启动时自动插入。
+- D1.3 测试使用的 Project、Snapshot 与 Session 仅由测试或人工验收流程创建，不在生产启动时自动插入。
 
 ## 后续演进
 
-以下概念已冻结，但不在 D1.2 建表：
+以下概念已在产品设计中冻结，但不在 D1.3 建表：
 
-- Development Session
 - Decision
 - Problem 与 Investigation Attempt
 - Evidence
+- Record Revision
+- Activity Event
 - Context Export
 
-它们必须在对应阶段通过新的 Migration 增加，并以 `project_id` 建立清晰归属。
-D1.2 不提前创建空表，也不实现通用 Task 数据模型。Current Snapshot 当前仅由人工维护；
-AI 生成、Git/GitHub 同步、Codex Context Pack 与 Timeline 留待独立阶段。
+它们应在进入相应开发阶段时通过新 Migration 增加，并以 `project_id` 建立清晰归属。D1.3 不提前创建空表，也不实现通用 Task 数据模型。Current Snapshot 与 Development Session 当前都由人工维护；AI 生成或总结、Git/GitHub 同步、Codex Context Pack、Evidence 与 Timeline 均留待独立阶段。
