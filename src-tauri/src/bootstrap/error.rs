@@ -10,4 +10,7 @@ pub enum BootstrapError {
 
     #[error("failed to initialize SQLite: {0}")]
     Database(#[from] crate::infrastructure::database::DatabaseInitError),
+
+    #[error("failed to initialize the AI Provider HTTP client: {0}")]
+    HttpClient(#[from] reqwest::Error),
 }
