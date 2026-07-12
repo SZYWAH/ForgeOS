@@ -294,6 +294,20 @@ impl Project {
         }
         Ok(())
     }
+
+    pub fn ensure_accepts_evidence_changes(&self) -> Result<(), DomainError> {
+        if self.status == ProjectStatus::Archived {
+            return Err(DomainError::ArchivedProjectCannotAcceptEvidenceChanges);
+        }
+        Ok(())
+    }
+
+    pub fn ensure_accepts_repository_changes(&self) -> Result<(), DomainError> {
+        if self.status == ProjectStatus::Archived {
+            return Err(DomainError::ArchivedProjectCannotAcceptRepositoryChanges);
+        }
+        Ok(())
+    }
 }
 
 fn validate_slug(value: String) -> Result<String, DomainError> {

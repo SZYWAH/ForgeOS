@@ -6,12 +6,17 @@ use sqlx::{FromRow, SqlitePool};
 
 use crate::{
     domain::{
-        DevelopmentSession, LifecycleStage, Project, ProjectDetails, ProjectSnapshot,
-        ProjectStatus, SessionStatus, SnapshotDetails, Workspace,
+        AiCandidate, AiCandidateStatus, AiCandidateType, AiProvider, AiProviderDetails,
+        ContextExport, ContextExportStatus, ContextTemplateType, DevelopmentSession, DiffSummary,
+        Evidence, EvidenceDetails, EvidenceLink, EvidenceRelationType, EvidenceSourceType,
+        EvidenceTargetType, EvidenceType, LifecycleStage, Project, ProjectDetails, ProjectSnapshot,
+        ProjectStatus, Repository, SessionStatus, SnapshotDetails, VerificationStatus, WorkingCopy,
+        Workspace,
     },
     ports::{
-        ProjectRepository, RepositoryError, SessionRepository, SnapshotRepository,
-        WorkspaceRepository,
+        AiCandidateRepository, AiProviderRepository, ContextExportRepository, EvidenceRepository,
+        ProjectRepository, RepositoryError, RepositoryStore, SessionRepository,
+        SnapshotRepository, WorkspaceRepository,
     },
 };
 
@@ -182,6 +187,261 @@ impl SessionRow {
 
 const SESSION_COLUMNS: &str = "id, project_id, status, goal, notes, outcome, validation, \
     handoff, started_at, completed_at, created_at, updated_at, version";
+
+#[derive(FromRow)]
+struct EvidenceRow {
+    id: String,
+    project_id: String,
+    title: String,
+    description: String,
+    evidence_type: String,
+    source_type: String,
+    source_uri: String,
+    verification_status: String,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl EvidenceRow {
+    fn into_domain(self) -> Result<Evidence, RepositoryError> {
+        Evidence::restore(
+            self.id,
+            self.project_id,
+            EvidenceDetails {
+                title: self.title,
+                description: self.description,
+                evidence_type: EvidenceType::from_str(&self.evidence_type).map_err(corrupt)?,
+                source_type: EvidenceSourceType::from_str(&self.source_type).map_err(corrupt)?,
+                source_uri: self.source_uri,
+            },
+            VerificationStatus::from_str(&self.verification_status).map_err(corrupt)?,
+            parse_timestamp("evidences.created_at", &self.created_at)?,
+            parse_timestamp("evidences.updated_at", &self.updated_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const EVIDENCE_COLUMNS: &str = "id, project_id, title, description, type AS evidence_type, \
+    source_type, source_uri, verification_status, created_at, updated_at, version";
+
+#[derive(FromRow)]
+struct EvidenceLinkRow {
+    id: String,
+    evidence_id: String,
+    target_type: String,
+    target_id: String,
+    relation_type: String,
+}
+
+#[derive(FromRow)]
+struct AiProviderRow {
+    id: String,
+    name: String,
+    base_url: String,
+    model: String,
+    enabled: i64,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl AiProviderRow {
+    fn into_domain(self) -> Result<AiProvider, RepositoryError> {
+        let enabled = match self.enabled {
+            0 => false,
+            1 => true,
+            value => {
+                return Err(RepositoryError::CorruptData(format!(
+                    "ai_providers.enabled contains {value}"
+                )))
+            }
+        };
+        AiProvider::restore(
+            self.id,
+            AiProviderDetails {
+                name: self.name,
+                base_url: self.base_url,
+                model: self.model,
+            },
+            enabled,
+            parse_timestamp("ai_providers.created_at", &self.created_at)?,
+            parse_timestamp("ai_providers.updated_at", &self.updated_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const AI_PROVIDER_COLUMNS: &str =
+    "id, name, base_url, model, enabled, created_at, updated_at, version";
+
+#[derive(FromRow)]
+struct ContextExportRow {
+    id: String,
+    project_id: String,
+    template_type: String,
+    snapshot_version: Option<i64>,
+    generated_from_session_ids: String,
+    content_markdown: String,
+    content_hash: String,
+    status: String,
+    created_at: String,
+    version: i64,
+}
+
+impl ContextExportRow {
+    fn into_domain(self) -> Result<ContextExport, RepositoryError> {
+        ContextExport::restore(
+            self.id,
+            self.project_id,
+            ContextTemplateType::from_str(&self.template_type).map_err(corrupt)?,
+            self.snapshot_version,
+            parse_list(
+                "context_exports.generated_from_session_ids",
+                &self.generated_from_session_ids,
+            )?,
+            self.content_markdown,
+            self.content_hash,
+            ContextExportStatus::from_str(&self.status).map_err(corrupt)?,
+            parse_timestamp("context_exports.created_at", &self.created_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const CONTEXT_EXPORT_COLUMNS: &str = "id, project_id, template_type, snapshot_version, \
+    generated_from_session_ids, content_markdown, content_hash, status, created_at, version";
+
+#[derive(FromRow)]
+struct AiCandidateRow {
+    id: String,
+    project_id: String,
+    candidate_type: String,
+    source_context_export_id: String,
+    title: String,
+    content_markdown: String,
+    status: String,
+    version: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl AiCandidateRow {
+    fn into_domain(self) -> Result<AiCandidate, RepositoryError> {
+        AiCandidate::restore(
+            self.id,
+            self.project_id,
+            AiCandidateType::from_str(&self.candidate_type).map_err(corrupt)?,
+            self.source_context_export_id,
+            self.title,
+            self.content_markdown,
+            AiCandidateStatus::from_str(&self.status).map_err(corrupt)?,
+            self.version,
+            parse_timestamp("ai_candidates.created_at", &self.created_at)?,
+            parse_timestamp("ai_candidates.updated_at", &self.updated_at)?,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const AI_CANDIDATE_COLUMNS: &str = "id, project_id, candidate_type, \
+    source_context_export_id, title, content_markdown, status, version, created_at, updated_at";
+
+#[derive(FromRow)]
+struct RepositoryRow {
+    id: String,
+    project_id: String,
+    path: String,
+    remote_url: Option<String>,
+    default_branch: String,
+    last_checked_at: String,
+    version: i64,
+}
+
+impl RepositoryRow {
+    fn into_domain(self) -> Result<Repository, RepositoryError> {
+        Repository::restore(
+            self.id,
+            self.project_id,
+            self.path,
+            self.remote_url,
+            self.default_branch,
+            parse_timestamp("repositories.last_checked_at", &self.last_checked_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const REPOSITORY_COLUMNS: &str =
+    "id, project_id, path, remote_url, default_branch, last_checked_at, version";
+
+#[derive(FromRow)]
+struct WorkingCopyRow {
+    id: String,
+    repository_id: String,
+    branch: String,
+    head_commit: String,
+    is_dirty: i64,
+    changed_files: i64,
+    staged_files: i64,
+    unstaged_files: i64,
+    untracked_files: i64,
+    insertions: i64,
+    deletions: i64,
+    checked_at: String,
+}
+
+impl WorkingCopyRow {
+    fn into_domain(self) -> Result<WorkingCopy, RepositoryError> {
+        let is_dirty = match self.is_dirty {
+            0 => false,
+            1 => true,
+            value => {
+                return Err(RepositoryError::CorruptData(format!(
+                    "working_copies.is_dirty contains {value}"
+                )))
+            }
+        };
+        WorkingCopy::restore(
+            self.id,
+            self.repository_id,
+            self.branch,
+            self.head_commit,
+            is_dirty,
+            DiffSummary {
+                changed_files: self.changed_files,
+                staged_files: self.staged_files,
+                unstaged_files: self.unstaged_files,
+                untracked_files: self.untracked_files,
+                insertions: self.insertions,
+                deletions: self.deletions,
+            },
+            parse_timestamp("working_copies.checked_at", &self.checked_at)?,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const WORKING_COPY_COLUMNS: &str = "id, repository_id, branch, head_commit, is_dirty, \
+    changed_files, staged_files, unstaged_files, untracked_files, insertions, deletions, checked_at";
+
+impl EvidenceLinkRow {
+    fn into_domain(self) -> Result<EvidenceLink, RepositoryError> {
+        EvidenceLink::create(
+            self.id,
+            self.evidence_id,
+            EvidenceTargetType::from_str(&self.target_type).map_err(corrupt)?,
+            self.target_id,
+            EvidenceRelationType::from_str(&self.relation_type).map_err(corrupt)?,
+        )
+        .map_err(corrupt)
+    }
+}
 
 #[async_trait]
 impl WorkspaceRepository for SqliteProjectRepository {
@@ -378,6 +638,20 @@ impl SnapshotRepository for SqliteProjectRepository {
 
         rows.into_iter().map(SnapshotRow::into_domain).collect()
     }
+
+    async fn get_snapshot(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, RepositoryError> {
+        let query = format!("SELECT {SNAPSHOT_COLUMNS} FROM project_snapshots WHERE id = ?");
+        let row = sqlx::query_as::<_, SnapshotRow>(&query)
+            .bind(snapshot_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        row.map(SnapshotRow::into_domain).transpose()
+    }
 }
 
 #[async_trait]
@@ -543,6 +817,591 @@ impl SessionRepository for SqliteProjectRepository {
     }
 }
 
+#[async_trait]
+impl EvidenceRepository for SqliteProjectRepository {
+    async fn insert_evidence(&self, evidence: &Evidence) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "INSERT INTO evidences (id, project_id, title, description, type, source_type, \
+             source_uri, verification_status, created_at, updated_at, version) \
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
+             WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND status <> 'archived')",
+        )
+        .bind(evidence.id())
+        .bind(evidence.project_id())
+        .bind(evidence.title())
+        .bind(evidence.description())
+        .bind(evidence.evidence_type().as_str())
+        .bind(evidence.source_type().as_str())
+        .bind(evidence.source_uri())
+        .bind(evidence.verification_status().as_str())
+        .bind(timestamp(evidence.created_at()))
+        .bind(timestamp(evidence.updated_at()))
+        .bind(evidence.version())
+        .bind(evidence.project_id())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        Ok(())
+    }
+
+    async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError> {
+        let query = format!(
+            "SELECT {EVIDENCE_COLUMNS} FROM evidences WHERE project_id = ? \
+             ORDER BY updated_at DESC, created_at DESC, id DESC"
+        );
+        let rows = sqlx::query_as::<_, EvidenceRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        rows.into_iter().map(EvidenceRow::into_domain).collect()
+    }
+
+    async fn get_evidence(&self, evidence_id: &str) -> Result<Option<Evidence>, RepositoryError> {
+        let query = format!("SELECT {EVIDENCE_COLUMNS} FROM evidences WHERE id = ?");
+        let row = sqlx::query_as::<_, EvidenceRow>(&query)
+            .bind(evidence_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        row.map(EvidenceRow::into_domain).transpose()
+    }
+
+    async fn update_evidence(
+        &self,
+        evidence: &Evidence,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "UPDATE evidences SET title = ?, description = ?, type = ?, source_type = ?, \
+             source_uri = ?, verification_status = ?, updated_at = ?, version = ? \
+             WHERE id = ? AND project_id = ? AND version = ? \
+             AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND status <> 'archived')",
+        )
+        .bind(evidence.title())
+        .bind(evidence.description())
+        .bind(evidence.evidence_type().as_str())
+        .bind(evidence.source_type().as_str())
+        .bind(evidence.source_uri())
+        .bind(evidence.verification_status().as_str())
+        .bind(timestamp(evidence.updated_at()))
+        .bind(evidence.version())
+        .bind(evidence.id())
+        .bind(evidence.project_id())
+        .bind(expected_version)
+        .bind(evidence.project_id())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+
+        if result.rows_affected() == 1 {
+            return Ok(());
+        }
+        if self.project_is_archived(evidence.project_id()).await? {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        Err(RepositoryError::OptimisticConflict)
+    }
+
+    async fn insert_evidence_link(&self, link: &EvidenceLink) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "INSERT INTO evidence_links (id, evidence_id, target_type, target_id, relation_type) \
+             SELECT ?, ?, ?, ?, ? WHERE EXISTS ( \
+                SELECT 1 FROM evidences e JOIN projects p ON p.id = e.project_id \
+                WHERE e.id = ? AND p.status <> 'archived' \
+             )",
+        )
+        .bind(link.id())
+        .bind(link.evidence_id())
+        .bind(link.target_type().as_str())
+        .bind(link.target_id())
+        .bind(link.relation_type().as_str())
+        .bind(link.evidence_id())
+        .execute(&self.pool)
+        .await
+        .map_err(map_evidence_link_write_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        Ok(())
+    }
+
+    async fn list_evidence_links(
+        &self,
+        evidence_id: &str,
+    ) -> Result<Vec<EvidenceLink>, RepositoryError> {
+        let rows = sqlx::query_as::<_, EvidenceLinkRow>(
+            "SELECT id, evidence_id, target_type, target_id, relation_type \
+             FROM evidence_links WHERE evidence_id = ? \
+             ORDER BY target_type, target_id, relation_type, id",
+        )
+        .bind(evidence_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+
+        rows.into_iter().map(EvidenceLinkRow::into_domain).collect()
+    }
+}
+
+#[async_trait]
+impl AiProviderRepository for SqliteProjectRepository {
+    async fn insert_ai_provider(&self, provider: &AiProvider) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO ai_providers \
+             (id, name, base_url, model, enabled, created_at, updated_at, version) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(provider.id())
+        .bind(provider.name())
+        .bind(provider.base_url())
+        .bind(provider.model())
+        .bind(i64::from(provider.enabled()))
+        .bind(timestamp(provider.created_at()))
+        .bind(timestamp(provider.updated_at()))
+        .bind(provider.version())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        Ok(())
+    }
+
+    async fn list_ai_providers(&self) -> Result<Vec<AiProvider>, RepositoryError> {
+        let query = format!(
+            "SELECT {AI_PROVIDER_COLUMNS} FROM ai_providers \
+             ORDER BY enabled DESC, name COLLATE NOCASE, id"
+        );
+        let rows = sqlx::query_as::<_, AiProviderRow>(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter().map(AiProviderRow::into_domain).collect()
+    }
+
+    async fn get_ai_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<AiProvider>, RepositoryError> {
+        let query = format!("SELECT {AI_PROVIDER_COLUMNS} FROM ai_providers WHERE id = ?");
+        let row = sqlx::query_as::<_, AiProviderRow>(&query)
+            .bind(provider_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(AiProviderRow::into_domain).transpose()
+    }
+
+    async fn update_ai_provider(
+        &self,
+        provider: &AiProvider,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "UPDATE ai_providers SET name = ?, base_url = ?, model = ?, enabled = ?, \
+             updated_at = ?, version = ? WHERE id = ? AND version = ?",
+        )
+        .bind(provider.name())
+        .bind(provider.base_url())
+        .bind(provider.model())
+        .bind(i64::from(provider.enabled()))
+        .bind(timestamp(provider.updated_at()))
+        .bind(provider.version())
+        .bind(provider.id())
+        .bind(expected_version)
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ContextExportRepository for SqliteProjectRepository {
+    async fn insert_context_export(&self, export: &ContextExport) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO context_exports (id, project_id, template_type, snapshot_version, \
+             generated_from_session_ids, content_markdown, content_hash, status, created_at, version) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(export.id())
+        .bind(export.project_id())
+        .bind(export.template_type().as_str())
+        .bind(export.snapshot_version())
+        .bind(encode_list(
+            "context_exports.generated_from_session_ids",
+            export.generated_from_session_ids(),
+        )?)
+        .bind(export.content_markdown())
+        .bind(export.content_hash())
+        .bind(export.status().as_str())
+        .bind(timestamp(export.created_at()))
+        .bind(export.version())
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        Ok(())
+    }
+
+    async fn list_context_exports(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ContextExport>, RepositoryError> {
+        let query = format!(
+            "SELECT {CONTEXT_EXPORT_COLUMNS} FROM context_exports WHERE project_id = ? \
+             ORDER BY created_at DESC, id DESC"
+        );
+        let rows = sqlx::query_as::<_, ContextExportRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter()
+            .map(ContextExportRow::into_domain)
+            .collect()
+    }
+
+    async fn get_context_export(
+        &self,
+        export_id: &str,
+    ) -> Result<Option<ContextExport>, RepositoryError> {
+        let query = format!("SELECT {CONTEXT_EXPORT_COLUMNS} FROM context_exports WHERE id = ?");
+        let row = sqlx::query_as::<_, ContextExportRow>(&query)
+            .bind(export_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(ContextExportRow::into_domain).transpose()
+    }
+
+    async fn update_context_export_status(
+        &self,
+        export: &ContextExport,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "UPDATE context_exports SET status = ?, version = ? \
+             WHERE id = ? AND project_id = ? AND version = ?",
+        )
+        .bind(export.status().as_str())
+        .bind(export.version())
+        .bind(export.id())
+        .bind(export.project_id())
+        .bind(expected_version)
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl AiCandidateRepository for SqliteProjectRepository {
+    async fn insert_ai_candidate(&self, candidate: &AiCandidate) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO ai_candidates (id, project_id, candidate_type, \
+             source_context_export_id, title, content_markdown, status, version, \
+             created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(candidate.id())
+        .bind(candidate.project_id())
+        .bind(candidate.candidate_type().as_str())
+        .bind(candidate.source_context_export_id())
+        .bind(candidate.title())
+        .bind(candidate.content_markdown())
+        .bind(candidate.status().as_str())
+        .bind(candidate.version())
+        .bind(timestamp(candidate.created_at()))
+        .bind(timestamp(candidate.updated_at()))
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        Ok(())
+    }
+
+    async fn list_ai_candidates(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<AiCandidate>, RepositoryError> {
+        let query = format!(
+            "SELECT {AI_CANDIDATE_COLUMNS} FROM ai_candidates WHERE project_id = ? \
+             ORDER BY updated_at DESC, created_at DESC, id DESC"
+        );
+        let rows = sqlx::query_as::<_, AiCandidateRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter().map(AiCandidateRow::into_domain).collect()
+    }
+
+    async fn get_ai_candidate(
+        &self,
+        candidate_id: &str,
+    ) -> Result<Option<AiCandidate>, RepositoryError> {
+        let query = format!("SELECT {AI_CANDIDATE_COLUMNS} FROM ai_candidates WHERE id = ?");
+        let row = sqlx::query_as::<_, AiCandidateRow>(&query)
+            .bind(candidate_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(AiCandidateRow::into_domain).transpose()
+    }
+
+    async fn update_ai_candidate_status(
+        &self,
+        candidate: &AiCandidate,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "UPDATE ai_candidates SET status = ?, version = ?, updated_at = ? \
+             WHERE id = ? AND project_id = ? AND status = 'pending' AND version = ?",
+        )
+        .bind(candidate.status().as_str())
+        .bind(candidate.version())
+        .bind(timestamp(candidate.updated_at()))
+        .bind(candidate.id())
+        .bind(candidate.project_id())
+        .bind(expected_version)
+        .execute(&self.pool)
+        .await
+        .map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RepositoryStore for SqliteProjectRepository {
+    async fn insert_repository_with_working_copy(
+        &self,
+        repository: &Repository,
+        working_copy: &WorkingCopy,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let inserted = sqlx::query(
+            "INSERT INTO repositories \
+             (id, project_id, path, remote_url, default_branch, last_checked_at, version) \
+             SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS ( \
+                SELECT 1 FROM projects WHERE id = ? AND status <> 'archived' \
+             )",
+        )
+        .bind(repository.id())
+        .bind(repository.project_id())
+        .bind(repository.path())
+        .bind(repository.remote_url())
+        .bind(repository.default_branch())
+        .bind(timestamp(repository.last_checked_at()))
+        .bind(repository.version())
+        .bind(repository.project_id())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if inserted.rows_affected() == 0 {
+            return Err(RepositoryError::ProjectArchived);
+        }
+
+        insert_working_copy(&mut transaction, working_copy).await?;
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn list_repositories(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<Repository>, RepositoryError> {
+        let query = format!(
+            "SELECT {REPOSITORY_COLUMNS} FROM repositories WHERE project_id = ? \
+             ORDER BY last_checked_at DESC, path COLLATE NOCASE, id"
+        );
+        let rows = sqlx::query_as::<_, RepositoryRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter().map(RepositoryRow::into_domain).collect()
+    }
+
+    async fn get_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<Repository>, RepositoryError> {
+        let query = format!("SELECT {REPOSITORY_COLUMNS} FROM repositories WHERE id = ?");
+        let row = sqlx::query_as::<_, RepositoryRow>(&query)
+            .bind(repository_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(RepositoryRow::into_domain).transpose()
+    }
+
+    async fn get_current_working_copy(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<WorkingCopy>, RepositoryError> {
+        let query = format!(
+            "SELECT {WORKING_COPY_COLUMNS} FROM working_copies WHERE repository_id = ? \
+             ORDER BY checked_at DESC, id DESC LIMIT 1"
+        );
+        let row = sqlx::query_as::<_, WorkingCopyRow>(&query)
+            .bind(repository_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(WorkingCopyRow::into_domain).transpose()
+    }
+
+    async fn update_repository_with_working_copy(
+        &self,
+        repository: &Repository,
+        expected_version: i64,
+        working_copy: &WorkingCopy,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let updated = sqlx::query(
+            "UPDATE repositories SET remote_url = ?, default_branch = ?, \
+             last_checked_at = ?, version = ? WHERE id = ? AND project_id = ? \
+             AND version = ? AND EXISTS ( \
+                SELECT 1 FROM projects WHERE id = ? AND status <> 'archived' \
+             )",
+        )
+        .bind(repository.remote_url())
+        .bind(repository.default_branch())
+        .bind(timestamp(repository.last_checked_at()))
+        .bind(repository.version())
+        .bind(repository.id())
+        .bind(repository.project_id())
+        .bind(expected_version)
+        .bind(repository.project_id())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if updated.rows_affected() != 1 {
+            let archived: Option<i64> = sqlx::query_scalar(
+                "SELECT 1 FROM projects WHERE id = ? AND status = 'archived' LIMIT 1",
+            )
+            .bind(repository.project_id())
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(storage)?;
+            return if archived.is_some() {
+                Err(RepositoryError::ProjectArchived)
+            } else {
+                Err(RepositoryError::OptimisticConflict)
+            };
+        }
+        insert_working_copy(&mut transaction, working_copy).await?;
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn insert_git_evidence(
+        &self,
+        evidence: &Evidence,
+        repository_id: &str,
+        commit_sha: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let inserted = sqlx::query(
+            "INSERT INTO evidences (id, project_id, title, description, type, source_type, \
+             source_uri, verification_status, created_at, updated_at, version) \
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS ( \
+                SELECT 1 FROM projects WHERE id = ? AND status <> 'archived' \
+             )",
+        )
+        .bind(evidence.id())
+        .bind(evidence.project_id())
+        .bind(evidence.title())
+        .bind(evidence.description())
+        .bind(evidence.evidence_type().as_str())
+        .bind(evidence.source_type().as_str())
+        .bind(evidence.source_uri())
+        .bind(evidence.verification_status().as_str())
+        .bind(timestamp(evidence.created_at()))
+        .bind(timestamp(evidence.updated_at()))
+        .bind(evidence.version())
+        .bind(evidence.project_id())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if inserted.rows_affected() == 0 {
+            return Err(RepositoryError::ProjectArchived);
+        }
+        sqlx::query(
+            "INSERT INTO repository_evidence_links \
+             (evidence_id, repository_id, project_id, commit_sha, captured_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(evidence.id())
+        .bind(repository_id)
+        .bind(evidence.project_id())
+        .bind(commit_sha)
+        .bind(timestamp(evidence.created_at()))
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn list_repository_evidence(
+        &self,
+        repository_id: &str,
+    ) -> Result<Vec<Evidence>, RepositoryError> {
+        let query = "SELECT e.id, e.project_id, e.title, e.description, e.type AS evidence_type, \
+             e.source_type, e.source_uri, e.verification_status, e.created_at, e.updated_at, \
+             e.version FROM evidences e \
+             JOIN repository_evidence_links rel ON rel.evidence_id = e.id \
+             WHERE rel.repository_id = ? \
+             ORDER BY rel.captured_at DESC, e.id DESC";
+        let rows = sqlx::query_as::<_, EvidenceRow>(query)
+            .bind(repository_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter().map(EvidenceRow::into_domain).collect()
+    }
+}
+
+async fn insert_working_copy(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    working_copy: &WorkingCopy,
+) -> Result<(), RepositoryError> {
+    let summary = working_copy.diff_summary();
+    sqlx::query(
+        "INSERT INTO working_copies (id, repository_id, branch, head_commit, is_dirty, \
+         changed_files, staged_files, unstaged_files, untracked_files, insertions, \
+         deletions, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(working_copy.id())
+    .bind(working_copy.repository_id())
+    .bind(working_copy.branch())
+    .bind(working_copy.head_commit())
+    .bind(i64::from(working_copy.is_dirty()))
+    .bind(summary.changed_files)
+    .bind(summary.staged_files)
+    .bind(summary.unstaged_files)
+    .bind(summary.untracked_files)
+    .bind(summary.insertions)
+    .bind(summary.deletions)
+    .bind(timestamp(working_copy.checked_at()))
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_write_error)?;
+    Ok(())
+}
+
 impl SqliteProjectRepository {
     async fn project_is_archived(&self, project_id: &str) -> Result<bool, RepositoryError> {
         let archived: Option<i64> = sqlx::query_scalar(
@@ -591,4 +1450,11 @@ fn map_write_error(error: sqlx::Error) -> RepositoryError {
         }
         _ => storage(error),
     }
+}
+
+fn map_evidence_link_write_error(error: sqlx::Error) -> RepositoryError {
+    if error.to_string().contains("evidence_link_target_invalid") {
+        return RepositoryError::EvidenceTargetInvalid;
+    }
+    map_write_error(error)
 }

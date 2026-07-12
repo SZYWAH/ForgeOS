@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::{DevelopmentSession, Project, ProjectSnapshot, Workspace};
+use crate::domain::{
+    AiCandidate, AiProvider, ContextExport, DevelopmentSession, Evidence, EvidenceLink, Project,
+    ProjectSnapshot, Repository, WorkingCopy, Workspace,
+};
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -13,6 +16,9 @@ pub enum RepositoryError {
 
     #[error("the Project is archived and cannot accept this change")]
     ProjectArchived,
+
+    #[error("Evidence link target is missing or belongs to another Project")]
+    EvidenceTargetInvalid,
 
     #[error("persisted ForgeOS data is invalid: {0}")]
     CorruptData(String),
@@ -59,6 +65,11 @@ pub trait SnapshotRepository: Send + Sync {
         &self,
         project_id: &str,
     ) -> Result<Vec<ProjectSnapshot>, RepositoryError>;
+
+    async fn get_snapshot(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, RepositoryError>;
 }
 
 #[async_trait]
@@ -93,12 +104,180 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<(), RepositoryError>;
 }
 
+#[async_trait]
+pub trait EvidenceRepository: Send + Sync {
+    async fn insert_evidence(&self, evidence: &Evidence) -> Result<(), RepositoryError>;
+
+    async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError>;
+
+    async fn get_evidence(&self, evidence_id: &str) -> Result<Option<Evidence>, RepositoryError>;
+
+    async fn update_evidence(
+        &self,
+        evidence: &Evidence,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+
+    async fn insert_evidence_link(&self, link: &EvidenceLink) -> Result<(), RepositoryError>;
+
+    async fn list_evidence_links(
+        &self,
+        evidence_id: &str,
+    ) -> Result<Vec<EvidenceLink>, RepositoryError>;
+}
+
+#[async_trait]
+pub trait AiProviderRepository: Send + Sync {
+    async fn insert_ai_provider(&self, provider: &AiProvider) -> Result<(), RepositoryError>;
+
+    async fn list_ai_providers(&self) -> Result<Vec<AiProvider>, RepositoryError>;
+
+    async fn get_ai_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<AiProvider>, RepositoryError>;
+
+    async fn update_ai_provider(
+        &self,
+        provider: &AiProvider,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
+pub trait ContextExportRepository: Send + Sync {
+    async fn insert_context_export(&self, export: &ContextExport) -> Result<(), RepositoryError>;
+
+    async fn list_context_exports(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ContextExport>, RepositoryError>;
+
+    async fn get_context_export(
+        &self,
+        export_id: &str,
+    ) -> Result<Option<ContextExport>, RepositoryError>;
+
+    async fn update_context_export_status(
+        &self,
+        export: &ContextExport,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
+pub trait AiCandidateRepository: Send + Sync {
+    async fn insert_ai_candidate(&self, candidate: &AiCandidate) -> Result<(), RepositoryError>;
+
+    async fn list_ai_candidates(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<AiCandidate>, RepositoryError>;
+
+    async fn get_ai_candidate(
+        &self,
+        candidate_id: &str,
+    ) -> Result<Option<AiCandidate>, RepositoryError>;
+
+    async fn update_ai_candidate_status(
+        &self,
+        candidate: &AiCandidate,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
+pub trait RepositoryStore: Send + Sync {
+    async fn insert_repository_with_working_copy(
+        &self,
+        repository: &Repository,
+        working_copy: &WorkingCopy,
+    ) -> Result<(), RepositoryError>;
+
+    async fn list_repositories(&self, project_id: &str)
+        -> Result<Vec<Repository>, RepositoryError>;
+
+    async fn get_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<Repository>, RepositoryError>;
+
+    async fn get_current_working_copy(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<WorkingCopy>, RepositoryError>;
+
+    async fn update_repository_with_working_copy(
+        &self,
+        repository: &Repository,
+        expected_version: i64,
+        working_copy: &WorkingCopy,
+    ) -> Result<(), RepositoryError>;
+
+    async fn insert_git_evidence(
+        &self,
+        evidence: &Evidence,
+        repository_id: &str,
+        commit_sha: Option<&str>,
+    ) -> Result<(), RepositoryError>;
+
+    async fn list_repository_evidence(
+        &self,
+        repository_id: &str,
+    ) -> Result<Vec<Evidence>, RepositoryError>;
+}
+
+pub trait RepositoryKernelStore: WorkspaceRepository + ProjectRepository + RepositoryStore {}
+
+impl<T> RepositoryKernelStore for T where
+    T: WorkspaceRepository + ProjectRepository + RepositoryStore
+{
+}
+
+pub trait AiCandidateKernelRepository:
+    WorkspaceRepository + ProjectRepository + ContextExportRepository + AiCandidateRepository
+{
+}
+
+impl<T> AiCandidateKernelRepository for T where
+    T: WorkspaceRepository + ProjectRepository + ContextExportRepository + AiCandidateRepository
+{
+}
+
+pub trait ContextPackRepository:
+    WorkspaceRepository
+    + ProjectRepository
+    + SnapshotRepository
+    + SessionRepository
+    + EvidenceRepository
+    + ContextExportRepository
+{
+}
+
+impl<T> ContextPackRepository for T where
+    T: WorkspaceRepository
+        + ProjectRepository
+        + SnapshotRepository
+        + SessionRepository
+        + EvidenceRepository
+        + ContextExportRepository
+{
+}
+
 pub trait ProjectKernelRepository:
-    WorkspaceRepository + ProjectRepository + SnapshotRepository + SessionRepository
+    WorkspaceRepository
+    + ProjectRepository
+    + SnapshotRepository
+    + SessionRepository
+    + EvidenceRepository
 {
 }
 
 impl<T> ProjectKernelRepository for T where
-    T: WorkspaceRepository + ProjectRepository + SnapshotRepository + SessionRepository
+    T: WorkspaceRepository
+        + ProjectRepository
+        + SnapshotRepository
+        + SessionRepository
+        + EvidenceRepository
 {
 }

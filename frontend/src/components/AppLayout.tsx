@@ -13,7 +13,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
           <span className="brand-mark">F</span>
           <div>
             <strong>ForgeOS</strong>
-            <span>D1.3 Session Kernel</span>
+            <span>D2 Git Evidence Integration</span>
           </div>
         </div>
 
@@ -22,6 +22,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
             Dashboard
           </NavLink>
           <NavLink to="/projects">Projects</NavLink>
+          <NavLink to="/settings/ai-providers">AI Providers</NavLink>
         </nav>
 
         <div className="workspace-card">
@@ -34,7 +35,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
       <div className="app-main">
         <header className="topbar">
           <span>Personal Engineering Workspace</span>
-          <span className="kernel-state">Project + Snapshot + Session Kernels · Local</span>
+          <span className="kernel-state">Engineering Memory + Read-only Git · Local</span>
         </header>
         <main className="content">
           <Outlet />

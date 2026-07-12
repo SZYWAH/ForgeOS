@@ -35,13 +35,15 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master \
          WHERE type = 'table' AND name IN (\
-            'workspaces', 'projects', 'project_snapshots', 'development_sessions'\
+            'workspaces', 'projects', 'project_snapshots', 'development_sessions', \
+            'evidences', 'evidence_links', 'ai_providers', 'context_exports', 'ai_candidates', \
+            'repositories', 'working_copies', 'repository_evidence_links'\
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 4 {
+    if table_count != 12 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
         ));
@@ -90,6 +92,116 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ));
     }
 
+    let evidence_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('evidences') \
+         WHERE name IN ('id', 'project_id', 'title', 'description', 'type', 'source_type', \
+         'source_uri', 'verification_status', 'created_at', 'updated_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if evidence_columns != 11 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Evidence schema is incomplete".to_owned(),
+        ));
+    }
+
+    let evidence_link_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('evidence_links') \
+         WHERE name IN ('id', 'evidence_id', 'target_type', 'target_id', 'relation_type')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if evidence_link_columns != 5 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Evidence link schema is incomplete".to_owned(),
+        ));
+    }
+
+    let ai_provider_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('ai_providers') \
+         WHERE name IN ('id', 'name', 'base_url', 'model', 'enabled', 'created_at', \
+         'updated_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if ai_provider_columns != 8 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS AI Provider schema is incomplete".to_owned(),
+        ));
+    }
+
+    let context_export_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('context_exports') \
+         WHERE name IN ('id', 'project_id', 'template_type', 'snapshot_version', \
+         'generated_from_session_ids', 'content_markdown', 'content_hash', 'status', \
+         'created_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if context_export_columns != 10 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Context Pack schema is incomplete".to_owned(),
+        ));
+    }
+
+    let ai_candidate_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('ai_candidates') \
+         WHERE name IN ('id', 'project_id', 'candidate_type', 'source_context_export_id', \
+         'title', 'content_markdown', 'status', 'version', 'created_at', 'updated_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if ai_candidate_columns != 10 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS AI Candidate schema is incomplete".to_owned(),
+        ));
+    }
+
+    let repository_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('repositories') \
+         WHERE name IN ('id', 'project_id', 'path', 'remote_url', 'default_branch', \
+         'last_checked_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if repository_columns != 7 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Repository schema is incomplete".to_owned(),
+        ));
+    }
+
+    let working_copy_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('working_copies') \
+         WHERE name IN ('id', 'repository_id', 'branch', 'head_commit', 'is_dirty', \
+         'changed_files', 'staged_files', 'unstaged_files', 'untracked_files', \
+         'insertions', 'deletions', 'checked_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if working_copy_columns != 12 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Working Copy schema is incomplete".to_owned(),
+        ));
+    }
+
+    let repository_evidence_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('repository_evidence_links') \
+         WHERE name IN ('evidence_id', 'repository_id', 'project_id', 'commit_sha', \
+         'captured_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if repository_evidence_columns != 5 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Repository Evidence schema is incomplete".to_owned(),
+        ));
+    }
+
     Ok(())
 }
 
@@ -107,7 +219,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn migrations_create_the_development_session_schema() {
+    async fn migrations_create_the_git_evidence_schema() {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -117,11 +229,11 @@ mod tests {
         MIGRATOR
             .run(&pool)
             .await
-            .expect("Development Session migrations should run");
+            .expect("Context Pack migrations should run");
 
         verify_schema(&pool)
             .await
-            .expect("schema should contain the Development Session kernel");
+            .expect("schema should contain the Context Pack foundation");
 
         let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects")
             .fetch_one(&pool)
@@ -141,6 +253,112 @@ mod tests {
             .await
             .expect("Rust should be able to read development_sessions");
         assert_eq!(session_count, 0);
+
+        let evidence_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM evidences")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read evidences");
+        assert_eq!(evidence_count, 0);
+
+        let link_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM evidence_links")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read evidence_links");
+        assert_eq!(link_count, 0);
+
+        let provider_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_providers")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read ai_providers");
+        assert_eq!(provider_count, 0);
+
+        let export_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM context_exports")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read context_exports");
+        assert_eq!(export_count, 0);
+
+        let candidate_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_candidates")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read ai_candidates");
+        assert_eq!(candidate_count, 0);
+
+        let repository_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM repositories")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read repositories");
+        assert_eq!(repository_count, 0);
+
+        let working_copy_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM working_copies")
+            .fetch_one(&pool)
+            .await
+            .expect("Rust should be able to read working_copies");
+        assert_eq!(working_copy_count, 0);
+    }
+
+    #[tokio::test]
+    async fn git_evidence_migration_preserves_existing_evidence_and_links() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite should connect");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        for migration in [
+            include_str!("../../../database/migrations/0001_create_workspaces_and_projects.sql"),
+            include_str!("../../../database/migrations/0002_project_identity_kernel.sql"),
+            include_str!("../../../database/migrations/0003_current_snapshot.sql"),
+            include_str!("../../../database/migrations/0004_development_session.sql"),
+            include_str!("../../../database/migrations/0005_evidence_kernel.sql"),
+            include_str!("../../../database/migrations/0006_ai_provider_foundation.sql"),
+            include_str!("../../../database/migrations/0007_context_pack.sql"),
+            include_str!("../../../database/migrations/0008_ai_candidate.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO workspaces (id, name, timezone, created_at, updated_at) VALUES ('workspace-1', 'Personal', 'UTC', '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO projects (id, workspace_id, slug, name, description, vision, target_user, scope, non_goals, tech_stack, status, lifecycle_stage, priority, created_at, updated_at, version) VALUES ('project-1', 'workspace-1', 'forgeos', 'ForgeOS', '', '', '', '', '', '', 'active', 'implementation', 80, '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z', 1)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO evidences (id, project_id, title, description, type, source_type, source_uri, verification_status, created_at, updated_at, version) VALUES ('evidence-1', 'project-1', 'Architecture', 'Preserve me', 'document', 'local_file', 'docs/architecture.md', 'verified', '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z', 2)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO evidence_links (id, evidence_id, target_type, target_id, relation_type) VALUES ('link-1', 'evidence-1', 'project', 'project-1', 'supports')")
+            .execute(&pool).await.unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../database/migrations/0009_git_evidence.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("D2 migration should preserve populated D1.4 tables");
+
+        let evidence: (String, String, i64) = sqlx::query_as(
+            "SELECT title, verification_status, version FROM evidences WHERE id = 'evidence-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(evidence, ("Architecture".into(), "verified".into(), 2));
+        let link_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM evidence_links WHERE id = 'link-1' AND evidence_id = 'evidence-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(link_count, 1);
+        let git_type = sqlx::query("INSERT INTO evidences (id, project_id, title, description, type, source_type, source_uri, verification_status, created_at, updated_at, version) VALUES ('git-1', 'project-1', 'Commit', '', 'git_commit', 'local_file', 'D:/repo', 'unverified', '2026-07-12T01:00:00Z', '2026-07-12T01:00:00Z', 1)")
+            .execute(&pool).await;
+        assert!(git_type.is_ok());
+        let foreign_keys: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_check")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(foreign_keys, 0);
     }
 
     #[tokio::test]

@@ -75,4 +75,130 @@ pub enum DomainError {
 
     #[error("an archived Project cannot start or edit Development Sessions")]
     ArchivedProjectCannotAcceptSessionChanges,
+
+    #[error("unsupported Evidence type: {0}")]
+    InvalidEvidenceType(String),
+
+    #[error("unsupported Evidence source type: {0}")]
+    InvalidEvidenceSourceType(String),
+
+    #[error("unsupported Evidence verification status: {0}")]
+    InvalidEvidenceVerificationStatus(String),
+
+    #[error("Evidence source URI is invalid for its source type")]
+    InvalidEvidenceSourceUri,
+
+    #[error("Evidence version must be at least 1")]
+    InvalidEvidenceVersion,
+
+    #[error("Evidence timestamps are not chronologically valid")]
+    InvalidEvidenceTimestamps,
+
+    #[error("Evidence cannot be used through a different Project")]
+    EvidenceProjectMismatch,
+
+    #[error("Evidence version cannot be incremented")]
+    EvidenceVersionOverflow,
+
+    #[error("unsupported Evidence target type: {0}")]
+    InvalidEvidenceTargetType(String),
+
+    #[error("unsupported Evidence relation type: {0}")]
+    InvalidEvidenceRelationType(String),
+
+    #[error("an archived Project cannot create or modify Evidence")]
+    ArchivedProjectCannotAcceptEvidenceChanges,
+
+    #[error("AI Provider base URL must be an HTTP or HTTPS URL without whitespace")]
+    InvalidAiProviderBaseUrl,
+
+    #[error("AI Provider version must be at least 1")]
+    InvalidAiProviderVersion,
+
+    #[error("AI Provider timestamps are not chronologically valid")]
+    InvalidAiProviderTimestamps,
+
+    #[error("AI Provider version cannot be incremented")]
+    AiProviderVersionOverflow,
+
+    #[error("AI Provider is disabled")]
+    AiProviderDisabled,
+
+    #[error("unsupported AI message role: {0}")]
+    InvalidAiMessageRole(String),
+
+    #[error("unsupported Context Pack template type: {0}")]
+    InvalidContextTemplateType(String),
+
+    #[error("unsupported Context Export status: {0}")]
+    InvalidContextExportStatus(String),
+
+    #[error("Context Export version must be at least 1")]
+    InvalidContextExportVersion,
+
+    #[error("Context Export content hash does not match its Markdown")]
+    InvalidContextExportHash,
+
+    #[error("Context Export cannot be used through a different Project")]
+    ContextExportProjectMismatch,
+
+    #[error("Context Export version cannot be incremented")]
+    ContextExportVersionOverflow,
+
+    #[error("Context Pack sources must belong to the requested Project")]
+    ContextSourceProjectMismatch,
+
+    #[error("unsupported AI Candidate type: {0}")]
+    InvalidAiCandidateType(String),
+
+    #[error("unsupported AI Candidate status: {0}")]
+    InvalidAiCandidateStatus(String),
+
+    #[error("AI Candidate version must be at least 1")]
+    InvalidAiCandidateVersion,
+
+    #[error("AI Candidate timestamps are not chronologically valid")]
+    InvalidAiCandidateTimestamps,
+
+    #[error("AI Candidate cannot be used through a different Project")]
+    AiCandidateProjectMismatch,
+
+    #[error("AI Candidate source Context Export must belong to the same Project")]
+    AiCandidateSourceProjectMismatch,
+
+    #[error("only a pending AI Candidate can be reviewed or archived")]
+    AiCandidateNotPending,
+
+    #[error("AI Candidate version cannot be incremented")]
+    AiCandidateVersionOverflow,
+
+    #[error("Repository path must be an absolute local path")]
+    InvalidRepositoryPath,
+
+    #[error("Repository version must be at least 1")]
+    InvalidRepositoryVersion,
+
+    #[error("Repository version cannot be incremented")]
+    RepositoryVersionOverflow,
+
+    #[error("Repository cannot be used through a different Project")]
+    RepositoryProjectMismatch,
+
+    #[error("Repository timestamps are not chronologically valid")]
+    InvalidRepositoryTimestamps,
+
+    #[error("an archived Project cannot register or refresh Repositories")]
+    ArchivedProjectCannotAcceptRepositoryChanges,
+
+    #[error("Working Copy commit SHA must contain 40 or 64 lowercase hexadecimal characters")]
+    InvalidGitCommitSha,
+
+    #[error("Working Copy counters cannot be negative")]
+    InvalidWorkingCopySummary,
+
+    #[error("Git Evidence must be created through the read-only Repository integration")]
+    GitEvidenceRequiresRepositoryIntegration,
+
+    #[error("captured Git Evidence content is read-only")]
+    GitEvidenceContentReadOnly,
 }

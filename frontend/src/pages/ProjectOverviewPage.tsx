@@ -8,6 +8,8 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { CurrentSnapshotCard } from "../components/CurrentSnapshotCard";
 import { CurrentSessionCard } from "../components/CurrentSessionCard";
+import { EvidenceSummaryCard } from "../components/EvidenceSummaryCard";
+import { RepositoryCard } from "../components/RepositoryCard";
 import {
   getErrorCode,
   getErrorMessage,
@@ -220,6 +222,36 @@ export function ProjectOverviewPage() {
         projectId={project.id}
         projectName={project.name}
       />
+
+      <EvidenceSummaryCard projectId={project.id} projectName={project.name} />
+
+      <RepositoryCard archived={isArchived} projectId={project.id} />
+
+      <section className="panel context-overview-card">
+        <div className="panel-header">
+          <div>
+            <p className="snapshot-kicker">Derived Context</p>
+            <h2>Context Pack</h2>
+            <p>从 Project、Current Snapshot、最近 Session 与 Evidence 生成稳定 Markdown。</p>
+          </div>
+          <Link className="secondary-button button-link" to={`/projects/${project.id}/context`}>
+            Open Context Pack
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel candidate-overview-card">
+        <div className="panel-header">
+          <div>
+            <p className="snapshot-kicker">AI Governance</p>
+            <h2>AI Candidates</h2>
+            <p>审核 AI 输出；Accept 仅记录人工认可，不自动修改任何正式事实。</p>
+          </div>
+          <Link className="secondary-button button-link" to={`/projects/${project.id}/candidates`}>
+            Review Candidates
+          </Link>
+        </div>
+      </section>
 
       <form className="project-form overview-form" onSubmit={handleSave}>
         {isArchived ? (
