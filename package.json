@@ -6,6 +6,9 @@
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:typecheck": "npm --prefix frontend run typecheck",
+    "mcp:build": "cd forgeos-mcp && cargo build",
+    "mcp:test": "cd forgeos-mcp && cargo test",
+    "mcp:run": "cd forgeos-mcp && cargo run",
     "tauri:dev": "tauri dev --config src-tauri/tauri.conf.json",
     "tauri:build": "tauri build --config src-tauri/tauri.conf.json"
   },
@@ -13,4 +16,3 @@
     "@tauri-apps/cli": "^2.0.0"
   }
 }
-

@@ -31,6 +31,28 @@ pub async fn connect(path: &Path) -> Result<DatabaseState, DatabaseInitError> {
     Ok(DatabaseState { pool })
 }
 
+/// Opens an existing ForgeOS database without migration or write capability.
+///
+/// This connection mode is reserved for read-only consumers such as the local
+/// MCP server. It deliberately does not create files, change journal settings,
+/// or execute migrations.
+pub async fn connect_read_only(path: &Path) -> Result<DatabaseState, DatabaseInitError> {
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(false)
+        .read_only(true)
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_secs(5));
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(2)
+        .connect_with(options)
+        .await?;
+
+    verify_schema(&pool).await?;
+    Ok(DatabaseState { pool })
+}
+
 async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master \

@@ -210,3 +210,138 @@ D0 不实现：
 新增能力必须从 Application Use Case 进入，不允许从 UI、AI 或外部集成直接写数据库。
 
 若未来拆出 MCP 进程，应复用领域与应用核心，而不是复制一套业务规则。
+
+## AI Provider Foundation
+
+AI Provider 使用独立于 ProjectKernel 的应用边界：
+
+```text
+React Provider Settings
+→ Typed Tauri IPC
+→ AiProviderKernel
+├─ AiProviderRepository → SQLite（非敏感配置）
+├─ ApiKeyStore → Windows Credential Manager（API Key）
+└─ AiProviderClient → OpenAI-compatible HTTP endpoint
+```
+
+固定规则：
+
+- Provider 新建后默认 Disabled，只有用户显式启用且显式点击 Invoke 才能发起网络请求。
+- SQLite 不保存 API Key；IPC DTO 只返回 `apiKeyConfigured`，不提供明文回读接口。
+- HTTP Adapter 只实现最小 Chat Completions `model + messages` 契约，不提供 tools、Agent、自动重试任务或后台调用。
+- 调用结果停留在当前 UI 内存，不自动写入 Project、Snapshot、Development Session、Evidence 或其他正式事实。
+- AI Provider 不依赖 Project 领域，也不能获得任何 Repository 写入能力。
+- 未来 AI 建议若需要进入正式事实，必须通过独立用例、用户确认与现有版本规则；本阶段不实现。
+
+## D1.5 Context Pack 与手动 AI 调用
+
+Context Pack 是正式事实层之上的确定性派生记录：
+
+```text
+Project + Current Snapshot + Recent Session + Evidence
+→ ContextPackKernel
+→ MarkdownContextRenderer
+→ ContextExport Repository
+→ SQLite context_exports
+```
+
+依赖与职责固定如下：
+
+- `ContextPackKernel` 负责按 Project 读取来源、验证来源归属、固定排序、调用 Renderer 并保存导出。
+- `MarkdownContextRenderer` 是无状态 Port Adapter；相同模板与相同来源必须生成逐字节相同的 Markdown。
+- `ContextExport` 保存来源 Snapshot 版本、最近 Session ID、内容 SHA-256、模板、状态和乐观版本。
+- React 只能通过 Context Pack IPC 生成、列出、读取和显式发送导出，不能直接拼装正式 Context Pack。
+- AI 调用通过既有 `AiProviderKernel` 执行；Disabled Provider 在网络请求前被拒绝。
+- AI 成功响应后只允许把 ContextExport 从 `generated` 标记为 `sent_to_ai`；Project、Snapshot、Session、Evidence 均不提供给该调用链写权限。
+- User Prompt 与 AI Response 只存在于当前调用和页面内存，不创建 Conversation、Prompt History 或 Response History。
+
+Markdown 章节顺序固定为 Project Identity、Current Snapshot、Recent Development Session、Evidence。
+Evidence 按标题与 ID 稳定排序；最近 Session 由 Repository 的确定性倒序结果选择第一条。
+
+## D1.6 AI Candidate 治理层
+
+AI Candidate 位于临时 AI Response 与正式事实之间：
+
+```text
+Context Pack → Manual AI Invocation → Temporary Response
+                                      │
+                                      ├─ 仅查看（不持久化）
+                                      └─ 用户显式保存 → Pending AICandidate
+                                                            │
+                                                            ├─ Accepted
+                                                            ├─ Rejected
+                                                            └─ Archived
+```
+
+固定边界：
+
+- `AiCandidateKernel` 只持有 Workspace/Project/ContextExport 的读取能力与 AICandidate Repository；不持有 Snapshot、Session、Evidence 的写入 Port。
+- AI Response 默认仍是页面内存数据，创建 Candidate 是用户执行的第二个独立操作。
+- Domain 创建入口不接受 status 参数，所有新 Candidate 固定为 `pending / version = 1`。
+- Accept、Reject、Archive 都是从 Pending 出发的单向终态；终态内容与状态保持只读。
+- Accept 只表达“用户认可这条建议”，不会调用任何正式领域 Application Use Case。
+- Application 与数据库复合外键同时验证 Candidate 和来源 ContextExport 属于同一 Project。
+- 所有 Review 使用 `expectedVersion`；Repository 的 UPDATE 还要求持久化状态仍为 Pending，防止并发双重审核。
+
+## D2 Git 只读观察与 Evidence
+
+Git 集成使用独立 RepositoryKernel：
+
+```text
+React Repository Page
+→ Typed IPC
+→ RepositoryKernel
+├─ GitAdapter → git CLI（固定只读命令）
+└─ RepositoryStore → SQLite
+     ├─ Repository metadata
+     ├─ immutable WorkingCopy observations
+     └─ Git Evidence + repository source link
+```
+
+固定边界：
+
+- GitCliAdapter 不接受任意子命令，只实现 `rev-parse`、`symbolic-ref`、`remote get-url`、`status`、`diff`、`log` 和 `show`。
+- 每个命令通过参数数组启动，不经过 shell；设置 `GIT_OPTIONAL_LOCKS=0`、禁用交互认证并使用十秒超时。
+- Adapter 没有 commit、push、pull、merge、checkout、reset 或 stash 方法与命令分支。
+- Register 和 Refresh 先读取外部状态，再在单个 SQLite 事务中保存 Repository/WorkingCopy；不向 Git 工作区写入。
+- Repository 保存集成身份和最近检查元数据；每次 Refresh 追加新的 WorkingCopy，保留观察历史。
+- Git Commit/Status Evidence 仍使用 Evidence Domain，默认 `unverified`，用户可在 Evidence 页面人工 Verify/Invalidate。
+- Generic Evidence IPC 不能创建或改写 Git Evidence；Git 类型只能通过 RepositoryKernel 的受控采集入口产生。
+- `repository_evidence_links` 使用 Evidence 与 Repository 的复合 Project 外键，确保外部事实不会跨项目串线。
+- Remote URL 在持久化前移除 HTTP(S) user-info，防止嵌入式凭据进入 SQLite。
+
+## D3 MCP Read-only Architecture
+
+ForgeOS MCP 是独立的本地 Rust 进程，只向外部 AI 客户端提供已经确认的研发语义上下文：
+
+```text
+Codex / MCP Client
+        ↓ STDIO JSON-RPC
+forgeos-mcp Protocol + Tool Layer
+        ↓ read-only query methods
+McpQueryKernel
+        ↓ existing repository ports + ContextRenderer
+SqliteProjectRepository
+        ↓ read-only SQLite connection
+ForgeOS Database
+```
+
+职责与依赖边界：
+
+- `forgeos-mcp` 只负责 MCP 协议、JSON Schema、参数校验、结果脱敏和错误映射，不包含领域规则或 SQL。
+- `McpQueryKernel` 位于 ForgeOS Core 的 Application 层，只持有 `McpQueryRepository` 和 `ContextRenderer`，不暴露任何 create/update/delete 用例。
+- `connect_read_only` 只打开已存在的数据库，不创建文件、不运行 Migration、不改变 Journal Mode。
+- `build_context_pack` 复用现有确定性 Markdown Renderer，在内存中构建并计算哈希，不插入或更新 `context_exports`。
+- 每个 Tool 都要求 `project_id`；Kernel 先在当前 Workspace 中确认 Project，再按该 Project 查询 Snapshot、Session 和 Evidence。
+- MCP DTO 不包含 Evidence `source_uri`、Repository path、AI Provider、API Key、Credential 或 Token。
+- STDOUT 只承载 MCP JSON-RPC；服务器不监听 HTTP 或 TCP，不提供 Resources、Prompts、Tasks 或写工具。
+
+第一版固定工具面：
+
+- `get_project_identity`
+- `get_current_snapshot`
+- `get_recent_sessions`
+- `list_evidence`
+- `build_context_pack`
+
+GitHub MCP 继续负责 Repository、Commit、Issue、Pull Request、Release 和 CI 等托管平台事实。ForgeOS MCP 不重复浏览代码仓库，只解释 Project 目标、当前状态、研发过程、证据链和 Context Pack。两类上下文可由客户端组合，但彼此没有写权限传递。

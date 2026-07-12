@@ -15,7 +15,7 @@ use crate::{
     },
     ports::{
         AiCandidateRepository, AiProviderRepository, ContextExportRepository, EvidenceRepository,
-        ProjectRepository, RepositoryError, RepositoryStore, SessionRepository,
+        McpQueryRepository, ProjectRepository, RepositoryError, RepositoryStore, SessionRepository,
         SnapshotRepository, WorkspaceRepository,
     },
 };
@@ -28,6 +28,39 @@ pub struct SqliteProjectRepository {
 impl SqliteProjectRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+}
+
+#[async_trait]
+impl McpQueryRepository for SqliteProjectRepository {
+    async fn get_current_workspace(&self) -> Result<Option<Workspace>, RepositoryError> {
+        WorkspaceRepository::get_current_workspace(self).await
+    }
+
+    async fn get_project(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<Project>, RepositoryError> {
+        ProjectRepository::get_project(self, workspace_id, project_id).await
+    }
+
+    async fn get_current_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, RepositoryError> {
+        SnapshotRepository::get_current_snapshot(self, project_id).await
+    }
+
+    async fn list_sessions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<DevelopmentSession>, RepositoryError> {
+        SessionRepository::list_sessions(self, project_id).await
+    }
+
+    async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError> {
+        EvidenceRepository::list_evidences(self, project_id).await
     }
 }
 

@@ -127,6 +127,25 @@ pub trait EvidenceRepository: Send + Sync {
 }
 
 #[async_trait]
+pub trait McpQueryRepository: Send + Sync {
+    async fn get_current_workspace(&self) -> Result<Option<Workspace>, RepositoryError>;
+    async fn get_project(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<Project>, RepositoryError>;
+    async fn get_current_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectSnapshot>, RepositoryError>;
+    async fn list_sessions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<DevelopmentSession>, RepositoryError>;
+    async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError>;
+}
+
+#[async_trait]
 pub trait AiProviderRepository: Send + Sync {
     async fn insert_ai_provider(&self, provider: &AiProvider) -> Result<(), RepositoryError>;
 

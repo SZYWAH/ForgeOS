@@ -20,7 +20,7 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 
 ## 当前阶段
 
-当前处于 **D1.3：Development Session Kernel**。
+当前处于 **D3：ForgeOS MCP Read-only Server**。
 
 本阶段只负责：
 
@@ -38,9 +38,31 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 - 记录 Goal、Markdown Notes、Outcome、Validation 和 Handoff
 - 使用 `expectedVersion` 保护 Session 并发写入，并将终态 Session 保持只读
 - 在 Project Overview 显示 Current Development Session，并提供 Session History
+- 人工创建 Document、Screenshot、Link、Test Result、Note 与 Artifact Evidence
+- 保存本地文件路径、外部 URL 或人工记录来源，不复制或自动采集附件
+- 通过 `unverified / verified / invalid` 状态明确证据可信度
+- 使用统一 EvidenceLink 将证据关联到 Project、Snapshot 或 Development Session
+- 内容修改后自动回到 unverified，避免旧验证状态继续背书已变化内容
+- 管理自定义 OpenAI-compatible Base URL、Model 与 Provider 启停状态
+- 将 API Key 保存到 Windows Credential Manager，而不是 SQLite
+- 通过用户显式操作执行最小 Chat Completions 调用，并只返回临时结果
+- 从 Project、Current Snapshot、最近 Development Session 与 Evidence 确定性生成 Markdown Context Pack
+- 保存 ContextExport 的来源版本、SHA-256 内容哈希、模板、发送状态与乐观并发版本
+- 支持 Planning、Coding、Debugging、Review 与 Handoff 五种模板
+- 由用户显式选择 Enabled Provider，将 Context Pack 与单次问题发送给 AI
+- AI Prompt 与 Response 只保留在当前页面状态，不进入正式事实层或调用历史
+- 由用户将当前 AI Response 显式保存为 Pending Candidate，或选择仅查看
+- 管理 Snapshot Update、Session Summary、Evidence Suggestion、Risk Finding 与 General Note 候选类型
+- 通过 `pending → accepted | rejected | archived` 单向状态机记录人工审核结果
+- Accept 只记录用户认可，不自动修改 Project、Snapshot、Session 或 Evidence
+- 注册并观察属于 Project 的本地 Git Repository
+- 通过固定只读 Git CLI 命令读取分支、HEAD、dirty 状态、diff summary 和最近提交
+- 每次刷新追加不可变 WorkingCopy 观察记录，不修改本地 Git 仓库
+- 由用户明确把 Commit 或 WorkingCopy 状态转换为 Git Evidence
+- 使用 Repository/Evidence 复合 Project 外键阻止跨项目 Git Evidence
 
-本阶段不实现 Decision、Problem、Evidence、AI、自动总结、
-Git/GitHub、Codex Context Pack、Search、Timeline 或任务系统。
+本阶段不实现 Decision、Problem、AI 自动调用、自动总结、AI 事实生成、Agent 执行、MCP 写入、
+Git 写操作、GitHub、Codex 自动协同、Search、Timeline、对话历史或任务系统。
 
 ## 技术栈
 
@@ -66,7 +88,20 @@ ForgeOS
 │     ├─ ADR-001-tauri-rust-sqlite.md
 │     ├─ ADR-002-project-identity-model.md
 │     ├─ ADR-003-current-snapshot-versioning.md
-│     └─ ADR-004-development-session-lifecycle.md
+│     ├─ ADR-004-development-session-lifecycle.md
+│     ├─ ADR-005-evidence-model.md
+│     ├─ ADR-006-ai-provider-foundation.md
+│     ├─ ADR-007-context-pack-and-ai-invocation.md
+│     ├─ ADR-008-ai-candidate-governance.md
+│     ├─ ADR-009-git-readonly-integration.md
+│     └─ ADR-010-mcp-readonly-architecture.md
+├─ forgeos-mcp
+│  ├─ src
+│  │  ├─ main.rs
+│  │  ├─ server.rs
+│  │  ├─ protocol.rs
+│  │  └─ tools
+│  └─ tests
 ├─ frontend
 ├─ src-tauri
 ├─ database
@@ -143,25 +178,38 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 ## 数据库
 
-D1.3 只使用四个业务表：
+D2 使用十二个 SQLite 表：
 
 - `workspaces`
 - `projects`
 - `project_snapshots`
 - `development_sessions`
+- `evidences`
+- `evidence_links`
+- `ai_providers`
+- `context_exports`
+- `ai_candidates`
+- `repositories`
+- `working_copies`
+- `repository_evidence_links`
 
 数据库迁移位于 `database/migrations`。`0002_project_identity_kernel.sql` 在不修改
 D0 Migration 的前提下完善 Project 身份、产品上下文、技术信息、状态、生命周期、
 优先级与版本字段；`0003_current_snapshot.sql` 增加按 Project 隔离、只追加版本的
 Current Snapshot；`0004_development_session.sql` 增加 Session 状态机、Project 归属、
 单 Open Session 部分唯一索引和历史查询索引。当前不创建 Decision、Problem、
-Evidence、Timeline 或 AI 相关业务表。
+Timeline、AI 生成内容或调用历史表。`0005_evidence_kernel.sql` 增加 Evidence、统一关联表、
+验证状态约束、查询索引和多态关联目标校验 trigger；
+`0006_ai_provider_foundation.sql` 只保存非敏感 Provider 配置。API Key 不进入数据库；
+`0007_context_pack.sql` 保存确定性导出内容、来源版本、SHA-256、模板、发送状态与乐观版本；
+`0008_ai_candidate.sql` 保存 AI 候选建议及人工审核状态，并以复合外键保护来源 Project 一致性；
+`0009_git_evidence.sql` 保存 Repository、WorkingCopy 观察与 Repository-Evidence 来源关系，并扩展 Git Evidence 类型。
 
 ## 文档
 
 - `docs/product-design.md`：冻结后的产品边界
 - `docs/architecture.md`：总体架构和模块职责
-- `docs/database-design.md`：D1.3 数据库设计
+- `docs/database-design.md`：D2 数据库设计
 - `docs/development-guide.md`：开发与 Git 规范
 - `docs/adr`：架构决策记录
 - `docs/development-log.md`：项目开发日志
@@ -170,5 +218,36 @@ Evidence、Timeline 或 AI 相关业务表。
 
 ForgeOS 已可在本地管理 Project 身份、生命周期和人工确认的 Current Snapshot，
 保留可追溯的 Snapshot 历史，并以 Development Session 记录一次研发活动的目标、
-过程、结果、验证和接手信息。进入 Decision、Problem、Evidence、Context Pack 或 AI
-能力前仍需按阶段冻结和验收。
+过程、结果、验证和接手信息。Evidence Kernel 已能保存人工证据、验证状态与
+Project/Snapshot/Session 关联。Context Pack Kernel 已能按固定章节和稳定排序生成可验证的
+Markdown，并通过用户选择的 Enabled Provider 执行一次性分析。用户可把临时 Response 明确保存为
+Pending Candidate，并人工 Accept、Reject 或 Archive；这些操作只记录治理状态，不生成或修改正式事实。
+Git Evidence Integration 已能以只读 Git CLI 观察本地 Repository，并由用户明确生成 Commit/Status Evidence。
+ForgeOS 不提供任何 Git 写命令；D3 MCP 仅提供研发语义上下文读取，GitHub、Agent、MCP 写入与自动 AI 任务仍未实现。
+
+## ForgeOS MCP Read-only Server
+
+D3 提供独立的 `forgeos-mcp` Rust 可执行程序。它通过 STDIO MCP 向本地 AI 客户端公开五个只读工具，不监听 HTTP/TCP 端口，也不修改 Codex 配置。
+
+构建与测试：
+
+```powershell
+npm run mcp:build
+npm run mcp:test
+```
+
+默认读取 `%APPDATA%\com.forgeos.desktop\database\forgeos.db`。也可以显式指定数据库：
+
+```powershell
+$env:FORGEOS_DATABASE_PATH = "D:\path\to\forgeos.db"
+npm run mcp:run
+```
+
+或直接执行：
+
+```powershell
+Set-Location forgeos-mcp
+cargo run -- --database "D:\path\to\forgeos.db"
+```
+
+STDOUT 专用于 MCP JSON-RPC；服务器只读打开既有数据库，不执行 Migration，不创建数据库，也不持久化 `build_context_pack` 的结果。

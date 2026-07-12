@@ -1,0 +1,19 @@
+[package]
+name = "forgeos-mcp"
+version = "0.1.0"
+description = "Read-only MCP server for ForgeOS engineering context"
+edition = "2021"
+rust-version = "1.85"
+
+[dependencies]
+anyhow = "1"
+forgeos_lib = { path = "../src-tauri", package = "forgeos" }
+rmcp = { version = "2.2", features = ["client", "server", "transport-io"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+tempfile = "3"
