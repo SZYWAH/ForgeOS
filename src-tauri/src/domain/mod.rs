@@ -6,6 +6,7 @@
 
 mod ai_candidate;
 mod ai_provider;
+mod codex_task_proposal;
 mod context_export;
 mod error;
 mod evidence;
@@ -17,6 +18,9 @@ mod workspace;
 
 pub use ai_candidate::{AiCandidate, AiCandidateStatus, AiCandidateType};
 pub use ai_provider::{AiProvider, AiProviderDetails};
+pub use codex_task_proposal::{
+    CodexTaskProposal, CodexTaskProposalDetails, CodexTaskProposalStatus,
+};
 pub use context_export::{ContextExport, ContextExportStatus, ContextTemplateType};
 pub use error::DomainError;
 pub use evidence::{

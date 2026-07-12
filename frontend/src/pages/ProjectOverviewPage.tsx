@@ -228,6 +228,10 @@ export function ProjectOverviewPage() {
       <RepositoryCard archived={isArchived} projectId={project.id} />
 
       <section className="panel context-overview-card">
+        <div className="panel-header"><div><p className="snapshot-kicker">Proposal only</p><h2>Codex Task Proposals</h2><p>定义绑定 Context Pack 的编码任务请求；不会执行 Codex 或修改代码。</p></div><Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>Open Proposals</Link></div>
+      </section>
+
+      <section className="panel context-overview-card">
         <div className="panel-header">
           <div>
             <p className="snapshot-kicker">Derived Context</p>

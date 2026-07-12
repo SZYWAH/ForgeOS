@@ -1,5 +1,6 @@
 pub mod ai_candidates;
 pub mod ai_providers;
+pub mod codex_task_proposals;
 pub mod context_packs;
 mod dto;
 mod error;

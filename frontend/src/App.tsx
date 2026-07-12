@@ -12,6 +12,7 @@ import { AiProvidersPage } from "./pages/AiProvidersPage";
 import { ContextPackPage } from "./pages/ContextPackPage";
 import { AiCandidatesPage } from "./pages/AiCandidatesPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
+import { CodexTasksPage } from "./pages/CodexTasksPage";
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
               <Route path="projects/:projectId/context" element={<ContextPackPage />} />
               <Route path="projects/:projectId/candidates" element={<AiCandidatesPage />} />
               <Route path="projects/:projectId/repositories" element={<RepositoriesPage />} />
+              <Route path="projects/:projectId/codex-tasks" element={<CodexTasksPage />} />
               <Route path="settings/ai-providers" element={<AiProvidersPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::domain::{
-    AiCandidate, AiProvider, ContextExport, DevelopmentSession, Evidence, EvidenceLink, Project,
-    ProjectSnapshot, Repository, WorkingCopy, Workspace,
+    AiCandidate, AiProvider, CodexTaskProposal, ContextExport, DevelopmentSession, Evidence,
+    EvidenceLink, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -206,6 +206,28 @@ pub trait AiCandidateRepository: Send + Sync {
 }
 
 #[async_trait]
+pub trait CodexTaskProposalRepository: Send + Sync {
+    async fn insert_codex_task_proposal(
+        &self,
+        proposal: &CodexTaskProposal,
+    ) -> Result<(), RepositoryError>;
+    async fn list_codex_task_proposals(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<CodexTaskProposal>, RepositoryError>;
+    async fn get_codex_task_proposal(
+        &self,
+        proposal_id: &str,
+    ) -> Result<Option<CodexTaskProposal>, RepositoryError>;
+    async fn transition_codex_task_proposal(
+        &self,
+        proposal: &CodexTaskProposal,
+        from_status: &str,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
 pub trait RepositoryStore: Send + Sync {
     async fn insert_repository_with_working_copy(
         &self,
@@ -255,6 +277,19 @@ impl<T> RepositoryKernelStore for T where
 
 pub trait AiCandidateKernelRepository:
     WorkspaceRepository + ProjectRepository + ContextExportRepository + AiCandidateRepository
+{
+}
+
+pub trait CodexTaskProposalKernelRepository:
+    WorkspaceRepository + ProjectRepository + ContextExportRepository + CodexTaskProposalRepository
+{
+}
+
+impl<T> CodexTaskProposalKernelRepository for T where
+    T: WorkspaceRepository
+        + ProjectRepository
+        + ContextExportRepository
+        + CodexTaskProposalRepository
 {
 }
 

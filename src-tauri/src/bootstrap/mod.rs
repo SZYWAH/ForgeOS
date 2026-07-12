@@ -8,7 +8,8 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AiCandidateKernel, AiProviderKernel, ContextPackKernel, ProjectKernel, RepositoryKernel,
+        AiCandidateKernel, AiProviderKernel, CodexTaskProposalKernel, ContextPackKernel,
+        ProjectKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
@@ -29,6 +30,7 @@ pub struct BootstrapState {
     pub context_pack_kernel: ContextPackKernel,
     pub ai_candidate_kernel: AiCandidateKernel,
     pub repository_kernel: RepositoryKernel,
+    pub codex_task_proposal_kernel: CodexTaskProposalKernel,
 }
 
 pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
@@ -51,6 +53,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         Arc::new(ai_provider_kernel.clone()),
     );
     let ai_candidate_kernel = AiCandidateKernel::new(repository.clone());
+    let codex_task_proposal_kernel = CodexTaskProposalKernel::new(repository.clone());
     let repository_kernel = RepositoryKernel::new(repository, Arc::new(GitCliAdapter));
 
     println!("ForgeOS database ready: {}", database_path.display());
@@ -61,6 +64,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         context_pack_kernel,
         ai_candidate_kernel,
         repository_kernel,
+        codex_task_proposal_kernel,
     })
 }
 

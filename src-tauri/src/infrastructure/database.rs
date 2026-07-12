@@ -59,13 +59,14 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
          WHERE type = 'table' AND name IN (\
             'workspaces', 'projects', 'project_snapshots', 'development_sessions', \
             'evidences', 'evidence_links', 'ai_providers', 'context_exports', 'ai_candidates', \
-            'repositories', 'working_copies', 'repository_evidence_links'\
+            'repositories', 'working_copies', 'repository_evidence_links', \
+            'codex_task_proposals', 'codex_task_proposal_status_history'\
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 12 {
+    if table_count != 14 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
         ));
@@ -181,6 +182,30 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     if ai_candidate_columns != 10 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS AI Candidate schema is incomplete".to_owned(),
+        ));
+    }
+
+    let proposal_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('codex_task_proposals') WHERE name IN \
+         ('id', 'project_id', 'context_export_id', 'title', 'description', 'goal', 'non_goals', \
+          'allowed_scope', 'forbidden_scope', 'acceptance_criteria', 'validation_commands', \
+          'status', 'version', 'created_at', 'updated_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if proposal_columns != 15 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Codex Task Proposal schema is incomplete".into(),
+        ));
+    }
+
+    let proposal_history_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('codex_task_proposal_status_history') WHERE name IN \
+         ('id', 'proposal_id', 'from_status', 'to_status', 'proposal_version', 'changed_at')",
+    ).fetch_one(pool).await?;
+    if proposal_history_columns != 6 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Codex Task Proposal history schema is incomplete".into(),
         ));
     }
 

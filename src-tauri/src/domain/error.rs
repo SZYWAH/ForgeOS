@@ -2,11 +2,29 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("invalid Codex Task Proposal status: {0}")]
+    InvalidCodexTaskProposalStatus(String),
+    #[error("invalid Codex Task Proposal version")]
+    InvalidCodexTaskProposalVersion,
+    #[error("invalid Codex Task Proposal timestamps")]
+    InvalidCodexTaskProposalTimestamps,
+    #[error("invalid Codex Task Proposal transition from {from} to {to}")]
+    InvalidCodexTaskProposalTransition {
+        from: &'static str,
+        to: &'static str,
+    },
+    #[error("Codex Task Proposal version overflow")]
+    CodexTaskProposalVersionOverflow,
+    #[error("Codex Task Proposal belongs to another Project")]
+    CodexTaskProposalProjectMismatch,
     #[error("{field} is required")]
     Required { field: &'static str },
 
     #[error("{field} must be at most {max} characters")]
     TooLong { field: &'static str, max: usize },
+
+    #[error("{field} must contain at most {max} items")]
+    TooManyItems { field: &'static str, max: usize },
 
     #[error(
         "slug must be 2-64 characters using lowercase ASCII letters, digits, and single hyphens"

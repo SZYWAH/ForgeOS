@@ -13,7 +13,8 @@ pub use context::{ContextRenderError, ContextRenderInput, ContextRenderer};
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitInspection};
 pub use repositories::{
     AiCandidateKernelRepository, AiCandidateRepository, AiProviderRepository,
-    ContextExportRepository, ContextPackRepository, EvidenceRepository, McpQueryRepository,
-    ProjectKernelRepository, ProjectRepository, RepositoryError, RepositoryKernelStore,
-    RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
+    CodexTaskProposalKernelRepository, CodexTaskProposalRepository, ContextExportRepository,
+    ContextPackRepository, EvidenceRepository, McpQueryRepository, ProjectKernelRepository,
+    ProjectRepository, RepositoryError, RepositoryKernelStore, RepositoryStore, SessionRepository,
+    SnapshotRepository, WorkspaceRepository,
 };

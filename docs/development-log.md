@@ -572,3 +572,33 @@ D3：ForgeOS MCP Read-only Server 完成
 等待用户确认 D3 MCP Read-only Server 的实现与验收结果。
 
 确认前不提交 Git，不修改 Codex 配置，不进入 MCP 写入、Agent 或 Codex 自动任务开发。
+
+## 2026-07-12 — ForgeOS D4 Codex Task Proposal Foundation
+
+### 当前阶段
+
+D4：Codex Task Proposal Foundation 完成
+
+### 目标
+
+建立执行前任务提案层，用固定 ContextExport、范围约束、验收标准和人工审批描述未来 Codex 编码请求，但不执行 Codex 或修改代码。
+
+### 完成内容
+
+- 新增 `CodexTaskProposal` Domain、Migration `0010`、Proposal 主表和只追加状态历史表。
+- 实现 `draft → proposed → approved | rejected`、`approved → archived` 状态机。
+- 复合外键保证 Proposal 与 ContextExport 属于同一 Project。
+- 实现创建、列表、详情、提交、批准、拒绝和归档 Use Cases、Repository 与类型化 IPC。
+- 状态变化使用 expectedVersion，并在事务中追加历史。
+- 新增 Codex Tasks 页面与 Project Overview 入口，明确显示 “Proposal only” 和“不会执行代码”。
+- 未实现 Codex 执行、Agent、MCP 写入、Sandbox、分支、Commit、Push 或 Merge。
+- 未执行 Git commit。
+
+### 验证结果
+
+- 集成测试覆盖创建、Context 绑定、跨 Project 拒绝、版本冲突、Approve/Reject、历史和重开持久化。
+- Approve 前后 Project、Snapshot、Session 与 Evidence 事实保持不变。
+
+### 下一步计划
+
+等待用户确认 D4。确认前不进入 Codex 执行、Agent 或 MCP 写入。

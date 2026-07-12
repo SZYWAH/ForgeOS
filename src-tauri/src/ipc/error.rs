@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        AiCandidateError, AiProviderError, ApplicationError, ContextPackError,
-        RepositoryKernelError,
+        AiCandidateError, AiProviderError, ApplicationError, CodexTaskProposalError,
+        ContextPackError, RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -134,6 +134,28 @@ impl From<AiCandidateError> for IpcError {
     }
 }
 
+impl From<CodexTaskProposalError> for IpcError {
+    fn from(error: CodexTaskProposalError) -> Self {
+        let (code, retryable) = match &error {
+            CodexTaskProposalError::Validation(value) => (validation_code(value), false),
+            CodexTaskProposalError::WorkspaceNotFound => ("workspace_not_found", false),
+            CodexTaskProposalError::ProjectNotFound => ("project_not_found", false),
+            CodexTaskProposalError::ContextExportNotFound => ("context_export_not_found", false),
+            CodexTaskProposalError::ProposalNotFound => ("codex_task_proposal_not_found", false),
+            CodexTaskProposalError::VersionConflict { .. } => {
+                ("codex_task_proposal_version_conflict", false)
+            }
+            CodexTaskProposalError::CorruptData(_) => ("corrupt_data", false),
+            CodexTaskProposalError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
 impl From<RepositoryKernelError> for IpcError {
     fn from(error: RepositoryKernelError) -> Self {
         let (code, retryable) = match &error {
@@ -173,6 +195,10 @@ fn validation_code(error: &DomainError) -> &'static str {
         DomainError::AiCandidateProjectMismatch => "ai_candidate_project_mismatch",
         DomainError::AiCandidateSourceProjectMismatch => "ai_candidate_source_project_mismatch",
         DomainError::AiCandidateNotPending => "ai_candidate_not_pending",
+        DomainError::CodexTaskProposalProjectMismatch => "codex_task_proposal_project_mismatch",
+        DomainError::InvalidCodexTaskProposalTransition { .. } => {
+            "codex_task_proposal_invalid_transition"
+        }
         DomainError::RepositoryProjectMismatch => "repository_project_mismatch",
         DomainError::ArchivedProjectCannotAcceptRepositoryChanges => "archived_project_read_only",
         DomainError::TerminalSessionCannotBeModified => "session_terminal_read_only",

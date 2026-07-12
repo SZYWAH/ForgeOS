@@ -605,3 +605,13 @@ Migration 失败时应用必须报告明确错误，不得继续以正常状态�
 - AI Candidate 采纳到正式领域的人工确认工作流
 
 它们应在进入相应开发阶段时通过新 Migration 增加，并以 `project_id` 建立清晰归属。当前不提前创建空表，也不实现通用 Task 数据模型。Current Snapshot、Development Session 与 Evidence 继续由人工维护；ContextExport 只组织事实，AICandidate 只记录建议及审核状态。Git 仅支持本地只读观察与用户显式 Evidence 捕获。Candidate 正式采纳、GitHub 同步、AI 自动运行、Codex 自动协同与 Timeline 均留待独立阶段。
+
+## CodexTaskProposal
+
+`0010_codex_task_proposal.sql` 新增 `codex_task_proposals` 与只追加的 `codex_task_proposal_status_history`。
+
+- Proposal 通过 `(context_export_id, project_id)` 复合外键绑定同一 Project 的 ContextExport。
+- 非目标、范围、验收标准与验证命令使用 JSON 字符串数组保存。
+- 状态限制为 `draft / proposed / approved / rejected / archived`；Domain 约束合法迁移。
+- 创建和状态迁移在同一事务中追加 History，保存前后状态、版本和时间。
+- Approve 只更新 Proposal 和 History，不修改事实表，也不产生执行记录。

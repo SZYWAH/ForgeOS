@@ -5,12 +5,13 @@ use crate::{
     application::{
         ai_candidate::CreateAiCandidateInput,
         ai_provider::{AiInvocationResult, AiProviderView},
+        codex_task_proposal::CreateCodexTaskProposalInput,
         context_pack::ContextAiInvocationResult,
         repository::RepositoryRecord,
     },
     domain::{
-        AiCandidate, ContextExport, DevelopmentSession, DiffSummary, Evidence, EvidenceLink,
-        Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
+        AiCandidate, CodexTaskProposal, ContextExport, DevelopmentSession, DiffSummary, Evidence,
+        EvidenceLink, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
     },
     ports::{GitCommit, GitInspection},
 };
@@ -619,6 +620,85 @@ impl From<AiCandidate> for AiCandidateDto {
             version: candidate.version(),
             created_at: timestamp(candidate.created_at()),
             updated_at: timestamp(candidate.updated_at()),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCodexTaskProposalRequest {
+    pub context_export_id: String,
+    pub title: String,
+    pub description: String,
+    pub goal: String,
+    pub non_goals: Vec<String>,
+    pub allowed_scope: Vec<String>,
+    pub forbidden_scope: Vec<String>,
+    pub acceptance_criteria: Vec<String>,
+    pub validation_commands: Vec<String>,
+}
+
+impl From<CreateCodexTaskProposalRequest> for CreateCodexTaskProposalInput {
+    fn from(value: CreateCodexTaskProposalRequest) -> Self {
+        Self {
+            context_export_id: value.context_export_id,
+            title: value.title,
+            description: value.description,
+            goal: value.goal,
+            non_goals: value.non_goals,
+            allowed_scope: value.allowed_scope,
+            forbidden_scope: value.forbidden_scope,
+            acceptance_criteria: value.acceptance_criteria,
+            validation_commands: value.validation_commands,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionCodexTaskProposalRequest {
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexTaskProposalDto {
+    pub id: String,
+    pub project_id: String,
+    pub context_export_id: String,
+    pub title: String,
+    pub description: String,
+    pub goal: String,
+    pub non_goals: Vec<String>,
+    pub allowed_scope: Vec<String>,
+    pub forbidden_scope: Vec<String>,
+    pub acceptance_criteria: Vec<String>,
+    pub validation_commands: Vec<String>,
+    pub status: String,
+    pub version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<CodexTaskProposal> for CodexTaskProposalDto {
+    fn from(value: CodexTaskProposal) -> Self {
+        let details = value.details().clone();
+        Self {
+            id: value.id().into(),
+            project_id: value.project_id().into(),
+            context_export_id: value.context_export_id().into(),
+            title: details.title,
+            description: details.description,
+            goal: details.goal,
+            non_goals: details.non_goals,
+            allowed_scope: details.allowed_scope,
+            forbidden_scope: details.forbidden_scope,
+            acceptance_criteria: details.acceptance_criteria,
+            validation_commands: details.validation_commands,
+            status: value.status().as_str().into(),
+            version: value.version(),
+            created_at: timestamp(value.created_at()),
+            updated_at: timestamp(value.updated_at()),
         }
     }
 }

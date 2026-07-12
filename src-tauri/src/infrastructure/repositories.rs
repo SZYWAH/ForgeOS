@@ -7,16 +7,18 @@ use sqlx::{FromRow, SqlitePool};
 use crate::{
     domain::{
         AiCandidate, AiCandidateStatus, AiCandidateType, AiProvider, AiProviderDetails,
-        ContextExport, ContextExportStatus, ContextTemplateType, DevelopmentSession, DiffSummary,
-        Evidence, EvidenceDetails, EvidenceLink, EvidenceRelationType, EvidenceSourceType,
+        CodexTaskProposal, CodexTaskProposalDetails, CodexTaskProposalStatus, ContextExport,
+        ContextExportStatus, ContextTemplateType, DevelopmentSession, DiffSummary, Evidence,
+        EvidenceDetails, EvidenceLink, EvidenceRelationType, EvidenceSourceType,
         EvidenceTargetType, EvidenceType, LifecycleStage, Project, ProjectDetails, ProjectSnapshot,
         ProjectStatus, Repository, SessionStatus, SnapshotDetails, VerificationStatus, WorkingCopy,
         Workspace,
     },
     ports::{
-        AiCandidateRepository, AiProviderRepository, ContextExportRepository, EvidenceRepository,
-        McpQueryRepository, ProjectRepository, RepositoryError, RepositoryStore, SessionRepository,
-        SnapshotRepository, WorkspaceRepository,
+        AiCandidateRepository, AiProviderRepository, CodexTaskProposalRepository,
+        ContextExportRepository, EvidenceRepository, McpQueryRepository, ProjectRepository,
+        RepositoryError, RepositoryStore, SessionRepository, SnapshotRepository,
+        WorkspaceRepository,
     },
 };
 
@@ -383,6 +385,64 @@ impl AiCandidateRow {
 
 const AI_CANDIDATE_COLUMNS: &str = "id, project_id, candidate_type, \
     source_context_export_id, title, content_markdown, status, version, created_at, updated_at";
+
+#[derive(FromRow)]
+struct CodexTaskProposalRow {
+    id: String,
+    project_id: String,
+    context_export_id: String,
+    title: String,
+    description: String,
+    goal: String,
+    non_goals: String,
+    allowed_scope: String,
+    forbidden_scope: String,
+    acceptance_criteria: String,
+    validation_commands: String,
+    status: String,
+    version: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl CodexTaskProposalRow {
+    fn into_domain(self) -> Result<CodexTaskProposal, RepositoryError> {
+        CodexTaskProposal::restore(
+            self.id,
+            self.project_id,
+            self.context_export_id,
+            CodexTaskProposalDetails {
+                title: self.title,
+                description: self.description,
+                goal: self.goal,
+                non_goals: parse_list("codex_task_proposals.non_goals", &self.non_goals)?,
+                allowed_scope: parse_list(
+                    "codex_task_proposals.allowed_scope",
+                    &self.allowed_scope,
+                )?,
+                forbidden_scope: parse_list(
+                    "codex_task_proposals.forbidden_scope",
+                    &self.forbidden_scope,
+                )?,
+                acceptance_criteria: parse_list(
+                    "codex_task_proposals.acceptance_criteria",
+                    &self.acceptance_criteria,
+                )?,
+                validation_commands: parse_list(
+                    "codex_task_proposals.validation_commands",
+                    &self.validation_commands,
+                )?,
+            },
+            CodexTaskProposalStatus::from_str(&self.status).map_err(corrupt)?,
+            self.version,
+            parse_timestamp("codex_task_proposals.created_at", &self.created_at)?,
+            parse_timestamp("codex_task_proposals.updated_at", &self.updated_at)?,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const CODEX_TASK_PROPOSAL_COLUMNS: &str = "id, project_id, context_export_id, title, description, goal, non_goals, allowed_scope, forbidden_scope, acceptance_criteria, validation_commands, status, version, created_at, updated_at";
 
 #[derive(FromRow)]
 struct RepositoryRow {
@@ -1214,6 +1274,82 @@ impl AiCandidateRepository for SqliteProjectRepository {
         if result.rows_affected() != 1 {
             return Err(RepositoryError::OptimisticConflict);
         }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl CodexTaskProposalRepository for SqliteProjectRepository {
+    async fn insert_codex_task_proposal(
+        &self,
+        proposal: &CodexTaskProposal,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let details = proposal.details();
+        sqlx::query("INSERT INTO codex_task_proposals (id, project_id, context_export_id, title, description, goal, non_goals, allowed_scope, forbidden_scope, acceptance_criteria, validation_commands, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(proposal.id()).bind(proposal.project_id()).bind(proposal.context_export_id())
+            .bind(&details.title).bind(&details.description).bind(&details.goal)
+            .bind(encode_list("codex_task_proposals.non_goals", &details.non_goals)?).bind(encode_list("codex_task_proposals.allowed_scope", &details.allowed_scope)?)
+            .bind(encode_list("codex_task_proposals.forbidden_scope", &details.forbidden_scope)?).bind(encode_list("codex_task_proposals.acceptance_criteria", &details.acceptance_criteria)?)
+            .bind(encode_list("codex_task_proposals.validation_commands", &details.validation_commands)?).bind(proposal.status().as_str())
+            .bind(proposal.version()).bind(timestamp(proposal.created_at())).bind(timestamp(proposal.updated_at()))
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        sqlx::query("INSERT INTO codex_task_proposal_status_history (id, proposal_id, from_status, to_status, proposal_version, changed_at) VALUES (?, ?, NULL, 'draft', ?, ?)")
+            .bind(uuid::Uuid::now_v7().to_string()).bind(proposal.id()).bind(proposal.version()).bind(timestamp(proposal.created_at()))
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(())
+    }
+
+    async fn list_codex_task_proposals(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<CodexTaskProposal>, RepositoryError> {
+        let query = format!("SELECT {CODEX_TASK_PROPOSAL_COLUMNS} FROM codex_task_proposals WHERE project_id = ? ORDER BY updated_at DESC, created_at DESC, id DESC");
+        sqlx::query_as::<_, CodexTaskProposalRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .map(CodexTaskProposalRow::into_domain)
+            .collect()
+    }
+
+    async fn get_codex_task_proposal(
+        &self,
+        proposal_id: &str,
+    ) -> Result<Option<CodexTaskProposal>, RepositoryError> {
+        let query =
+            format!("SELECT {CODEX_TASK_PROPOSAL_COLUMNS} FROM codex_task_proposals WHERE id = ?");
+        sqlx::query_as::<_, CodexTaskProposalRow>(&query)
+            .bind(proposal_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(CodexTaskProposalRow::into_domain)
+            .transpose()
+    }
+
+    async fn transition_codex_task_proposal(
+        &self,
+        proposal: &CodexTaskProposal,
+        from_status: &str,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let result = sqlx::query("UPDATE codex_task_proposals SET status = ?, version = ?, updated_at = ? WHERE id = ? AND project_id = ? AND status = ? AND version = ?")
+            .bind(proposal.status().as_str()).bind(proposal.version()).bind(timestamp(proposal.updated_at()))
+            .bind(proposal.id()).bind(proposal.project_id()).bind(from_status).bind(expected_version)
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        sqlx::query("INSERT INTO codex_task_proposal_status_history (id, proposal_id, from_status, to_status, proposal_version, changed_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(uuid::Uuid::now_v7().to_string()).bind(proposal.id()).bind(from_status)
+            .bind(proposal.status().as_str()).bind(proposal.version()).bind(timestamp(proposal.updated_at()))
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        transaction.commit().await.map_err(storage)?;
         Ok(())
     }
 }
