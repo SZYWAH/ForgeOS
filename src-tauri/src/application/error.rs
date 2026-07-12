@@ -40,6 +40,21 @@ pub enum ApplicationError {
     #[error("Development Session version conflict: expected {expected}, current {actual}")]
     SessionVersionConflict { expected: i64, actual: i64 },
 
+    #[error("Evidence not found")]
+    EvidenceNotFound,
+
+    #[error("Evidence version conflict: expected {expected}, current {actual}")]
+    EvidenceVersionConflict { expected: i64, actual: i64 },
+
+    #[error("this Evidence link already exists")]
+    EvidenceLinkAlreadyExists,
+
+    #[error("Evidence link target not found")]
+    EvidenceTargetNotFound,
+
+    #[error("Evidence link target must belong to the same Project")]
+    EvidenceTargetProjectMismatch,
+
     #[error("stored ForgeOS data is invalid: {0}")]
     CorruptData(String),
 

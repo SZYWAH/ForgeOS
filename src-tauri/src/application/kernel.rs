@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use crate::{
-    domain::{DevelopmentSession, Project, ProjectSnapshot, Workspace},
+    domain::{DevelopmentSession, Evidence, EvidenceLink, Project, ProjectSnapshot, Workspace},
     ports::ProjectKernelRepository,
 };
 
 use super::{
+    evidence::{
+        self, ChangeEvidenceStatusInput, CreateEvidenceInput, EvidenceRecord, LinkEvidenceInput,
+        UpdateEvidenceInput,
+    },
     project::{self, CreateProjectInput, UpdateProjectInput},
     session::{
         self, AbandonSessionInput, CompleteSessionInput, StartSessionInput, UpdateSessionInput,
@@ -144,5 +148,65 @@ impl ProjectKernel {
         input: AbandonSessionInput,
     ) -> Result<DevelopmentSession, ApplicationError> {
         session::abandon_session(self.repository.as_ref(), project_id, session_id, input).await
+    }
+
+    pub async fn create_evidence(
+        &self,
+        project_id: &str,
+        input: CreateEvidenceInput,
+    ) -> Result<Evidence, ApplicationError> {
+        evidence::create_evidence(self.repository.as_ref(), project_id, input).await
+    }
+
+    pub async fn list_evidences(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<Evidence>, ApplicationError> {
+        evidence::get_project_evidences(self.repository.as_ref(), project_id).await
+    }
+
+    pub async fn get_evidence(
+        &self,
+        project_id: &str,
+        evidence_id: &str,
+    ) -> Result<EvidenceRecord, ApplicationError> {
+        evidence::get_evidence(self.repository.as_ref(), project_id, evidence_id).await
+    }
+
+    pub async fn update_evidence(
+        &self,
+        project_id: &str,
+        evidence_id: &str,
+        input: UpdateEvidenceInput,
+    ) -> Result<Evidence, ApplicationError> {
+        evidence::update_evidence(self.repository.as_ref(), project_id, evidence_id, input).await
+    }
+
+    pub async fn verify_evidence(
+        &self,
+        project_id: &str,
+        evidence_id: &str,
+        input: ChangeEvidenceStatusInput,
+    ) -> Result<Evidence, ApplicationError> {
+        evidence::verify_evidence(self.repository.as_ref(), project_id, evidence_id, input).await
+    }
+
+    pub async fn invalidate_evidence(
+        &self,
+        project_id: &str,
+        evidence_id: &str,
+        input: ChangeEvidenceStatusInput,
+    ) -> Result<Evidence, ApplicationError> {
+        evidence::invalidate_evidence(self.repository.as_ref(), project_id, evidence_id, input)
+            .await
+    }
+
+    pub async fn link_evidence(
+        &self,
+        project_id: &str,
+        evidence_id: &str,
+        input: LinkEvidenceInput,
+    ) -> Result<EvidenceLink, ApplicationError> {
+        evidence::link_evidence(self.repository.as_ref(), project_id, evidence_id, input).await
     }
 }

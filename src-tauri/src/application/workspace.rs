@@ -70,6 +70,7 @@ pub(crate) fn map_read_error(error: RepositoryError) -> ApplicationError {
         RepositoryError::ProjectArchived => {
             ApplicationError::Validation(DomainError::ArchivedProjectCannotAcceptSnapshots)
         }
+        RepositoryError::EvidenceTargetInvalid => ApplicationError::CorruptData(error.to_string()),
         RepositoryError::Conflict | RepositoryError::OptimisticConflict => {
             ApplicationError::Storage(error.to_string())
         }
