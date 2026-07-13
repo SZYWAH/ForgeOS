@@ -13,7 +13,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
           <span className="brand-mark">F</span>
           <div>
             <strong>ForgeOS</strong>
-            <span>D2 Git Evidence Integration</span>
+            <span>D4.5 · GitHub 只读导入</span>
           </div>
         </div>
 
@@ -22,8 +22,8 @@ export function AppLayout({ workspace }: AppLayoutProps) {
             总览
           </NavLink>
           <NavLink to="/projects">项目</NavLink>
-          <NavLink to="/settings/ai-providers">AI 服务配置</NavLink>
           <NavLink to="/github-import">GitHub 导入</NavLink>
+          <NavLink to="/settings/ai-providers">AI 服务配置</NavLink>
         </nav>
 
         <div className="workspace-card">
