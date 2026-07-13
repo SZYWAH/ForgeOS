@@ -56,7 +56,7 @@ export function CodexTasksPage() {
   if (!project || !projectId) return <p className="loading-copy">Loading Codex Task Proposals…</p>;
   return <div className="page-stack codex-task-page">
     <div className="breadcrumb"><Link to="/projects">Projects</Link><span>/</span><Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span><span>Codex Tasks</span></div>
-    <header className="page-header"><div><p className="eyebrow">D4 · Proposal Governance</p><h1>Codex Task Proposals</h1><p>定义受 Context Pack 约束的编码请求。Proposal only，不会执行代码。</p></div></header>
+    <header className="page-header"><div><p className="eyebrow">D4 · Proposal Governance</p><h1>Codex Task Proposals</h1><p>定义受 Context Pack 约束的编码请求。Proposal only，不会执行代码。</p></div><Link className="secondary-button button-link" to={`/projects/${project.id}/codex-executions`}>查看执行记录</Link></header>
     <div className="ai-boundary-banner"><strong>不会执行 Codex</strong><span>Approve 只记录人工授权；不会创建分支、修改文件、提交、推送或调用 Agent。</span></div>
     {error ? <div className="error-banner">{error}</div> : null}{notice ? <div className="success-banner">{notice}</div> : null}
     <form className="panel proposal-form" onSubmit={create}>

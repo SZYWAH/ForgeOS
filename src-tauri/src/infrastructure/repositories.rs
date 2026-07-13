@@ -7,7 +7,7 @@ use sqlx::{FromRow, SqlitePool};
 use crate::{
     domain::{
         AiCandidate, AiCandidateStatus, AiCandidateType, AiProvider, AiProviderDetails,
-        CodexTaskProposal, CodexTaskProposalDetails,
+        CodexExecutionRecord, CodexExecutionStatus, CodexTaskProposal, CodexTaskProposalDetails,
         CodexTaskProposalStatus, ContextExport, ContextExportStatus, ContextTemplateType,
         DevelopmentSession, DiffSummary, Evidence, EvidenceDetails, EvidenceLink,
         EvidenceRelationType, EvidenceSourceType, EvidenceTargetType, EvidenceType, GitHubAuthType,
@@ -17,7 +17,7 @@ use crate::{
         VerificationStatus, WorkingCopy, Workspace,
     },
     ports::{
-        AiCandidateRepository, AiProviderRepository,
+        AiCandidateRepository, AiProviderRepository, CodexExecutionRepository,
         CodexTaskProposalRepository, ContextExportRepository, EvidenceRepository,
         GitHubImportRepository, McpQueryRepository, ProjectRepository, RepositoryError,
         RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
@@ -546,6 +546,48 @@ impl CodexTaskProposalRow {
 }
 
 const CODEX_TASK_PROPOSAL_COLUMNS: &str = "id, project_id, context_export_id, title, description, goal, non_goals, allowed_scope, forbidden_scope, acceptance_criteria, validation_commands, status, version, created_at, updated_at";
+
+#[derive(FromRow)]
+struct CodexExecutionRow {
+    id: String,
+    proposal_id: String,
+    project_id: String,
+    status: String,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    output_summary: String,
+    validation_result: String,
+    version: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl CodexExecutionRow {
+    fn into_domain(self) -> Result<CodexExecutionRecord, RepositoryError> {
+        CodexExecutionRecord::restore(
+            self.id,
+            self.proposal_id,
+            self.project_id,
+            CodexExecutionStatus::from_str(&self.status).map_err(corrupt)?,
+            self.start_time
+                .as_deref()
+                .map(|value| parse_timestamp("codex_execution_records.start_time", value))
+                .transpose()?,
+            self.end_time
+                .as_deref()
+                .map(|value| parse_timestamp("codex_execution_records.end_time", value))
+                .transpose()?,
+            self.output_summary,
+            self.validation_result,
+            self.version,
+            parse_timestamp("codex_execution_records.created_at", &self.created_at)?,
+            parse_timestamp("codex_execution_records.updated_at", &self.updated_at)?,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const CODEX_EXECUTION_COLUMNS: &str = "id, proposal_id, project_id, status, start_time, end_time, output_summary, validation_result, version, created_at, updated_at";
 
 #[derive(FromRow)]
 struct RepositoryRow {
@@ -1457,6 +1499,111 @@ impl CodexTaskProposalRepository for SqliteProjectRepository {
     }
 }
 
+#[async_trait]
+impl CodexExecutionRepository for SqliteProjectRepository {
+    async fn insert_codex_execution(
+        &self,
+        execution: &CodexExecutionRecord,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        sqlx::query("INSERT INTO codex_execution_records (id, proposal_id, project_id, status, start_time, end_time, output_summary, validation_result, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(execution.id())
+            .bind(execution.proposal_id())
+            .bind(execution.project_id())
+            .bind(execution.status().as_str())
+            .bind(execution.started_at().map(timestamp))
+            .bind(execution.ended_at().map(timestamp))
+            .bind(execution.output_summary())
+            .bind(execution.validation_result())
+            .bind(execution.version())
+            .bind(timestamp(execution.created_at()))
+            .bind(timestamp(execution.updated_at()))
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_write_error)?;
+        sqlx::query("INSERT INTO codex_execution_status_history (id, execution_id, from_status, to_status, execution_version, changed_at) VALUES (?, ?, NULL, 'pending', ?, ?)")
+            .bind(uuid::Uuid::now_v7().to_string())
+            .bind(execution.id())
+            .bind(execution.version())
+            .bind(timestamp(execution.created_at()))
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_write_error)?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(())
+    }
+
+    async fn list_codex_executions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<CodexExecutionRecord>, RepositoryError> {
+        let query = format!(
+            "SELECT {CODEX_EXECUTION_COLUMNS} FROM codex_execution_records WHERE project_id = ? ORDER BY created_at DESC, id DESC"
+        );
+        sqlx::query_as::<_, CodexExecutionRow>(&query)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .map(CodexExecutionRow::into_domain)
+            .collect()
+    }
+
+    async fn get_codex_execution(
+        &self,
+        execution_id: &str,
+    ) -> Result<Option<CodexExecutionRecord>, RepositoryError> {
+        let query =
+            format!("SELECT {CODEX_EXECUTION_COLUMNS} FROM codex_execution_records WHERE id = ?");
+        sqlx::query_as::<_, CodexExecutionRow>(&query)
+            .bind(execution_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(CodexExecutionRow::into_domain)
+            .transpose()
+    }
+
+    async fn transition_codex_execution(
+        &self,
+        execution: &CodexExecutionRecord,
+        from_status: &str,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let result = sqlx::query("UPDATE codex_execution_records SET status = ?, start_time = ?, end_time = ?, output_summary = ?, validation_result = ?, version = ?, updated_at = ? WHERE id = ? AND project_id = ? AND status = ? AND version = ?")
+            .bind(execution.status().as_str())
+            .bind(execution.started_at().map(timestamp))
+            .bind(execution.ended_at().map(timestamp))
+            .bind(execution.output_summary())
+            .bind(execution.validation_result())
+            .bind(execution.version())
+            .bind(timestamp(execution.updated_at()))
+            .bind(execution.id())
+            .bind(execution.project_id())
+            .bind(from_status)
+            .bind(expected_version)
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        sqlx::query("INSERT INTO codex_execution_status_history (id, execution_id, from_status, to_status, execution_version, changed_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(uuid::Uuid::now_v7().to_string())
+            .bind(execution.id())
+            .bind(from_status)
+            .bind(execution.status().as_str())
+            .bind(execution.version())
+            .bind(timestamp(execution.updated_at()))
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_write_error)?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(())
+    }
+}
 
 #[async_trait]
 impl GitHubImportRepository for SqliteProjectRepository {

@@ -13,6 +13,7 @@ import { ContextPackPage } from "./pages/ContextPackPage";
 import { AiCandidatesPage } from "./pages/AiCandidatesPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { CodexTasksPage } from "./pages/CodexTasksPage";
+import { CodexExecutionsPage } from "./pages/CodexExecutionsPage";
 import { GitHubImportPage } from "./pages/GitHubImportPage";
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
               <Route path="projects/:projectId/candidates" element={<AiCandidatesPage />} />
               <Route path="projects/:projectId/repositories" element={<RepositoriesPage />} />
               <Route path="projects/:projectId/codex-tasks" element={<CodexTasksPage />} />
+              <Route path="projects/:projectId/codex-executions" element={<CodexExecutionsPage />} />
               <Route path="settings/ai-providers" element={<AiProvidersPage />} />
               <Route path="github-import" element={<GitHubImportPage />} />
               <Route path="*" element={<NotFoundPage />} />

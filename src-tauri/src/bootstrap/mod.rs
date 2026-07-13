@@ -8,11 +8,12 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AiCandidateKernel, AiProviderKernel, CodexTaskProposalKernel,
+        AiCandidateKernel, AiProviderKernel, CodexExecutionKernel, CodexTaskProposalKernel,
         ContextPackKernel, GitHubImportKernel, ProjectKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
+        codex_runner::RecordOnlyCodexRunner,
         context_renderer::MarkdownContextRenderer,
         database::{self, DatabaseState},
         git::GitCliAdapter,
@@ -32,6 +33,7 @@ pub struct BootstrapState {
     pub ai_candidate_kernel: AiCandidateKernel,
     pub repository_kernel: RepositoryKernel,
     pub codex_task_proposal_kernel: CodexTaskProposalKernel,
+    pub codex_execution_kernel: CodexExecutionKernel,
     pub github_import_kernel: GitHubImportKernel,
 }
 
@@ -56,6 +58,8 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     );
     let ai_candidate_kernel = AiCandidateKernel::new(repository.clone());
     let codex_task_proposal_kernel = CodexTaskProposalKernel::new(repository.clone());
+    let codex_execution_kernel =
+        CodexExecutionKernel::new(repository.clone(), Arc::new(RecordOnlyCodexRunner));
     let repository_kernel = RepositoryKernel::new(repository.clone(), Arc::new(GitCliAdapter));
     let github_import_kernel = GitHubImportKernel::new(
         repository.clone(),
@@ -75,6 +79,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         ai_candidate_kernel,
         repository_kernel,
         codex_task_proposal_kernel,
+        codex_execution_kernel,
         github_import_kernel,
     })
 }

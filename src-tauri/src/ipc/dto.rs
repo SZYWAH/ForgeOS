@@ -5,13 +5,14 @@ use crate::{
     application::{
         ai_candidate::CreateAiCandidateInput,
         ai_provider::{AiInvocationResult, AiProviderView},
+        codex_execution::{CancelCodexExecutionInput, RecordCodexExecutionResultInput},
         codex_task_proposal::CreateCodexTaskProposalInput,
         context_pack::ContextAiInvocationResult,
         github_import::{GitHubConnectorView, GitHubImportResult},
         repository::RepositoryRecord,
     },
     domain::{
-        AiCandidate, CodexTaskProposal, ContextExport, DevelopmentSession,
+        AiCandidate, CodexExecutionRecord, CodexTaskProposal, ContextExport, DevelopmentSession,
         DiffSummary, Evidence, EvidenceLink, GitHubConnector, GitHubImportDraft,
         GitHubRepositoryFacts, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
     },
@@ -698,6 +699,80 @@ impl From<CodexTaskProposal> for CodexTaskProposalDto {
             acceptance_criteria: details.acceptance_criteria,
             validation_commands: details.validation_commands,
             status: value.status().as_str().into(),
+            version: value.version(),
+            created_at: timestamp(value.created_at()),
+            updated_at: timestamp(value.updated_at()),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionCodexExecutionRequest {
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordCodexExecutionResultRequest {
+    pub output_summary: String,
+    pub validation_result: String,
+    pub expected_version: i64,
+}
+
+impl From<RecordCodexExecutionResultRequest> for RecordCodexExecutionResultInput {
+    fn from(value: RecordCodexExecutionResultRequest) -> Self {
+        Self {
+            output_summary: value.output_summary,
+            validation_result: value.validation_result,
+            expected_version: value.expected_version,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelCodexExecutionRequest {
+    pub output_summary: String,
+    pub expected_version: i64,
+}
+
+impl From<CancelCodexExecutionRequest> for CancelCodexExecutionInput {
+    fn from(value: CancelCodexExecutionRequest) -> Self {
+        Self {
+            output_summary: value.output_summary,
+            expected_version: value.expected_version,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexExecutionDto {
+    pub id: String,
+    pub proposal_id: String,
+    pub project_id: String,
+    pub status: String,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub output_summary: String,
+    pub validation_result: String,
+    pub version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<CodexExecutionRecord> for CodexExecutionDto {
+    fn from(value: CodexExecutionRecord) -> Self {
+        Self {
+            id: value.id().into(),
+            proposal_id: value.proposal_id().into(),
+            project_id: value.project_id().into(),
+            status: value.status().as_str().into(),
+            start_time: value.started_at().map(timestamp),
+            end_time: value.ended_at().map(timestamp),
+            output_summary: value.output_summary().into(),
+            validation_result: value.validation_result().into(),
             version: value.version(),
             created_at: timestamp(value.created_at()),
             updated_at: timestamp(value.updated_at()),

@@ -2,6 +2,25 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("invalid Codex Execution status: {0}")]
+    InvalidCodexExecutionStatus(String),
+    #[error("invalid Codex Execution version")]
+    InvalidCodexExecutionVersion,
+    #[error("invalid Codex Execution timestamps")]
+    InvalidCodexExecutionTimestamps,
+    #[error("stored Codex Execution fields do not match its lifecycle status")]
+    InvalidCodexExecutionLifecycle,
+    #[error("invalid Codex Execution transition from {from} to {to}")]
+    InvalidCodexExecutionTransition {
+        from: &'static str,
+        to: &'static str,
+    },
+    #[error("Codex Execution result summary and validation result are required")]
+    CodexExecutionResultRequired,
+    #[error("Codex Execution version overflow")]
+    CodexExecutionVersionOverflow,
+    #[error("Codex Execution belongs to another Project")]
+    CodexExecutionProjectMismatch,
     #[error("unsupported GitHub connector auth type: {0}")]
     InvalidGitHubAuthType(String),
     #[error("invalid GitHub connector state")]

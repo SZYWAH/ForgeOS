@@ -61,13 +61,14 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             'evidences', 'evidence_links', 'ai_providers', 'context_exports', 'ai_candidates', \
             'repositories', 'working_copies', 'repository_evidence_links', \
             'codex_task_proposals', 'codex_task_proposal_status_history', \
-            'github_connectors', 'github_import_drafts', 'github_evidence_links'
+            'github_connectors', 'github_import_drafts', 'github_evidence_links', \
+            'codex_execution_records', 'codex_execution_status_history'\
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 17 {
+    if table_count != 19 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
         ));
@@ -207,6 +208,31 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     if proposal_history_columns != 6 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS Codex Task Proposal history schema is incomplete".into(),
+        ));
+    }
+
+    let execution_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('codex_execution_records') WHERE name IN \
+         ('id', 'proposal_id', 'project_id', 'status', 'start_time', 'end_time', \
+          'output_summary', 'validation_result', 'version', 'created_at', 'updated_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if execution_columns != 11 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Codex Execution schema is incomplete".into(),
+        ));
+    }
+
+    let execution_history_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('codex_execution_status_history') WHERE name IN \
+         ('id', 'execution_id', 'from_status', 'to_status', 'execution_version', 'changed_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if execution_history_columns != 6 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Codex Execution history schema is incomplete".into(),
         ));
     }
 
@@ -380,6 +406,13 @@ mod tests {
             .await
             .expect("Rust should be able to read working_copies");
         assert_eq!(working_copy_count, 0);
+
+        let execution_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM codex_execution_records")
+                .fetch_one(&pool)
+                .await
+                .expect("Rust should be able to read codex_execution_records");
+        assert_eq!(execution_count, 0);
     }
 
     #[tokio::test]
@@ -505,6 +538,74 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn codex_execution_migration_preserves_approved_proposals_and_enforces_project_scope() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../../database/migrations/0001_create_workspaces_and_projects.sql"),
+            include_str!("../../../database/migrations/0002_project_identity_kernel.sql"),
+            include_str!("../../../database/migrations/0003_current_snapshot.sql"),
+            include_str!("../../../database/migrations/0004_development_session.sql"),
+            include_str!("../../../database/migrations/0005_evidence_kernel.sql"),
+            include_str!("../../../database/migrations/0006_ai_provider_foundation.sql"),
+            include_str!("../../../database/migrations/0007_context_pack.sql"),
+            include_str!("../../../database/migrations/0008_ai_candidate.sql"),
+            include_str!("../../../database/migrations/0009_git_evidence.sql"),
+            include_str!("../../../database/migrations/0010_codex_task_proposal.sql"),
+            include_str!("../../../database/migrations/0011_github_readonly_import.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        }
+        sqlx::raw_sql(
+            "INSERT INTO workspaces VALUES ('w', 'Personal', 'UTC', '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z');
+             INSERT INTO projects (id, workspace_id, slug, name, description, vision, target_user, scope, non_goals, tech_stack, status, lifecycle_stage, priority, created_at, updated_at, version)
+             VALUES ('p1', 'w', 'one', 'One', '', '', '', '', '', '', 'active', 'implementation', 1, '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z', 1),
+                    ('p2', 'w', 'two', 'Two', '', '', '', '', '', '', 'active', 'implementation', 1, '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z', 1);
+             INSERT INTO context_exports VALUES ('ctx', 'p1', 'coding', NULL, '[]', '# context', '327f031b25e00b1a7cd9b0c18f05948b60f55d09f9b3d177d21083f83a3cb6df', 'generated', '2026-07-13T00:00:00Z', 1);
+             INSERT INTO codex_task_proposals VALUES ('proposal', 'p1', 'ctx', 'D5', '', 'Record execution', '[]', '[]', '[]', '[\"Preserved\"]', '[]', 'approved', 3, '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z');",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../database/migrations/0012_codex_execution_foundation.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT status FROM codex_task_proposals WHERE id = 'proposal'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            "approved"
+        );
+        let cross_project = sqlx::query(
+            "INSERT INTO codex_execution_records (id, proposal_id, project_id, status, version, created_at, updated_at) VALUES ('execution', 'proposal', 'p2', 'pending', 1, '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(cross_project.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM pragma_foreign_key_check")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+    }
 
     #[tokio::test]
     async fn d1_migration_preserves_d0_projects_and_backfills_defaults() {

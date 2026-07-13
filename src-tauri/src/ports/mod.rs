@@ -1,6 +1,7 @@
 //! Persistence interfaces required by ForgeOS application use cases.
 
 mod ai;
+mod codex;
 mod context;
 mod git;
 mod github;
@@ -10,12 +11,13 @@ pub use ai::{
     AiClientError, AiCompletion, AiMessage, AiMessageRole, AiProviderClient, AiTokenUsage,
     ApiKeyStore, SecretStoreError,
 };
+pub use codex::{CodexExecutionRequest, CodexRunner, CodexRunnerError};
 pub use context::{ContextRenderError, ContextRenderInput, ContextRenderer};
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitInspection};
 pub use github::{GitHubClient, GitHubClientError};
 pub use repositories::{
     AiCandidateKernelRepository, AiCandidateRepository, AiProviderRepository,
-    CodexTaskProposalKernelRepository,
+    CodexExecutionKernelRepository, CodexExecutionRepository, CodexTaskProposalKernelRepository,
     CodexTaskProposalRepository, ContextExportRepository, ContextPackRepository,
     EvidenceRepository, GitHubImportKernelRepository, GitHubImportRepository, McpQueryRepository,
     ProjectKernelRepository, ProjectRepository, RepositoryError, RepositoryKernelStore,

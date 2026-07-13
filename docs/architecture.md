@@ -365,3 +365,23 @@ GitHub Repository URL
 - Import Repository 在单事务中创建 Project、把 Draft 标记为 Imported，并写入带来源链的 GitHub Evidence。
 - Reject 保留 Draft 历史且不创建 Project。系统不提供后台轮询、Webhook 或自动同步入口。
 - Project Overview 仅显示已导入来源，不把 GitHub 字段自动覆盖回 Project Identity。
+
+## D5 Codex Execution Foundation
+
+```text
+Approved CodexTaskProposal
+→ CodexExecutionKernel
+├─ CodexRunner Port → RecordOnlyCodexRunner（不启动进程）
+└─ CodexExecutionRepository → SQLite
+     ├─ Execution Record
+     └─ append-only Status History
+```
+
+- Proposal 是经过人工批准的任务契约；Execution 是引用该契约的一次独立执行尝试。
+- 只有同一 Project 的 Approved Proposal 可以创建 `pending` Execution。Approve 本身仍不创建 Execution。
+- Domain 管理 `pending → running → success | failed | cancelled` 与 `pending → cancelled` 状态机、时间字段和乐观版本。
+- Application 负责 Project/Proposal 归属、批准状态和并发检查；Repository 在事务中更新记录并追加历史。
+- `CodexRunner` 是未来执行适配器端口。D5 的 `RecordOnlyCodexRunner` 仅接受请求元数据，不调用 `codex exec`、不读取或修改代码、不运行验证命令。
+- React 通过类型化 IPC 创建请求、查看历史和显式记录状态/结果，不直接访问 SQLite。
+- ExecutionKernel 没有 Snapshot、Session 或 Evidence 写入能力；成功、失败或取消都不会改变正式研发事实。
+- D5 不使用 `jobs` 模块，不实现后台队列、进度流、Agent、MCP 写入或 Git 自动化。

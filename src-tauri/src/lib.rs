@@ -21,6 +21,7 @@ pub fn run() {
             app.manage(state.ai_candidate_kernel);
             app.manage(state.repository_kernel);
             app.manage(state.codex_task_proposal_kernel);
+            app.manage(state.codex_execution_kernel);
             app.manage(state.github_import_kernel);
             Ok(())
         })
@@ -82,6 +83,13 @@ pub fn run() {
             ipc::codex_task_proposals::approve_proposal,
             ipc::codex_task_proposals::reject_proposal,
             ipc::codex_task_proposals::archive_proposal,
+            ipc::codex_executions::create_codex_execution,
+            ipc::codex_executions::list_codex_executions,
+            ipc::codex_executions::get_codex_execution,
+            ipc::codex_executions::start_codex_execution,
+            ipc::codex_executions::complete_codex_execution,
+            ipc::codex_executions::fail_codex_execution,
+            ipc::codex_executions::cancel_codex_execution,
             ipc::github::get_github_connector,
             ipc::github::set_github_token,
             ipc::github::clear_github_token,

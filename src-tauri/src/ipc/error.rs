@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        AiCandidateError, AiProviderError, ApplicationError,
+        AiCandidateError, AiProviderError, ApplicationError, CodexExecutionError,
         CodexTaskProposalError, ContextPackError, GitHubImportError, RepositoryKernelError,
     },
     domain::DomainError,
@@ -156,6 +156,33 @@ impl From<CodexTaskProposalError> for IpcError {
     }
 }
 
+impl From<CodexExecutionError> for IpcError {
+    fn from(error: CodexExecutionError) -> Self {
+        let (code, retryable) = match &error {
+            CodexExecutionError::Validation(value) => (validation_code(value), false),
+            CodexExecutionError::WorkspaceNotFound => ("workspace_not_found", false),
+            CodexExecutionError::ProjectNotFound => ("project_not_found", false),
+            CodexExecutionError::ProjectArchived => ("archived_project_read_only", false),
+            CodexExecutionError::ProposalNotFound => ("codex_task_proposal_not_found", false),
+            CodexExecutionError::ProposalNotApproved => {
+                ("codex_execution_proposal_not_approved", false)
+            }
+            CodexExecutionError::ExecutionNotFound => ("codex_execution_not_found", false),
+            CodexExecutionError::VersionConflict { .. } => {
+                ("codex_execution_version_conflict", false)
+            }
+            CodexExecutionError::Runner(_) => ("codex_runner_error", true),
+            CodexExecutionError::CorruptData(_) => ("corrupt_data", false),
+            CodexExecutionError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
 impl From<RepositoryKernelError> for IpcError {
     fn from(error: RepositoryKernelError) -> Self {
         let (code, retryable) = match &error {
@@ -223,6 +250,9 @@ fn validation_code(error: &DomainError) -> &'static str {
         DomainError::InvalidCodexTaskProposalTransition { .. } => {
             "codex_task_proposal_invalid_transition"
         }
+        DomainError::CodexExecutionProjectMismatch => "codex_execution_project_mismatch",
+        DomainError::InvalidCodexExecutionTransition { .. } => "codex_execution_invalid_transition",
+        DomainError::CodexExecutionResultRequired => "codex_execution_result_required",
         DomainError::RepositoryProjectMismatch => "repository_project_mismatch",
         DomainError::InvalidGitHubRepositoryUrl => "invalid_github_repository_url",
         DomainError::InvalidGitHubImportTransition { .. } => "invalid_github_import_transition",

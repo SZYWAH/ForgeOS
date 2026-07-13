@@ -637,3 +637,39 @@ D4.5：GitHub Connector / Project Import Foundation 完成
 ### 下一步计划
 
 等待用户确认 D4.5。确认前不提交 Git，不开发 GitHub 写入、Webhook、自动同步、Codex 执行或 Agent。
+
+## 2026-07-13 — ForgeOS D5 Codex Execution Foundation
+
+### 当前阶段
+
+D5：Codex Execution Foundation 完成
+
+### 目标
+
+在不执行 Codex、不修改代码的前提下，把 Approved Task Proposal 转换为可审计的 Execution Request、Execution Record 与 Execution Result。
+
+### 完成内容
+
+- 新增 Migration `0012_codex_execution_foundation.sql`，未修改 `0001` 至 `0011`。
+- 新增 `CodexExecutionRecord` Domain，支持 `pending/running/success/failed/cancelled` 状态机、时间规则和乐观版本。
+- 新增只追加的 `codex_execution_status_history`，状态更新与 History 在同一事务提交。
+- 只有同一 Project 的 Approved Proposal 可以创建 Execution；跨 Project 与未批准 Proposal 均被拒绝。
+- 新增 `CodexRunner` Port 与 `RecordOnlyCodexRunner` Infrastructure Adapter。当前只接收请求元数据，不启动任何进程。
+- 新增创建、列表、详情、开始、成功、失败和取消 Use Cases 与类型化 IPC。
+- 新增 Codex 执行记录页面，支持关联 Proposal、查看 Execution History、结果与验证信息。
+- 前端所有状态操作明确为记录模式，不暗示 Codex 或验证命令已经真实执行。
+- 新增 ADR-013，记录 Proposal 与 Execution 分离以及未来 Runner 接入边界。
+- 未实现 `codex exec`、文件修改、Agent、MCP 写入、自动 Commit/Push/Merge 或后台任务。
+
+### 验证结果
+
+- `npm run build` 通过，包含 TypeScript 构建与 Vite 生产打包。
+- `cargo fmt --check` 与 `cargo check` 通过。
+- `cargo test` 执行 43 个单元/Migration 测试与 12 个集成测试，55 个通过、0 个失败；GitHub 真实网络测试按设计保持 Ignore。
+- D5 专用集成测试覆盖 Approved Proposal 约束、跨 Project 拒绝、状态流转、版本冲突、失败/取消历史、事实隔离和重启持久化。
+- Migration 升级测试确认 Approved Proposal 保留，复合外键拒绝跨 Project Execution。
+- `integrity_check = ok`，`foreign_key_check = 0`。
+
+### 下一步计划
+
+等待用户确认 D5。确认前不提交 Git，不进入真实 Codex Runner、Agent、MCP 写入或 Git 自动化。

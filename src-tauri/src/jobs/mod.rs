@@ -1,3 +1,4 @@
 //! Cancellable and auditable background jobs live here in later phases.
 //!
-//! D0 deliberately runs no Git, AI, GitHub, or Codex jobs.
+//! D5 still runs no Git, AI, GitHub, Codex, or validation jobs. Codex
+//! Execution records are explicit lifecycle facts, not background processes.

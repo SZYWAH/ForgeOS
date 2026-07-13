@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-D2 数据库承载 ForgeOS 的 Project Identity Kernel、Current Snapshot Kernel、Development Session Kernel、Evidence Kernel、AI Provider Foundation、Context Pack Kernel、AI Candidate Foundation 与 Git Evidence Integration，包含：
+D5 数据库承载 ForgeOS 的研发记忆、外部事实、AI 治理、Codex 提案与执行记录基础，包含：
 
 - 单用户的唯一 `Workspace`
 - 归属于该 Workspace 的多个 `Project`
@@ -16,8 +16,11 @@ D2 数据库承载 ForgeOS 的 Project Identity Kernel、Current Snapshot Kernel
 - 保存 Project 与本地 Git 工作区关联的 `Repository`
 - 保存每次只读检查结果的不可变 `WorkingCopy`
 - 追溯 Git Evidence 来源 Repository 的 `RepositoryEvidenceLink`
+- 保存受 ContextExport 约束且经过人工审批的 `CodexTaskProposal`
+- 保存 GitHub 只读导入连接状态与人工审核草稿
+- 保存一次 Codex 执行请求、状态、结果与只追加历史的 `CodexExecutionRecord`
 
-Current Snapshot 只表达“项目现在真实处于什么状态”，Development Session 只表达“一次研发活动发生了什么”，Evidence 只表达“支持该事实的依据是什么”。ContextExport 是上述事实的可验证派生记录；AICandidate 是待人工治理的 AI 建议。Repository/WorkingCopy 是外部 Git 观察，不是 Git 控制状态。本阶段不创建 Conversation、Prompt/Response History、Decision、Problem、Agent、MCP、GitHub、Search 或 Timeline 相关表。
+Current Snapshot 只表达“项目现在真实处于什么状态”，Development Session 只表达“一次研发活动发生了什么”，Evidence 只表达“支持该事实的依据是什么”。ContextExport 是上述事实的可验证派生记录；AICandidate 是待人工治理的 AI 建议。Repository/WorkingCopy 与 GitHub Import 是外部只读事实来源，不是版本控制器。CodexTaskProposal 是人工审批的任务契约，CodexExecutionRecord 只是执行生命周期记录。本阶段不创建 Conversation、Prompt/Response History、Decision、Problem、Agent、MCP 写入、Search 或 Timeline 相关表，也不保存真实 Codex 进程输出流。
 
 ## 技术选择
 
@@ -629,3 +632,45 @@ Migration 失败时应用必须报告明确错误，不得继续以正常状态�
 - GitHub 网络请求发生在事务之前；API 失败不会创建 Draft、Project 或 Evidence。
 
 GitHub Token 通过独立 Credential Manager 服务名保存。IPC 只返回 `tokenConfigured`，不提供 Token 读取字段或命令。
+
+## `codex_execution_records`
+
+`0012_codex_execution_foundation.sql` 新增独立执行记录，Proposal 继续保存任务契约，Execution 表示一次具体尝试。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Execution ID |
+| `proposal_id` | TEXT | NOT NULL, COMPOSITE FOREIGN KEY | 已批准 Proposal |
+| `project_id` | TEXT | NOT NULL, FOREIGN KEY | 所属 Project |
+| `status` | TEXT | NOT NULL, CHECK | `pending/running/success/failed/cancelled` |
+| `start_time` | TEXT | NULL | 进入 Running 的 UTC 时间 |
+| `end_time` | TEXT | NULL | 进入终态的 UTC 时间 |
+| `output_summary` | TEXT | NOT NULL | 执行输出摘要或取消原因 |
+| `validation_result` | TEXT | NOT NULL | 验证结果；成功/失败时必须提供 |
+| `version` | INTEGER | NOT NULL, CHECK | 乐观并发版本 |
+| `created_at` | TEXT | NOT NULL | 请求创建时间 |
+| `updated_at` | TEXT | NOT NULL | 最近状态变化时间 |
+
+数据库 CHECK 保证 Pending 没有开始/结束时间、Running 只有开始时间、Success/Failed 同时具有开始和结束时间、Cancelled 具有结束时间。Application 与 Domain 进一步限制状态迁移和结果必填规则。
+
+Migration 为 `codex_task_proposals (id, project_id)` 增加唯一索引，使 Execution 可以通过复合外键保证 Proposal 与 Project 一致。Project、Proposal 和 Execution 均使用 `ON DELETE RESTRICT` 保留审计历史。
+
+## `codex_execution_status_history`
+
+每次创建或状态变化追加一行，保存：
+
+- `execution_id`
+- `from_status`
+- `to_status`
+- `execution_version`
+- `changed_at`
+
+主记录更新与 History 插入位于同一 SQLite 事务。失败和取消是只读终态；再次尝试需要创建新的 Execution，不覆盖旧记录。
+
+### `0012_codex_execution_foundation.sql`
+
+1. 新增 `codex_execution_records` 与 `codex_execution_status_history`。
+2. 建立 Proposal/Project 复合外键、状态与生命周期 CHECK、Project/Proposal/Status 查询索引。
+3. 使用版本匹配和状态匹配保护并发迁移。
+4. 不修改 `0001` 至 `0011`，不启动 Codex、不保存代码 Diff、不运行 Validation Command。
+5. 不修改 Project、Snapshot、Session、Evidence、Git 或 GitHub 数据。
