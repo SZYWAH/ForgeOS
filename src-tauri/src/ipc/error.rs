@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        AiCandidateError, AiProviderError, ApplicationError, CodexTaskProposalError,
-        ContextPackError, RepositoryKernelError,
+        AiCandidateError, AiProviderError, ApplicationError,
+        CodexTaskProposalError, ContextPackError, GitHubImportError, RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -182,6 +182,30 @@ impl From<RepositoryKernelError> for IpcError {
     }
 }
 
+impl From<GitHubImportError> for IpcError {
+    fn from(error: GitHubImportError) -> Self {
+        let (code, retryable) = match &error {
+            GitHubImportError::Validation(value) => (validation_code(value), false),
+            GitHubImportError::WorkspaceNotFound => ("workspace_not_found", false),
+            GitHubImportError::DraftNotFound => ("github_import_draft_not_found", false),
+            GitHubImportError::ProjectNotFound => ("project_not_found", false),
+            GitHubImportError::DraftConflict => ("github_import_draft_conflict", false),
+            GitHubImportError::ProjectSlugConflict => ("project_slug_conflict", false),
+            GitHubImportError::VersionConflict { .. } => ("github_import_version_conflict", false),
+            GitHubImportError::InvalidToken => ("github_token_invalid", false),
+            GitHubImportError::SecretStore(_) => ("credential_store_error", true),
+            GitHubImportError::GitHub(_) => ("github_api_error", true),
+            GitHubImportError::CorruptData(_) => ("corrupt_data", false),
+            GitHubImportError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
 fn validation_code(error: &DomainError) -> &'static str {
     match error {
         DomainError::ArchiveRequiresDedicatedOperation => "archive_requires_dedicated_operation",
@@ -200,6 +224,8 @@ fn validation_code(error: &DomainError) -> &'static str {
             "codex_task_proposal_invalid_transition"
         }
         DomainError::RepositoryProjectMismatch => "repository_project_mismatch",
+        DomainError::InvalidGitHubRepositoryUrl => "invalid_github_repository_url",
+        DomainError::InvalidGitHubImportTransition { .. } => "invalid_github_import_transition",
         DomainError::ArchivedProjectCannotAcceptRepositoryChanges => "archived_project_read_only",
         DomainError::TerminalSessionCannotBeModified => "session_terminal_read_only",
         DomainError::SessionProjectMismatch => "session_project_mismatch",

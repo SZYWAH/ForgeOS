@@ -23,6 +23,7 @@ export function AppLayout({ workspace }: AppLayoutProps) {
           </NavLink>
           <NavLink to="/projects">Projects</NavLink>
           <NavLink to="/settings/ai-providers">AI Providers</NavLink>
+          <NavLink to="/github-import">GitHub 导入</NavLink>
         </nav>
 
         <div className="workspace-card">

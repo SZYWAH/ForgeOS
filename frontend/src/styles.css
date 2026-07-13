@@ -2134,6 +2134,42 @@ button:disabled {
   }
 }
 
+/* D4.5 GitHub read-only import */
+.github-boundary { display: flex; gap: 14px; padding: 16px 20px; border-color: #c9d6e7; color: #43566f; background: #f6f9fc; }
+.github-boundary strong { flex: 0 0 auto; }
+.github-token-row, .github-url-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 18px 20px; }
+.github-token-row input, .github-url-form input { min-height: 42px; padding: 9px 11px; border: 1px solid #cbd3de; border-radius: 5px; }
+.github-url-form { grid-template-columns: minmax(0, 1fr) auto; }
+.github-import-workbench { display: grid; grid-template-columns: 310px minmax(0, 1fr); align-items: start; gap: 18px; }
+.github-draft-list { overflow: hidden; }
+.github-draft-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 10px; width: 100%; padding: 15px 16px; border: 0; border-top: 1px solid #e5e9ee; color: #4d5868; background: #fff; text-align: left; cursor: pointer; }
+.github-draft-list > button.selected { box-shadow: inset 3px 0 #51759d; background: #f4f8fc; }
+.github-draft-list strong { overflow: hidden; color: #303845; font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.github-draft-list small { grid-column: 1 / -1; color: #818a97; font-family: "Cascadia Code", Consolas, monospace; font-size: .64rem; }
+.github-preview-meta, .github-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #e5e9ee; border-bottom: 1px solid #e5e9ee; background: #fafbfc; }
+.github-preview-meta > div, .github-card-grid > div { display: grid; gap: 6px; min-width: 0; padding: 14px 16px; border-right: 1px solid #e5e9ee; }
+.github-preview-meta span, .github-card-grid span { color: #7b8491; font-size: .64rem; font-weight: 700; text-transform: uppercase; }
+.github-preview-meta strong, .github-card-grid strong, .github-card-grid a { overflow: hidden; color: #384452; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+.github-card-grid a { color: #315f91; font-weight: 700; }
+.github-readme-preview { padding: 20px; }
+.github-readme-preview h3 { margin: 0 0 12px; color: #3a4451; font-size: .82rem; }
+.github-readme-preview pre { max-height: 380px; margin: 0; overflow: auto; color: #485361; font-family: "Cascadia Code", Consolas, monospace; font-size: .72rem; line-height: 1.65; white-space: pre-wrap; }
+.github-review-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-top: 1px solid #e4e8ee; color: #737d8b; background: #fafbfc; font-size: .7rem; }
+.github-review-actions > div { display: flex; gap: 8px; }
+.github-project-card { border-color: #cbd9e8; }
+
+@media (max-width: 900px) {
+  .github-import-workbench { grid-template-columns: 1fr; }
+  .github-preview-meta, .github-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .github-token-row, .github-url-form { grid-template-columns: 1fr; }
+  .github-preview-meta, .github-card-grid { grid-template-columns: 1fr; }
+  .github-review-actions, .github-boundary { align-items: stretch; flex-direction: column; }
+  .github-review-actions > div { display: grid; }
+}
+
 /* D1.6 AI Candidate governance */
 .candidate-overview-card { border-color: #d5cce7; }
 .candidate-message { margin: 0; }

@@ -2,6 +2,18 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("unsupported GitHub connector auth type: {0}")]
+    InvalidGitHubAuthType(String),
+    #[error("invalid GitHub connector state")]
+    InvalidGitHubConnector,
+    #[error("GitHub repository URL must identify exactly one github.com owner/repository")]
+    InvalidGitHubRepositoryUrl,
+    #[error("unsupported GitHub import status: {0}")]
+    InvalidGitHubImportStatus(String),
+    #[error("invalid GitHub import draft")]
+    InvalidGitHubImportDraft,
+    #[error("invalid GitHub import transition from {from} to {to}")]
+    InvalidGitHubImportTransition { from: String, to: String },
     #[error("invalid Codex Task Proposal status: {0}")]
     InvalidCodexTaskProposalStatus(String),
     #[error("invalid Codex Task Proposal version")]

@@ -60,13 +60,14 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             'workspaces', 'projects', 'project_snapshots', 'development_sessions', \
             'evidences', 'evidence_links', 'ai_providers', 'context_exports', 'ai_candidates', \
             'repositories', 'working_copies', 'repository_evidence_links', \
-            'codex_task_proposals', 'codex_task_proposal_status_history'\
+            'codex_task_proposals', 'codex_task_proposal_status_history', \
+            'github_connectors', 'github_import_drafts', 'github_evidence_links'
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 14 {
+    if table_count != 17 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
         ));
@@ -249,6 +250,43 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ));
     }
 
+    let github_connector_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('github_connectors') WHERE name IN \
+         ('id', 'provider', 'auth_type', 'created_at', 'updated_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if github_connector_columns != 6 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS GitHub Connector schema is incomplete".into(),
+        ));
+    }
+
+    let github_draft_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('github_import_drafts') WHERE name IN \
+         ('id', 'connector_id', 'github_repository_id', 'owner', 'name', 'url', 'description', \
+          'homepage', 'default_branch', 'language', 'languages', 'topics', 'readme_summary', \
+          'recent_commits', 'latest_release', 'status', 'imported_project_id', 'created_at', \
+          'updated_at', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if github_draft_columns != 20 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS GitHub Import Draft schema is incomplete".into(),
+        ));
+    }
+
+    let github_evidence_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('github_evidence_links') WHERE name IN \
+         ('evidence_id', 'draft_id', 'project_id', 'github_object_type', 'github_object_id', 'captured_at')",
+    ).fetch_one(pool).await?;
+    if github_evidence_columns != 6 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS GitHub Evidence schema is incomplete".into(),
+        ));
+    }
+
     Ok(())
 }
 
@@ -407,6 +445,66 @@ mod tests {
             .unwrap();
         assert_eq!(foreign_keys, 0);
     }
+
+    #[tokio::test]
+    async fn github_migration_preserves_existing_manual_and_git_evidence() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../../database/migrations/0001_create_workspaces_and_projects.sql"),
+            include_str!("../../../database/migrations/0002_project_identity_kernel.sql"),
+            include_str!("../../../database/migrations/0003_current_snapshot.sql"),
+            include_str!("../../../database/migrations/0004_development_session.sql"),
+            include_str!("../../../database/migrations/0005_evidence_kernel.sql"),
+            include_str!("../../../database/migrations/0006_ai_provider_foundation.sql"),
+            include_str!("../../../database/migrations/0007_context_pack.sql"),
+            include_str!("../../../database/migrations/0008_ai_candidate.sql"),
+            include_str!("../../../database/migrations/0009_git_evidence.sql"),
+            include_str!("../../../database/migrations/0010_codex_task_proposal.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        }
+        sqlx::raw_sql("INSERT INTO workspaces VALUES ('w', 'Personal', 'UTC', '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z');
+            INSERT INTO projects (id, workspace_id, slug, name, description, vision, target_user, scope, non_goals, tech_stack, status, lifecycle_stage, priority, created_at, updated_at, version) VALUES ('p', 'w', 'project', 'Project', '', '', '', '', '', '', 'active', 'implementation', 1, '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z', 1);
+            INSERT INTO evidences VALUES ('e', 'p', 'Existing Git fact', '', 'git_status', 'local_file', 'D:/repo', 'verified', '2026-07-12T00:00:00Z', '2026-07-12T00:00:00Z', 2);
+            INSERT INTO evidence_links VALUES ('el', 'e', 'project', 'p', 'supports');
+            INSERT INTO repositories VALUES ('r', 'p', 'D:/repo', NULL, 'main', '2026-07-12T00:00:00Z', 1);
+            INSERT INTO working_copies VALUES ('wc', 'r', 'main', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 0, 0, 0, 0, 0, 0, 0, '2026-07-12T00:00:00Z');
+            INSERT INTO repository_evidence_links VALUES ('e', 'r', 'p', NULL, '2026-07-12T00:00:00Z');")
+            .execute(&pool).await.unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../database/migrations/0011_github_readonly_import.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM evidences WHERE id = 'e' AND verification_status = 'verified' AND version = 2").fetch_one(&pool).await.unwrap(), 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM evidence_links WHERE id = 'el'")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM repository_evidence_links WHERE evidence_id = 'e' AND repository_id = 'r'").fetch_one(&pool).await.unwrap(), 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM pragma_foreign_key_check")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
 
     #[tokio::test]
     async fn d1_migration_preserves_d0_projects_and_backfills_defaults() {

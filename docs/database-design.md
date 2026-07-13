@@ -615,3 +615,17 @@ Migration 失败时应用必须报告明确错误，不得继续以正常状态�
 - 状态限制为 `draft / proposed / approved / rejected / archived`；Domain 约束合法迁移。
 - 创建和状态迁移在同一事务中追加 History，保存前后状态、版本和时间。
 - Approve 只更新 Proposal 和 History，不修改事实表，也不产生执行记录。
+
+## GitHub Connector 与 Import Draft
+
+`0011_github_readonly_import.sql` 建立 GitHub 只读导入基础：
+
+- `github_connectors` 仅保存固定 provider、`none / token_reference` 认证方式、时间与乐观版本。真实 Token 永不进入 SQLite。
+- `github_import_drafts` 保存 Repository 元数据、语言、Topics、README 确定性摘要、最近 Commit 与最新 Release 元数据；状态限制为 `draft / reviewed / imported / rejected`。
+- `imported_project_id` 只允许在 Imported 状态出现，用于 Project Overview 反查导入来源。
+- `github_evidence_links` 使用 Evidence、Draft 与 Project 的复合外键，阻止跨 Project 证据来源。
+- Evidence 类型扩展为 `github_repository / github_commit / github_release`，来源扩展为 `github_api`；既有 Evidence、EvidenceLink 与 RepositoryEvidenceLink 在前向 Migration 中完整迁移。
+- Import 在单个 SQLite 事务中创建 Project、更新 Draft 并创建 GitHub Evidence。任何约束或写入失败都会整体回滚。
+- GitHub 网络请求发生在事务之前；API 失败不会创建 Draft、Project 或 Evidence。
+
+GitHub Token 通过独立 Credential Manager 服务名保存。IPC 只返回 `tokenConfigured`，不提供 Token 读取字段或命令。

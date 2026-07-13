@@ -10,6 +10,7 @@ import { CurrentSnapshotCard } from "../components/CurrentSnapshotCard";
 import { CurrentSessionCard } from "../components/CurrentSessionCard";
 import { EvidenceSummaryCard } from "../components/EvidenceSummaryCard";
 import { RepositoryCard } from "../components/RepositoryCard";
+import { GitHubRepositoryCard } from "../components/GitHubRepositoryCard";
 import {
   getErrorCode,
   getErrorMessage,
@@ -226,6 +227,8 @@ export function ProjectOverviewPage() {
       <EvidenceSummaryCard projectId={project.id} projectName={project.name} />
 
       <RepositoryCard archived={isArchived} projectId={project.id} />
+
+      <GitHubRepositoryCard projectId={project.id} />
 
       <section className="panel context-overview-card">
         <div className="panel-header"><div><p className="snapshot-kicker">Proposal only</p><h2>Codex Task Proposals</h2><p>定义绑定 Context Pack 的编码任务请求；不会执行 Codex 或修改代码。</p></div><Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>Open Proposals</Link></div>

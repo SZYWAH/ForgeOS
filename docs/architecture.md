@@ -345,3 +345,23 @@ ForgeOS Database
 - `build_context_pack`
 
 GitHub MCP 继续负责 Repository、Commit、Issue、Pull Request、Release 和 CI 等托管平台事实。ForgeOS MCP 不重复浏览代码仓库，只解释 Project 目标、当前状态、研发过程、证据链和 Context Pack。两类上下文可由客户端组合，但彼此没有写权限传递。
+
+## D4.5 GitHub Read-only Import Architecture
+
+```text
+GitHub Repository URL
+→ GitHubImportKernel
+├─ GitHubClient → GitHub REST API（只读 GET）
+├─ ApiKeyStore → Windows Credential Manager
+└─ GitHubImportRepository → SQLite Import Draft
+                              ↓ human review
+                         atomic Project + Evidence import
+```
+
+- GitHub API 逻辑隔离在 `infrastructure/github`，核心 Project、Evidence 与 IPC 不包含 HTTP 细节。
+- Connector 默认无认证，只能读取公开仓库；可选 Token 只从 Credential Manager 注入请求头，不进入日志、SQLite 或返回 DTO。
+- API Adapter 只实现 Repository、Languages、Topics、README、最近 Commit 与最新 Release 的读取，不定义任何 GitHub 写方法。
+- Draft 是外部事实进入 ForgeOS 前的隔离区。生成 Draft 不创建 Project；必须经过用户 `review` 后才能执行 Import。
+- Import Repository 在单事务中创建 Project、把 Draft 标记为 Imported，并写入带来源链的 GitHub Evidence。
+- Reject 保留 Draft 历史且不创建 Project。系统不提供后台轮询、Webhook 或自动同步入口。
+- Project Overview 仅显示已导入来源，不把 GitHub 字段自动覆盖回 Project Identity。

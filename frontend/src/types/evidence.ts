@@ -11,12 +11,16 @@ export const EVIDENCE_TYPES = [
   ...MANUAL_EVIDENCE_TYPES,
   "git_commit",
   "git_status",
+  "github_repository",
+  "github_commit",
+  "github_release",
 ] as const;
 
 export const EVIDENCE_SOURCE_TYPES = [
   "local_file",
   "external_url",
   "manual_note",
+  "github_api",
 ] as const;
 
 export const VERIFICATION_STATUSES = [

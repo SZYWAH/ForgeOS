@@ -21,6 +21,7 @@ pub fn run() {
             app.manage(state.ai_candidate_kernel);
             app.manage(state.repository_kernel);
             app.manage(state.codex_task_proposal_kernel);
+            app.manage(state.github_import_kernel);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -81,6 +82,15 @@ pub fn run() {
             ipc::codex_task_proposals::approve_proposal,
             ipc::codex_task_proposals::reject_proposal,
             ipc::codex_task_proposals::archive_proposal,
+            ipc::github::get_github_connector,
+            ipc::github::set_github_token,
+            ipc::github::clear_github_token,
+            ipc::github::preview_github_repository,
+            ipc::github::list_github_import_drafts,
+            ipc::github::review_github_import,
+            ipc::github::reject_github_import,
+            ipc::github::import_github_project,
+            ipc::github::get_project_github_import,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run ForgeOS");

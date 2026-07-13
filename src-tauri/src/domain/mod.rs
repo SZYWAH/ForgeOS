@@ -10,6 +10,7 @@ mod codex_task_proposal;
 mod context_export;
 mod error;
 mod evidence;
+mod github;
 mod project;
 mod repository;
 mod session;
@@ -26,6 +27,10 @@ pub use error::DomainError;
 pub use evidence::{
     Evidence, EvidenceDetails, EvidenceLink, EvidenceRelationType, EvidenceSourceType,
     EvidenceTargetType, EvidenceType, VerificationStatus,
+};
+pub use github::{
+    parse_github_repository_url, GitHubAuthType, GitHubCommitFact, GitHubConnector,
+    GitHubImportDraft, GitHubImportStatus, GitHubReleaseFact, GitHubRepositoryFacts,
 };
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
 pub use repository::{validate_commit_sha, DiffSummary, Repository, WorkingCopy};

@@ -7,20 +7,123 @@ use sqlx::{FromRow, SqlitePool};
 use crate::{
     domain::{
         AiCandidate, AiCandidateStatus, AiCandidateType, AiProvider, AiProviderDetails,
-        CodexTaskProposal, CodexTaskProposalDetails, CodexTaskProposalStatus, ContextExport,
-        ContextExportStatus, ContextTemplateType, DevelopmentSession, DiffSummary, Evidence,
-        EvidenceDetails, EvidenceLink, EvidenceRelationType, EvidenceSourceType,
-        EvidenceTargetType, EvidenceType, LifecycleStage, Project, ProjectDetails, ProjectSnapshot,
-        ProjectStatus, Repository, SessionStatus, SnapshotDetails, VerificationStatus, WorkingCopy,
-        Workspace,
+        CodexTaskProposal, CodexTaskProposalDetails,
+        CodexTaskProposalStatus, ContextExport, ContextExportStatus, ContextTemplateType,
+        DevelopmentSession, DiffSummary, Evidence, EvidenceDetails, EvidenceLink,
+        EvidenceRelationType, EvidenceSourceType, EvidenceTargetType, EvidenceType, GitHubAuthType,
+        GitHubCommitFact, GitHubConnector, GitHubImportDraft, GitHubImportStatus,
+        GitHubReleaseFact, GitHubRepositoryFacts, LifecycleStage, Project, ProjectDetails,
+        ProjectSnapshot, ProjectStatus, Repository, SessionStatus, SnapshotDetails,
+        VerificationStatus, WorkingCopy, Workspace,
     },
     ports::{
-        AiCandidateRepository, AiProviderRepository, CodexTaskProposalRepository,
-        ContextExportRepository, EvidenceRepository, McpQueryRepository, ProjectRepository,
-        RepositoryError, RepositoryStore, SessionRepository, SnapshotRepository,
-        WorkspaceRepository,
+        AiCandidateRepository, AiProviderRepository,
+        CodexTaskProposalRepository, ContextExportRepository, EvidenceRepository,
+        GitHubImportRepository, McpQueryRepository, ProjectRepository, RepositoryError,
+        RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
     },
 };
+
+#[derive(FromRow)]
+struct GitHubConnectorRow {
+    id: String,
+    auth_type: String,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl GitHubConnectorRow {
+    fn into_domain(self) -> Result<GitHubConnector, RepositoryError> {
+        GitHubConnector::restore(
+            self.id,
+            GitHubAuthType::from_str(&self.auth_type).map_err(corrupt)?,
+            parse_timestamp("github_connectors.created_at", &self.created_at)?,
+            parse_timestamp("github_connectors.updated_at", &self.updated_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+#[derive(FromRow)]
+struct GitHubImportDraftRow {
+    id: String,
+    connector_id: String,
+    github_repository_id: String,
+    owner: String,
+    name: String,
+    url: String,
+    description: String,
+    homepage: Option<String>,
+    default_branch: String,
+    language: Option<String>,
+    languages: String,
+    topics: String,
+    readme_summary: String,
+    recent_commits: String,
+    latest_release: Option<String>,
+    status: String,
+    imported_project_id: Option<String>,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl GitHubImportDraftRow {
+    fn into_domain(self) -> Result<GitHubImportDraft, RepositoryError> {
+        let languages: std::collections::BTreeMap<String, u64> =
+            serde_json::from_str(&self.languages).map_err(|error| {
+                RepositoryError::CorruptData(format!("github_import_drafts.languages: {error}"))
+            })?;
+        let topics = serde_json::from_str(&self.topics).map_err(|error| {
+            RepositoryError::CorruptData(format!("github_import_drafts.topics: {error}"))
+        })?;
+        let recent_commits: Vec<GitHubCommitFact> = serde_json::from_str(&self.recent_commits)
+            .map_err(|error| {
+                RepositoryError::CorruptData(format!(
+                    "github_import_drafts.recent_commits: {error}"
+                ))
+            })?;
+        let latest_release: Option<GitHubReleaseFact> = self
+            .latest_release
+            .map(|value| {
+                serde_json::from_str(&value).map_err(|error| {
+                    RepositoryError::CorruptData(format!(
+                        "github_import_drafts.latest_release: {error}"
+                    ))
+                })
+            })
+            .transpose()?;
+        GitHubImportDraft::restore(
+            self.id,
+            self.connector_id,
+            GitHubRepositoryFacts {
+                repository_id: self.github_repository_id,
+                owner: self.owner,
+                name: self.name,
+                url: self.url,
+                description: self.description,
+                homepage: self.homepage,
+                default_branch: self.default_branch,
+                language: self.language,
+                languages: languages.into_iter().collect(),
+                topics,
+                readme_summary: self.readme_summary,
+                recent_commits,
+                latest_release,
+            },
+            GitHubImportStatus::from_str(&self.status).map_err(corrupt)?,
+            self.imported_project_id,
+            parse_timestamp("github_import_drafts.created_at", &self.created_at)?,
+            parse_timestamp("github_import_drafts.updated_at", &self.updated_at)?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
+
+const GITHUB_DRAFT_COLUMNS: &str = "id, connector_id, github_repository_id, owner, name, url, description, homepage, default_branch, language, languages, topics, readme_summary, recent_commits, latest_release, status, imported_project_id, created_at, updated_at, version";
 
 #[derive(Clone)]
 pub struct SqliteProjectRepository {
@@ -1351,6 +1454,161 @@ impl CodexTaskProposalRepository for SqliteProjectRepository {
             .execute(&mut *transaction).await.map_err(map_write_error)?;
         transaction.commit().await.map_err(storage)?;
         Ok(())
+    }
+}
+
+
+#[async_trait]
+impl GitHubImportRepository for SqliteProjectRepository {
+    async fn get_github_connector(&self) -> Result<Option<GitHubConnector>, RepositoryError> {
+        sqlx::query_as::<_, GitHubConnectorRow>(
+            "SELECT id, auth_type, created_at, updated_at, version FROM github_connectors WHERE provider = 'github' LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(GitHubConnectorRow::into_domain)
+        .transpose()
+    }
+
+    async fn insert_github_connector(
+        &self,
+        connector: &GitHubConnector,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO github_connectors (id, provider, auth_type, created_at, updated_at, version) VALUES (?, 'github', ?, ?, ?, ?)")
+            .bind(connector.id())
+            .bind(connector.auth_type().as_str())
+            .bind(timestamp(connector.created_at()))
+            .bind(timestamp(connector.updated_at()))
+            .bind(connector.version())
+            .execute(&self.pool).await.map_err(map_write_error)?;
+        Ok(())
+    }
+
+    async fn update_github_connector(
+        &self,
+        connector: &GitHubConnector,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query("UPDATE github_connectors SET auth_type = ?, updated_at = ?, version = ? WHERE id = ? AND version = ?")
+            .bind(connector.auth_type().as_str())
+            .bind(timestamp(connector.updated_at()))
+            .bind(connector.version())
+            .bind(connector.id())
+            .bind(expected_version)
+            .execute(&self.pool).await.map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+
+    async fn insert_github_import_draft(
+        &self,
+        draft: &GitHubImportDraft,
+    ) -> Result<(), RepositoryError> {
+        let facts = draft.facts();
+        let languages = facts
+            .languages
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        sqlx::query("INSERT INTO github_import_drafts (id, connector_id, github_repository_id, owner, name, url, description, homepage, default_branch, language, languages, topics, readme_summary, recent_commits, latest_release, status, imported_project_id, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(draft.id()).bind(draft.connector_id()).bind(&facts.repository_id).bind(&facts.owner).bind(&facts.name)
+            .bind(&facts.url).bind(&facts.description).bind(&facts.homepage).bind(&facts.default_branch).bind(&facts.language)
+            .bind(serde_json::to_string(&languages).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+            .bind(serde_json::to_string(&facts.topics).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+            .bind(&facts.readme_summary)
+            .bind(serde_json::to_string(&facts.recent_commits).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+            .bind(facts.latest_release.as_ref().map(serde_json::to_string).transpose().map_err(|error| RepositoryError::Storage(error.to_string()))?)
+            .bind(draft.status().as_str()).bind(draft.imported_project_id()).bind(timestamp(draft.created_at())).bind(timestamp(draft.updated_at())).bind(draft.version())
+            .execute(&self.pool).await.map_err(map_write_error)?;
+        Ok(())
+    }
+
+    async fn list_github_import_drafts(&self) -> Result<Vec<GitHubImportDraft>, RepositoryError> {
+        let query = format!("SELECT {GITHUB_DRAFT_COLUMNS} FROM github_import_drafts ORDER BY updated_at DESC, created_at DESC, id DESC");
+        sqlx::query_as::<_, GitHubImportDraftRow>(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .map(GitHubImportDraftRow::into_domain)
+            .collect()
+    }
+
+    async fn get_github_import_draft(
+        &self,
+        draft_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, RepositoryError> {
+        let query = format!("SELECT {GITHUB_DRAFT_COLUMNS} FROM github_import_drafts WHERE id = ?");
+        sqlx::query_as::<_, GitHubImportDraftRow>(&query)
+            .bind(draft_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(GitHubImportDraftRow::into_domain)
+            .transpose()
+    }
+
+    async fn update_github_import_draft(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query("UPDATE github_import_drafts SET status = ?, imported_project_id = ?, updated_at = ?, version = ? WHERE id = ? AND version = ?")
+            .bind(draft.status().as_str()).bind(draft.imported_project_id()).bind(timestamp(draft.updated_at())).bind(draft.version()).bind(draft.id()).bind(expected_version)
+            .execute(&self.pool).await.map_err(map_write_error)?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        Ok(())
+    }
+
+    async fn import_github_draft(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_version: i64,
+        project: &Project,
+        evidences: &[(Evidence, String, String)],
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        sqlx::query("INSERT INTO projects (id, workspace_id, slug, name, description, vision, target_user, scope, non_goals, tech_stack, status, lifecycle_stage, priority, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(&project.id).bind(&project.workspace_id).bind(&project.slug).bind(&project.name).bind(&project.description).bind(&project.vision)
+            .bind(&project.target_user).bind(&project.scope).bind(&project.non_goals).bind(&project.tech_stack).bind(project.status.as_str())
+            .bind(project.lifecycle_stage.as_str()).bind(project.priority).bind(timestamp(project.created_at)).bind(timestamp(project.updated_at)).bind(project.version)
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        let updated = sqlx::query("UPDATE github_import_drafts SET status = 'imported', imported_project_id = ?, updated_at = ?, version = ? WHERE id = ? AND status = 'reviewed' AND version = ?")
+            .bind(&project.id).bind(timestamp(draft.updated_at())).bind(draft.version()).bind(draft.id()).bind(expected_version)
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        for (evidence, object_type, object_id) in evidences {
+            sqlx::query("INSERT INTO evidences (id, project_id, title, description, type, source_type, source_uri, verification_status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(evidence.id()).bind(evidence.project_id()).bind(evidence.title()).bind(evidence.description()).bind(evidence.evidence_type().as_str())
+                .bind(evidence.source_type().as_str()).bind(evidence.source_uri()).bind(evidence.verification_status().as_str())
+                .bind(timestamp(evidence.created_at())).bind(timestamp(evidence.updated_at())).bind(evidence.version())
+                .execute(&mut *transaction).await.map_err(map_write_error)?;
+            sqlx::query("INSERT INTO github_evidence_links (evidence_id, draft_id, project_id, github_object_type, github_object_id, captured_at) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(evidence.id()).bind(draft.id()).bind(&project.id).bind(object_type).bind(object_id).bind(timestamp(evidence.created_at()))
+                .execute(&mut *transaction).await.map_err(map_write_error)?;
+        }
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn get_github_import_for_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, RepositoryError> {
+        let query = format!("SELECT {GITHUB_DRAFT_COLUMNS} FROM github_import_drafts WHERE imported_project_id = ? AND status = 'imported' LIMIT 1");
+        sqlx::query_as::<_, GitHubImportDraftRow>(&query)
+            .bind(project_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(GitHubImportDraftRow::into_domain)
+            .transpose()
     }
 }
 

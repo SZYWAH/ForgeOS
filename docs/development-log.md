@@ -602,3 +602,38 @@ D4：Codex Task Proposal Foundation 完成
 ### 下一步计划
 
 等待用户确认 D4。确认前不进入 Codex 执行、Agent 或 MCP 写入。
+
+## 2026-07-12 — ForgeOS D4.5 GitHub Connector Foundation
+
+### 当前阶段
+
+D4.5：GitHub Connector / Project Import Foundation 完成
+
+### 目标
+
+以只读方式接管已有 GitHub 软件项目，通过 Import Draft 与人工审核把托管平台事实安全转换为 ForgeOS Project 和 Evidence。
+
+### 完成内容
+
+- 新增 Migration `0011_github_readonly_import.sql`，未修改 `0001` 至 `0010`。
+- 新增 GitHubConnector、GitHubImportDraft、Repository/Commit/Release Fact Domain 与人工审核状态机。
+- 新增只读 GitHub REST Adapter，读取 Repository、Languages、Topics、README、最近 Commit 与最新 Release。
+- GitHub Token 使用独立 Windows Credential Manager 安全存储；SQLite、日志和 IPC 返回均不包含 Token。
+- 新增 Preview、List、Review、Reject、Import 与 Project 来源查询 Application Use Cases 和类型化 IPC。
+- Import 使用单事务创建 Project、更新 Draft 并创建 GitHub Repository/Commit/Release Evidence。
+- 新增 GitHub Import 页面、Connector 安全配置、Import Preview、Draft Review 与 Project Overview GitHub Card。
+- Reject 不创建 Project；API 失败不保存 Draft；无后台同步、Webhook 或 GitHub 写操作。
+- 新增 ADR-012。
+
+### 验证结果
+
+- `npm run frontend:typecheck`、`npm run frontend:build`、`cargo fmt --check`、`cargo check` 全部通过。
+- `cargo test` 通过 39 个单元/Migration 测试与 11 个集成测试，0 失败；网络测试默认 Ignore。
+- 公开仓库 `octocat/Hello-World` 的真实 GitHub REST 只读烟雾测试单独执行通过；匿名出口触发限流后使用进程级 GitHub CLI Token 完成验证，Token 未持久化。
+- 集成测试覆盖 Token 隔离、Draft 审核、Reject、原子 Import、跨 Project 隔离、API 失败无脏数据和重启持久化。
+- Migration 保留既有 Manual/Git Evidence、EvidenceLink 与 RepositoryEvidenceLink；`integrity_check = ok`、`foreign_key_check = 0`。
+- D3 MCP 回归测试通过，工具面仍严格保持五个只读 Tool。
+
+### 下一步计划
+
+等待用户确认 D4.5。确认前不提交 Git，不开发 GitHub 写入、Webhook、自动同步、Codex 执行或 Agent。

@@ -3,6 +3,7 @@
 mod ai;
 mod context;
 mod git;
+mod github;
 mod repositories;
 
 pub use ai::{
@@ -11,10 +12,12 @@ pub use ai::{
 };
 pub use context::{ContextRenderError, ContextRenderInput, ContextRenderer};
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitInspection};
+pub use github::{GitHubClient, GitHubClientError};
 pub use repositories::{
     AiCandidateKernelRepository, AiCandidateRepository, AiProviderRepository,
-    CodexTaskProposalKernelRepository, CodexTaskProposalRepository, ContextExportRepository,
-    ContextPackRepository, EvidenceRepository, McpQueryRepository, ProjectKernelRepository,
-    ProjectRepository, RepositoryError, RepositoryKernelStore, RepositoryStore, SessionRepository,
-    SnapshotRepository, WorkspaceRepository,
+    CodexTaskProposalKernelRepository,
+    CodexTaskProposalRepository, ContextExportRepository, ContextPackRepository,
+    EvidenceRepository, GitHubImportKernelRepository, GitHubImportRepository, McpQueryRepository,
+    ProjectKernelRepository, ProjectRepository, RepositoryError, RepositoryKernelStore,
+    RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
 };

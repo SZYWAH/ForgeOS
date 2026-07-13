@@ -6,6 +6,7 @@ use keyring::{Entry, Error as KeyringError};
 use crate::ports::{ApiKeyStore, SecretStoreError};
 
 const SERVICE_NAME: &str = "ForgeOS AI Provider";
+const GITHUB_SERVICE_NAME: &str = "ForgeOS GitHub Connector";
 
 #[derive(Clone, Default)]
 pub struct WindowsCredentialApiKeyStore {
@@ -63,6 +64,64 @@ impl ApiKeyStore for WindowsCredentialApiKeyStore {
 
 fn entry(provider_id: &str) -> Result<Entry, SecretStoreError> {
     Entry::new(SERVICE_NAME, provider_id).map_err(secret_error)
+}
+
+#[derive(Clone, Default)]
+pub struct WindowsCredentialGitHubTokenStore {
+    gate: Arc<Mutex<()>>,
+}
+
+#[async_trait]
+impl ApiKeyStore for WindowsCredentialGitHubTokenStore {
+    async fn set(&self, connector_id: &str, token: &str) -> Result<(), SecretStoreError> {
+        let connector_id = connector_id.to_owned();
+        let token = token.to_owned();
+        let gate = self.gate.clone();
+        blocking(move || {
+            let _guard = gate.lock().map_err(|error| {
+                SecretStoreError::Unavailable(format!("credential lock poisoned: {error}"))
+            })?;
+            github_entry(&connector_id)?
+                .set_password(&token)
+                .map_err(secret_error)
+        })
+        .await
+    }
+
+    async fn get(&self, connector_id: &str) -> Result<Option<String>, SecretStoreError> {
+        let connector_id = connector_id.to_owned();
+        let gate = self.gate.clone();
+        blocking(move || {
+            let _guard = gate.lock().map_err(|error| {
+                SecretStoreError::Unavailable(format!("credential lock poisoned: {error}"))
+            })?;
+            match github_entry(&connector_id)?.get_password() {
+                Ok(value) => Ok(Some(value)),
+                Err(KeyringError::NoEntry) => Ok(None),
+                Err(error) => Err(secret_error(error)),
+            }
+        })
+        .await
+    }
+
+    async fn clear(&self, connector_id: &str) -> Result<(), SecretStoreError> {
+        let connector_id = connector_id.to_owned();
+        let gate = self.gate.clone();
+        blocking(move || {
+            let _guard = gate.lock().map_err(|error| {
+                SecretStoreError::Unavailable(format!("credential lock poisoned: {error}"))
+            })?;
+            match github_entry(&connector_id)?.delete_credential() {
+                Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+                Err(error) => Err(secret_error(error)),
+            }
+        })
+        .await
+    }
+}
+
+fn github_entry(connector_id: &str) -> Result<Entry, SecretStoreError> {
+    Entry::new(GITHUB_SERVICE_NAME, connector_id).map_err(secret_error)
 }
 
 async fn blocking<T, F>(operation: F) -> Result<T, SecretStoreError>

@@ -7,11 +7,13 @@ use crate::{
         ai_provider::{AiInvocationResult, AiProviderView},
         codex_task_proposal::CreateCodexTaskProposalInput,
         context_pack::ContextAiInvocationResult,
+        github_import::{GitHubConnectorView, GitHubImportResult},
         repository::RepositoryRecord,
     },
     domain::{
-        AiCandidate, CodexTaskProposal, ContextExport, DevelopmentSession, DiffSummary, Evidence,
-        EvidenceLink, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
+        AiCandidate, CodexTaskProposal, ContextExport, DevelopmentSession,
+        DiffSummary, Evidence, EvidenceLink, GitHubConnector, GitHubImportDraft,
+        GitHubRepositoryFacts, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
     },
     ports::{GitCommit, GitInspection},
 };
@@ -865,6 +867,169 @@ pub struct RepositoryRecordDto {
     pub repository: RepositoryDto,
     pub working_copy: WorkingCopyDto,
     pub recent_commits: Vec<GitCommitDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetGitHubTokenRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewGitHubRepositoryRequest {
+    pub repository_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionGitHubImportRequest {
+    pub expected_version: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubConnectorDto {
+    pub id: String,
+    pub provider: &'static str,
+    pub auth_type: String,
+    pub token_configured: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub version: i64,
+}
+
+impl From<GitHubConnectorView> for GitHubConnectorDto {
+    fn from(view: GitHubConnectorView) -> Self {
+        let connector: GitHubConnector = view.connector;
+        Self {
+            id: connector.id().to_owned(),
+            provider: "github",
+            auth_type: connector.auth_type().as_str().to_owned(),
+            token_configured: view.token_configured,
+            created_at: timestamp(connector.created_at()),
+            updated_at: timestamp(connector.updated_at()),
+            version: connector.version(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubCommitFactDto {
+    pub sha: String,
+    pub message: String,
+    pub author: String,
+    pub authored_at: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubReleaseFactDto {
+    pub id: String,
+    pub tag_name: String,
+    pub name: String,
+    pub published_at: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubImportDraftDto {
+    pub id: String,
+    pub github_repository_id: String,
+    pub owner: String,
+    pub name: String,
+    pub url: String,
+    pub description: String,
+    pub homepage: Option<String>,
+    pub default_branch: String,
+    pub language: Option<String>,
+    pub languages: Vec<(String, u64)>,
+    pub topics: Vec<String>,
+    pub readme_summary: String,
+    pub recent_commits: Vec<GitHubCommitFactDto>,
+    pub latest_release: Option<GitHubReleaseFactDto>,
+    pub status: String,
+    pub imported_project_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub version: i64,
+}
+
+impl From<GitHubImportDraft> for GitHubImportDraftDto {
+    fn from(draft: GitHubImportDraft) -> Self {
+        let GitHubRepositoryFacts {
+            repository_id,
+            owner,
+            name,
+            url,
+            description,
+            homepage,
+            default_branch,
+            language,
+            languages,
+            topics,
+            readme_summary,
+            recent_commits,
+            latest_release,
+        } = draft.facts().clone();
+        Self {
+            id: draft.id().to_owned(),
+            github_repository_id: repository_id,
+            owner,
+            name,
+            url,
+            description,
+            homepage,
+            default_branch,
+            language,
+            languages,
+            topics,
+            readme_summary,
+            recent_commits: recent_commits
+                .into_iter()
+                .map(|item| GitHubCommitFactDto {
+                    sha: item.sha,
+                    message: item.message,
+                    author: item.author,
+                    authored_at: item.authored_at,
+                    url: item.url,
+                })
+                .collect(),
+            latest_release: latest_release.map(|item| GitHubReleaseFactDto {
+                id: item.id,
+                tag_name: item.tag_name,
+                name: item.name,
+                published_at: item.published_at,
+                url: item.url,
+            }),
+            status: draft.status().as_str().to_owned(),
+            imported_project_id: draft.imported_project_id().map(str::to_owned),
+            created_at: timestamp(draft.created_at()),
+            updated_at: timestamp(draft.updated_at()),
+            version: draft.version(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubImportResultDto {
+    pub draft: GitHubImportDraftDto,
+    pub project: ProjectDto,
+    pub evidences: Vec<EvidenceDto>,
+}
+
+impl From<GitHubImportResult> for GitHubImportResultDto {
+    fn from(value: GitHubImportResult) -> Self {
+        Self {
+            draft: value.draft.into(),
+            project: value.project.into(),
+            evidences: value.evidences.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 impl From<RepositoryRecord> for RepositoryRecordDto {

@@ -13,4 +13,7 @@ pub enum BootstrapError {
 
     #[error("failed to initialize the AI Provider HTTP client: {0}")]
     HttpClient(#[from] reqwest::Error),
+
+    #[error("failed to initialize the GitHub read-only client: {0}")]
+    GitHubClient(String),
 }

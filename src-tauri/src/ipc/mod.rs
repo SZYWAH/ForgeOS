@@ -5,6 +5,7 @@ pub mod context_packs;
 mod dto;
 mod error;
 pub mod evidences;
+pub mod github;
 pub mod health;
 pub mod projects;
 pub mod repositories;

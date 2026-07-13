@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::domain::{
-    AiCandidate, AiProvider, CodexTaskProposal, ContextExport, DevelopmentSession, Evidence,
-    EvidenceLink, Project, ProjectSnapshot, Repository, WorkingCopy, Workspace,
+    AiCandidate, AiProvider, CodexTaskProposal, ContextExport,
+    DevelopmentSession, Evidence, EvidenceLink, GitHubConnector, GitHubImportDraft, Project,
+    ProjectSnapshot, Repository, WorkingCopy, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -266,6 +267,55 @@ pub trait RepositoryStore: Send + Sync {
         &self,
         repository_id: &str,
     ) -> Result<Vec<Evidence>, RepositoryError>;
+}
+
+#[async_trait]
+pub trait GitHubImportRepository: Send + Sync {
+    async fn get_github_connector(&self) -> Result<Option<GitHubConnector>, RepositoryError>;
+    async fn insert_github_connector(
+        &self,
+        connector: &GitHubConnector,
+    ) -> Result<(), RepositoryError>;
+    async fn update_github_connector(
+        &self,
+        connector: &GitHubConnector,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+    async fn insert_github_import_draft(
+        &self,
+        draft: &GitHubImportDraft,
+    ) -> Result<(), RepositoryError>;
+    async fn list_github_import_drafts(&self) -> Result<Vec<GitHubImportDraft>, RepositoryError>;
+    async fn get_github_import_draft(
+        &self,
+        draft_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, RepositoryError>;
+    async fn update_github_import_draft(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+    async fn import_github_draft(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_version: i64,
+        project: &Project,
+        evidences: &[(Evidence, String, String)],
+    ) -> Result<(), RepositoryError>;
+    async fn get_github_import_for_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, RepositoryError>;
+}
+
+pub trait GitHubImportKernelRepository:
+    WorkspaceRepository + ProjectRepository + GitHubImportRepository
+{
+}
+
+impl<T> GitHubImportKernelRepository for T where
+    T: WorkspaceRepository + ProjectRepository + GitHubImportRepository
+{
 }
 
 pub trait RepositoryKernelStore: WorkspaceRepository + ProjectRepository + RepositoryStore {}

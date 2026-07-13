@@ -8,16 +8,17 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AiCandidateKernel, AiProviderKernel, CodexTaskProposalKernel, ContextPackKernel,
-        ProjectKernel, RepositoryKernel,
+        AiCandidateKernel, AiProviderKernel, CodexTaskProposalKernel,
+        ContextPackKernel, GitHubImportKernel, ProjectKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
         context_renderer::MarkdownContextRenderer,
         database::{self, DatabaseState},
         git::GitCliAdapter,
+        github::GitHubRestClient,
         repositories::SqliteProjectRepository,
-        secret_store::WindowsCredentialApiKeyStore,
+        secret_store::{WindowsCredentialApiKeyStore, WindowsCredentialGitHubTokenStore},
     },
 };
 
@@ -31,6 +32,7 @@ pub struct BootstrapState {
     pub ai_candidate_kernel: AiCandidateKernel,
     pub repository_kernel: RepositoryKernel,
     pub codex_task_proposal_kernel: CodexTaskProposalKernel,
+    pub github_import_kernel: GitHubImportKernel,
 }
 
 pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
@@ -54,7 +56,15 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     );
     let ai_candidate_kernel = AiCandidateKernel::new(repository.clone());
     let codex_task_proposal_kernel = CodexTaskProposalKernel::new(repository.clone());
-    let repository_kernel = RepositoryKernel::new(repository, Arc::new(GitCliAdapter));
+    let repository_kernel = RepositoryKernel::new(repository.clone(), Arc::new(GitCliAdapter));
+    let github_import_kernel = GitHubImportKernel::new(
+        repository.clone(),
+        Arc::new(
+            GitHubRestClient::new()
+                .map_err(|error| BootstrapError::GitHubClient(error.to_string()))?,
+        ),
+        Arc::new(WindowsCredentialGitHubTokenStore::default()),
+    );
 
     println!("ForgeOS database ready: {}", database_path.display());
     Ok(BootstrapState {
@@ -65,6 +75,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         ai_candidate_kernel,
         repository_kernel,
         codex_task_proposal_kernel,
+        github_import_kernel,
     })
 }
 

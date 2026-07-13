@@ -18,6 +18,9 @@ pub enum EvidenceType {
     Artifact,
     GitCommit,
     GitStatus,
+    GitHubRepository,
+    GitHubCommit,
+    GitHubRelease,
 }
 
 impl EvidenceType {
@@ -31,6 +34,9 @@ impl EvidenceType {
             Self::Artifact => "artifact",
             Self::GitCommit => "git_commit",
             Self::GitStatus => "git_status",
+            Self::GitHubRepository => "github_repository",
+            Self::GitHubCommit => "github_commit",
+            Self::GitHubRelease => "github_release",
         }
     }
 }
@@ -54,6 +60,9 @@ impl FromStr for EvidenceType {
             "artifact" => Ok(Self::Artifact),
             "git_commit" => Ok(Self::GitCommit),
             "git_status" => Ok(Self::GitStatus),
+            "github_repository" => Ok(Self::GitHubRepository),
+            "github_commit" => Ok(Self::GitHubCommit),
+            "github_release" => Ok(Self::GitHubRelease),
             _ => Err(DomainError::InvalidEvidenceType(value.to_owned())),
         }
     }
@@ -64,6 +73,7 @@ pub enum EvidenceSourceType {
     LocalFile,
     ExternalUrl,
     ManualNote,
+    GitHubApi,
 }
 
 impl EvidenceSourceType {
@@ -72,6 +82,7 @@ impl EvidenceSourceType {
             Self::LocalFile => "local_file",
             Self::ExternalUrl => "external_url",
             Self::ManualNote => "manual_note",
+            Self::GitHubApi => "github_api",
         }
     }
 }
@@ -84,6 +95,7 @@ impl FromStr for EvidenceSourceType {
             "local_file" => Ok(Self::LocalFile),
             "external_url" => Ok(Self::ExternalUrl),
             "manual_note" => Ok(Self::ManualNote),
+            "github_api" => Ok(Self::GitHubApi),
             _ => Err(DomainError::InvalidEvidenceSourceType(value.to_owned())),
         }
     }
@@ -155,7 +167,22 @@ impl EvidenceDetails {
             {
                 return Err(DomainError::InvalidEvidenceSourceUri);
             }
+            EvidenceSourceType::GitHubApi if !source_uri.starts_with("https://github.com/") => {
+                return Err(DomainError::InvalidEvidenceSourceUri);
+            }
             _ => {}
+        }
+
+        let github_type = matches!(
+            self.evidence_type,
+            EvidenceType::GitHubRepository
+                | EvidenceType::GitHubCommit
+                | EvidenceType::GitHubRelease
+        );
+        if github_type != matches!(self.source_type, EvidenceSourceType::GitHubApi) {
+            return Err(DomainError::InvalidEvidenceSourceType(
+                self.source_type.as_str().to_owned(),
+            ));
         }
 
         Ok(Self {
@@ -267,7 +294,11 @@ impl Evidence {
     pub fn is_git_evidence(&self) -> bool {
         matches!(
             self.details.evidence_type,
-            EvidenceType::GitCommit | EvidenceType::GitStatus
+            EvidenceType::GitCommit
+                | EvidenceType::GitStatus
+                | EvidenceType::GitHubRepository
+                | EvidenceType::GitHubCommit
+                | EvidenceType::GitHubRelease
         )
     }
 

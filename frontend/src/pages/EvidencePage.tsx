@@ -39,12 +39,16 @@ const TYPE_LABELS: Record<EvidenceType, string> = {
   artifact: "Artifact",
   git_commit: "Git commit",
   git_status: "Git status",
+  github_repository: "GitHub 仓库",
+  github_commit: "GitHub 提交",
+  github_release: "GitHub 发布版本",
 };
 
 const SOURCE_LABELS: Record<EvidenceSourceType, string> = {
   local_file: "Local file path",
   external_url: "External URL",
   manual_note: "Manual note",
+  github_api: "GitHub API",
 };
 
 export function EvidencePage() {
@@ -282,7 +286,7 @@ export function EvidencePage() {
 
   const archived = project.status === "archived";
   const gitEvidence = record
-    ? record.evidence.evidenceType === "git_commit" || record.evidence.evidenceType === "git_status"
+    ? ["git_commit", "git_status", "github_repository", "github_commit", "github_release"].includes(record.evidence.evidenceType)
     : false;
 
   return (
@@ -388,7 +392,7 @@ export function EvidencePage() {
                   <EvidenceFields value={draft} onChange={setDraft} />
                 </fieldset>
                 <div className="form-actions evidence-form-actions">
-                  <span>{gitEvidence ? "Git Evidence 内容来自只读采集，不能手动改写。" : "保存内容后必须重新人工验证。"}</span>
+                  <span>{gitEvidence ? "Git/GitHub 证据内容来自只读采集，不能手动改写。" : "保存内容后必须重新人工验证。"}</span>
                   <button className="primary-button" disabled={saving || archived || gitEvidence} type="submit">
                     {saving ? "Saving…" : "Save Changes"}
                   </button>
@@ -467,7 +471,7 @@ function EvidenceFields({ value, onChange }: EvidenceFieldsProps) {
       </label>
       <label>Source type
         <select value={value.sourceType} onChange={(event) => onChange({ ...value, sourceType: event.target.value as EvidenceSourceType, sourceUri: event.target.value === "manual_note" ? "" : value.sourceUri })}>
-          {EVIDENCE_SOURCE_TYPES.map((type) => <option key={type} value={type}>{SOURCE_LABELS[type]}</option>)}
+          {EVIDENCE_SOURCE_TYPES.filter((type) => type !== "github_api").map((type) => <option key={type} value={type}>{SOURCE_LABELS[type]}</option>)}
         </select>
       </label>
       <label className="span-2">Description
