@@ -2,7 +2,8 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use forgeos_lib::application::{
-    ContextPackView, CurrentSnapshotView, EvidenceView, ProjectIdentityView, RecentSessionView,
+    ContextPackView, CurrentSnapshotView, EvidenceRelationView, EvidenceSummaryView, EvidenceView,
+    GitActivityView, ProjectIdentityView, RecentSessionView, RecommendedNextStepView,
 };
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -31,6 +32,8 @@ impl From<ProjectIdentityView> for ProjectIdentityResult {
         }
     }
 }
+
+pub type ProjectOverviewResult = ProjectIdentityResult;
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct CurrentSnapshotResult {
@@ -74,8 +77,12 @@ impl CurrentSnapshotResult {
     }
 }
 
+pub type CurrentStateResult = CurrentSnapshotResult;
+
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct RecentSessionResult {
+    pub session_id: String,
+    pub status: String,
     pub goal: String,
     pub outcome: String,
     pub validation: String,
@@ -87,6 +94,8 @@ pub struct RecentSessionResult {
 impl From<RecentSessionView> for RecentSessionResult {
     fn from(value: RecentSessionView) -> Self {
         Self {
+            session_id: value.session_id,
+            status: value.status,
             goal: value.goal,
             outcome: value.outcome,
             validation: value.validation,
@@ -102,6 +111,8 @@ pub struct RecentSessionsResult {
     pub project_id: String,
     pub sessions: Vec<RecentSessionResult>,
 }
+
+pub type DevelopmentHistoryResult = RecentSessionsResult;
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct EvidenceResult {
@@ -127,6 +138,120 @@ impl From<EvidenceView> for EvidenceResult {
 pub struct EvidenceListResult {
     pub project_id: String,
     pub evidence: Vec<EvidenceResult>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct EvidenceRelationResult {
+    pub target_type: String,
+    pub target_id: String,
+    pub relation_type: String,
+}
+
+impl From<EvidenceRelationView> for EvidenceRelationResult {
+    fn from(value: EvidenceRelationView) -> Self {
+        Self {
+            target_type: value.target_type,
+            target_id: value.target_id,
+            relation_type: value.relation_type,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct EvidenceSummaryResult {
+    pub evidence_id: String,
+    pub title: String,
+    #[serde(rename = "type")]
+    pub evidence_type: String,
+    pub verification_status: String,
+    pub relations: Vec<EvidenceRelationResult>,
+}
+
+impl From<EvidenceSummaryView> for EvidenceSummaryResult {
+    fn from(value: EvidenceSummaryView) -> Self {
+        Self {
+            evidence_id: value.evidence_id,
+            title: value.title,
+            evidence_type: value.evidence_type,
+            verification_status: value.verification_status,
+            relations: value
+                .relations
+                .into_iter()
+                .map(EvidenceRelationResult::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct ProjectEvidenceSummaryResult {
+    pub project_id: String,
+    pub evidence: Vec<EvidenceSummaryResult>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct GitActivityResult {
+    pub evidence_id: String,
+    pub title: String,
+    pub activity_type: String,
+    pub commit_sha: Option<String>,
+    pub message: Option<String>,
+    pub author: Option<String>,
+    pub date: String,
+    pub status_summary: Option<String>,
+    pub verification_status: String,
+    pub captured_at: String,
+}
+
+impl From<GitActivityView> for GitActivityResult {
+    fn from(value: GitActivityView) -> Self {
+        Self {
+            evidence_id: value.evidence_id,
+            title: value.title,
+            activity_type: value.activity_type,
+            commit_sha: value.commit_sha,
+            message: value.message,
+            author: value.author,
+            date: value.date,
+            status_summary: value.status_summary,
+            verification_status: value.verification_status,
+            captured_at: value.captured_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct RecentGitActivityResult {
+    pub project_id: String,
+    pub activities: Vec<GitActivityResult>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct RecommendedNextStepResult {
+    pub priority: usize,
+    pub source_type: String,
+    pub source_id: String,
+    pub recommendation: String,
+    pub reason: String,
+}
+
+impl From<RecommendedNextStepView> for RecommendedNextStepResult {
+    fn from(value: RecommendedNextStepView) -> Self {
+        Self {
+            priority: value.priority,
+            source_type: value.source_type,
+            source_id: value.source_id,
+            recommendation: value.recommendation,
+            reason: value.reason,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct RecommendedNextStepsResult {
+    pub project_id: String,
+    pub strategy: String,
+    pub recommendations: Vec<RecommendedNextStepResult>,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]

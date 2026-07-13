@@ -25,7 +25,8 @@ pub use error::ApplicationError;
 pub use github_import::{GitHubImportError, GitHubImportKernel};
 pub use kernel::ProjectKernel;
 pub use mcp_query::{
-    ContextPackView, CurrentSnapshotView, EvidenceView, McpQueryError, McpQueryKernel,
-    ProjectIdentityView, RecentSessionView,
+    ContextPackView, CurrentSnapshotView, CurrentStateView, EvidenceRelationView,
+    EvidenceSummaryView, EvidenceView, GitActivityView, McpQueryError, McpQueryKernel,
+    ProjectIdentityView, ProjectOverviewView, RecentSessionView, RecommendedNextStepView,
 };
 pub use repository::{RepositoryKernel, RepositoryKernelError};

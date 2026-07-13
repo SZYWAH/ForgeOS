@@ -19,8 +19,9 @@ use crate::{
     ports::{
         AiCandidateRepository, AiProviderRepository, CodexExecutionRepository,
         CodexTaskProposalRepository, ContextExportRepository, EvidenceRepository,
-        GitHubImportRepository, McpQueryRepository, ProjectRepository, RepositoryError,
-        RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
+        GitHubImportRepository, McpGitEvidenceRecord, McpQueryRepository, ProjectRepository,
+        RepositoryError, RepositoryStore, SessionRepository, SnapshotRepository,
+        WorkspaceRepository,
     },
 };
 
@@ -164,8 +165,67 @@ impl McpQueryRepository for SqliteProjectRepository {
         SessionRepository::list_sessions(self, project_id).await
     }
 
+    async fn get_current_session(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError> {
+        SessionRepository::get_current_session(self, project_id).await
+    }
+
     async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError> {
         EvidenceRepository::list_evidences(self, project_id).await
+    }
+
+    async fn list_evidence_links_for_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<EvidenceLink>, RepositoryError> {
+        let rows = sqlx::query_as::<_, EvidenceLinkRow>(
+            "SELECT links.id, links.evidence_id, links.target_type, links.target_id, \
+             links.relation_type FROM evidence_links links \
+             JOIN evidences evidence ON evidence.id = links.evidence_id \
+             WHERE evidence.project_id = ? \
+             ORDER BY links.evidence_id, links.target_type, links.target_id, \
+             links.relation_type, links.id",
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+
+        rows.into_iter().map(EvidenceLinkRow::into_domain).collect()
+    }
+
+    async fn list_ai_candidates(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<AiCandidate>, RepositoryError> {
+        AiCandidateRepository::list_ai_candidates(self, project_id).await
+    }
+
+    async fn list_git_evidence_activity(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<McpGitEvidenceRecord>, RepositoryError> {
+        let rows = sqlx::query_as::<_, McpGitEvidenceRow>(
+            "SELECT evidence.id AS evidence_id, evidence.title, evidence.description, \
+             evidence.type AS evidence_type, evidence.verification_status, \
+             links.commit_sha, links.captured_at \
+             FROM repository_evidence_links links \
+             JOIN evidences evidence ON evidence.id = links.evidence_id \
+             WHERE links.project_id = ? AND evidence.project_id = ? \
+               AND evidence.type IN ('git_commit', 'git_status') \
+             ORDER BY links.captured_at DESC, evidence.id DESC",
+        )
+        .bind(project_id)
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+
+        rows.into_iter()
+            .map(McpGitEvidenceRow::into_read_model)
+            .collect()
     }
 }
 
@@ -372,6 +432,35 @@ struct EvidenceLinkRow {
     target_type: String,
     target_id: String,
     relation_type: String,
+}
+
+#[derive(FromRow)]
+struct McpGitEvidenceRow {
+    evidence_id: String,
+    title: String,
+    description: String,
+    evidence_type: String,
+    verification_status: String,
+    commit_sha: Option<String>,
+    captured_at: String,
+}
+
+impl McpGitEvidenceRow {
+    fn into_read_model(self) -> Result<McpGitEvidenceRecord, RepositoryError> {
+        Ok(McpGitEvidenceRecord {
+            evidence_id: self.evidence_id,
+            title: self.title,
+            description: self.description,
+            evidence_type: EvidenceType::from_str(&self.evidence_type).map_err(corrupt)?,
+            verification_status: VerificationStatus::from_str(&self.verification_status)
+                .map_err(corrupt)?,
+            commit_sha: self.commit_sha,
+            captured_at: parse_timestamp(
+                "repository_evidence_links.captured_at",
+                &self.captured_at,
+            )?,
+        })
+    }
 }
 
 #[derive(FromRow)]

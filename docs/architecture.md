@@ -385,3 +385,56 @@ Approved CodexTaskProposal
 - React 通过类型化 IPC 创建请求、查看历史和显式记录状态/结果，不直接访问 SQLite。
 - ExecutionKernel 没有 Snapshot、Session 或 Evidence 写入能力；成功、失败或取消都不会改变正式研发事实。
 - D5 不使用 `jobs` 模块，不实现后台队列、进度流、Agent、MCP 写入或 Git 自动化。
+
+## D5 MCP Intelligence Layer（方向调整）
+
+ForgeOS 后续不继续扩展 Codex Execution。既有 Execution Foundation 仅保留为历史记录能力；当前 D5 的研发方向调整为增强只读 MCP 查询，让 Codex 在自己的工作环境中消费 ForgeOS 已确认的研发知识：
+
+```text
+Codex / MCP Client
+        ↓ STDIO JSON-RPC
+forgeos-mcp Protocol + Safe Result DTO
+        ↓ read-only query methods
+McpQueryKernel
+        ↓ Application Query + Repository Port
+SqliteProjectRepository
+        ↓ SQLite read-only connection
+ForgeOS Database
+```
+
+依赖与职责保持固定：
+
+- MCP Tool 层只负责协议转换、参数校验、结果 DTO 和安全错误映射，不包含 SQL、领域规则或推荐规则。
+- `McpQueryKernel` 负责 Project 归属验证、查询编排、确定性排序、安全投影与规则型建议；它不持有任何 Mutation Use Case。
+- `McpQueryRepository` 只提供查询所需的 Repository Port；MCP Server 不直接访问 SQLite。
+- SQLite 继续通过 `connect_read_only` 打开，不创建数据库、不执行 Migration，也不允许写事务。
+- 每次请求必须显式绑定 `project_id`，所有 Snapshot、Session、Evidence、Git Activity 和 Candidate 查询都在该 Project 范围内完成。
+
+在保留 D3 五个只读工具兼容面的基础上，新增以下 Intelligence Tools：
+
+- `get_project_overview`
+- `get_current_state`
+- `get_development_history`
+- `get_recent_git_activity`
+- `get_project_evidence_summary`
+- `get_recommended_next_steps`
+
+`get_recommended_next_steps` 是确定性规则查询，不是 AI 推理。规则只读取 Current Snapshot、Open Session、Pending Candidate 与尚未确认的 Evidence，使用固定优先级、固定排序和去重策略生成建议。同一份数据库状态必须返回相同结果；Candidate 仍然只是候选内容，建议结果不会接受 Candidate 或改变正式事实。
+
+`build_context_pack` 继续只在内存中生成，并按固定顺序组织：
+
+1. Project Overview
+2. Current Snapshot
+3. Recent Development Session
+4. Evidence Summary
+5. Recent Git Activity
+
+Renderer 使用稳定字段顺序和稳定来源排序计算 Markdown 与 SHA-256。Git Evidence 在 Git Activity 中形成安全结构化摘要，不重复输出为普通 Evidence，也不返回 Evidence `source_uri`、Repository 绝对路径或原始路径字段。
+
+安全边界：
+
+- MCP Result DTO 使用字段白名单，不直接序列化 Repository、Evidence 或 AI Provider 实体。
+- 禁止返回 API Key、Credential、Token、Provider Secret、Repository 私有绝对路径或嵌入凭据的 URL。
+- MCP 不调用 AI，不启动 Agent，不执行 Codex，不启动 Shell，也不执行任何 Git 命令。
+- MCP 不创建、更新或删除 Project、Snapshot、Session、Evidence、Candidate、ContextExport 或其他 ForgeOS 记录。
+- STDIO 仍是唯一 Transport；不监听 HTTP/TCP，不提供写 Tool、Task 执行或后台任务。

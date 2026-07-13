@@ -1,6 +1,12 @@
 use std::fmt::Write;
 
-use crate::ports::{ContextRenderError, ContextRenderInput, ContextRenderer};
+use crate::{
+    domain::EvidenceType,
+    ports::{
+        redact_external_text, redact_git_evidence_description, ContextRenderError,
+        ContextRenderInput, ContextRenderer,
+    },
+};
 
 #[derive(Default)]
 pub struct MarkdownContextRenderer;
@@ -14,12 +20,19 @@ impl ContextRenderer for MarkdownContextRenderer {
         writeln!(output, "Purpose: {}", input.template_type.purpose()).map_err(render_error)?;
         writeln!(output).map_err(render_error)?;
 
-        writeln!(output, "## Project Identity").map_err(render_error)?;
+        writeln!(output, "## Project Overview").map_err(render_error)?;
         field(&mut output, "Name", &input.project.name)?;
         field(&mut output, "Description", &input.project.description)?;
         field(&mut output, "Vision", &input.project.vision)?;
+        field(&mut output, "Target User", &input.project.target_user)?;
         field(&mut output, "Scope", &input.project.scope)?;
         field(&mut output, "Tech Stack", &input.project.tech_stack)?;
+        field(
+            &mut output,
+            "Lifecycle Stage",
+            input.project.lifecycle_stage.as_str(),
+        )?;
+        field(&mut output, "Status", input.project.status.as_str())?;
 
         writeln!(output, "## Current Snapshot").map_err(render_error)?;
         if let Some(snapshot) = input.snapshot {
@@ -45,13 +58,54 @@ impl ContextRenderer for MarkdownContextRenderer {
         }
 
         writeln!(output, "## Evidence").map_err(render_error)?;
-        if input.evidences.is_empty() {
+        let mut evidence = input
+            .evidences
+            .iter()
+            .filter(|evidence| !is_local_git_evidence(evidence.evidence_type()))
+            .peekable();
+        if evidence.peek().is_none() {
             writeln!(output, "Not available.").map_err(render_error)?;
         } else {
-            for evidence in input.evidences {
-                writeln!(output, "### {}", value(evidence.title())).map_err(render_error)?;
+            for evidence in evidence {
+                writeln!(
+                    output,
+                    "### {}",
+                    value(&redact_external_text(evidence.title()))
+                )
+                .map_err(render_error)?;
                 field(&mut output, "Type", evidence.evidence_type().as_str())?;
                 field(&mut output, "Description", evidence.description())?;
+                field(
+                    &mut output,
+                    "Verification Status",
+                    evidence.verification_status().as_str(),
+                )?;
+            }
+        }
+
+        writeln!(output).map_err(render_error)?;
+        writeln!(output, "## Recent Git Activity").map_err(render_error)?;
+        let mut git_activity = input
+            .evidences
+            .iter()
+            .filter(|evidence| is_local_git_evidence(evidence.evidence_type()))
+            .peekable();
+        if git_activity.peek().is_none() {
+            writeln!(output, "Not available.").map_err(render_error)?;
+        } else {
+            for evidence in git_activity {
+                writeln!(
+                    output,
+                    "### {}",
+                    value(&redact_external_text(evidence.title()))
+                )
+                .map_err(render_error)?;
+                field(&mut output, "Type", evidence.evidence_type().as_str())?;
+                field(
+                    &mut output,
+                    "Description",
+                    &redact_git_evidence_description(evidence.description()),
+                )?;
                 field(
                     &mut output,
                     "Verification Status",
@@ -64,9 +118,16 @@ impl ContextRenderer for MarkdownContextRenderer {
     }
 }
 
+fn is_local_git_evidence(evidence_type: EvidenceType) -> bool {
+    matches!(
+        evidence_type,
+        EvidenceType::GitCommit | EvidenceType::GitStatus
+    )
+}
+
 fn field(output: &mut String, label: &str, content: &str) -> Result<(), ContextRenderError> {
     writeln!(output, "{label}:").map_err(render_error)?;
-    writeln!(output, "{}", value(content)).map_err(render_error)?;
+    writeln!(output, "{}", value(&redact_external_text(content))).map_err(render_error)?;
     writeln!(output).map_err(render_error)
 }
 
@@ -76,7 +137,7 @@ fn list(output: &mut String, label: &str, items: &[String]) -> Result<(), Contex
         writeln!(output, "- None recorded").map_err(render_error)?;
     } else {
         for item in items {
-            writeln!(output, "- {}", value(item)).map_err(render_error)?;
+            writeln!(output, "- {}", value(&redact_external_text(item))).map_err(render_error)?;
         }
     }
     writeln!(output).map_err(render_error)
@@ -138,10 +199,18 @@ mod tests {
         };
         let first = render();
         assert_eq!(first, render());
-        let project_at = first.find("## Project Identity").unwrap();
+        let project_at = first.find("## Project Overview").unwrap();
         let snapshot_at = first.find("## Current Snapshot").unwrap();
         let session_at = first.find("## Recent Development Session").unwrap();
         let evidence_at = first.find("## Evidence").unwrap();
-        assert!(project_at < snapshot_at && snapshot_at < session_at && session_at < evidence_at);
+        let git_at = first.find("## Recent Git Activity").unwrap();
+        assert!(
+            project_at < snapshot_at
+                && snapshot_at < session_at
+                && session_at < evidence_at
+                && evidence_at < git_at
+        );
+        assert!(first.contains("Lifecycle Stage:\nimplementation"));
+        assert!(first.contains("Status:\nactive"));
     }
 }

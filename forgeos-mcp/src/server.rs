@@ -8,8 +8,11 @@ use rmcp::{
 
 use crate::{
     protocol::{
-        ContextPackResult, CurrentSnapshotResult, EvidenceListResult, EvidenceResult,
-        ProjectIdentityResult, RecentSessionResult, RecentSessionsResult,
+        ContextPackResult, CurrentSnapshotResult, CurrentStateResult, DevelopmentHistoryResult,
+        EvidenceListResult, EvidenceResult, EvidenceSummaryResult, GitActivityResult,
+        ProjectEvidenceSummaryResult, ProjectIdentityResult, ProjectOverviewResult,
+        RecentGitActivityResult, RecentSessionResult, RecentSessionsResult,
+        RecommendedNextStepResult, RecommendedNextStepsResult,
     },
     tools::{
         context::BuildContextPackParams, evidence::ListEvidenceParams, project::ProjectScope,
@@ -46,6 +49,22 @@ impl ForgeOsMcpServer {
             .map_err(safe_error)
     }
 
+    #[tool(
+        description = "Read the Project overview and confirmed lifecycle state for one ForgeOS Project."
+    )]
+    async fn get_project_overview(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<ProjectOverviewResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_project_overview(&project_id)
+            .await
+            .map(ProjectOverviewResult::from)
+            .map(Json)
+            .map_err(safe_error)
+    }
+
     #[tool(description = "Read the current confirmed Snapshot for one ForgeOS Project.")]
     async fn get_current_snapshot(
         &self,
@@ -56,6 +75,20 @@ impl ForgeOsMcpServer {
             .get_current_snapshot(&project_id)
             .await
             .map(|snapshot| CurrentSnapshotResult::from_optional(project_id, snapshot))
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(description = "Read the current confirmed engineering state for one ForgeOS Project.")]
+    async fn get_current_state(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<CurrentStateResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_current_state(&project_id)
+            .await
+            .map(|snapshot| CurrentStateResult::from_optional(project_id, snapshot))
             .map(Json)
             .map_err(safe_error)
     }
@@ -83,6 +116,28 @@ impl ForgeOsMcpServer {
     }
 
     #[tool(
+        description = "Read up to five most recent Development Sessions for one ForgeOS Project, including outcomes and handoff context."
+    )]
+    async fn get_development_history(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<DevelopmentHistoryResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_development_history(&project_id)
+            .await
+            .map(|sessions| DevelopmentHistoryResult {
+                project_id,
+                sessions: sessions
+                    .into_iter()
+                    .map(RecentSessionResult::from)
+                    .collect(),
+            })
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(
         description = "Read manual and Git Evidence summaries for one ForgeOS Project. Source paths are omitted."
     )]
     async fn list_evidence(
@@ -96,6 +151,73 @@ impl ForgeOsMcpServer {
             .map(|evidence| EvidenceListResult {
                 project_id,
                 evidence: evidence.into_iter().map(EvidenceResult::from).collect(),
+            })
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(
+        description = "Read safe Evidence summaries and their Project, Snapshot, or Session relations for one ForgeOS Project."
+    )]
+    async fn get_project_evidence_summary(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<ProjectEvidenceSummaryResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_project_evidence_summary(&project_id)
+            .await
+            .map(|evidence| ProjectEvidenceSummaryResult {
+                project_id,
+                evidence: evidence
+                    .into_iter()
+                    .map(EvidenceSummaryResult::from)
+                    .collect(),
+            })
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(
+        description = "Read structured, path-redacted Git commit and working-copy Evidence for one ForgeOS Project."
+    )]
+    async fn get_recent_git_activity(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<RecentGitActivityResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_recent_git_activity(&project_id)
+            .await
+            .map(|activities| RecentGitActivityResult {
+                project_id,
+                activities: activities
+                    .into_iter()
+                    .map(GitActivityResult::from)
+                    .collect(),
+            })
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(
+        description = "Return deterministic, rule-based next-step recommendations from confirmed Snapshot, open Session, pending Candidate, and unresolved Evidence data. No AI is called."
+    )]
+    async fn get_recommended_next_steps(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<RecommendedNextStepsResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_recommended_next_steps(&project_id)
+            .await
+            .map(|recommendations| RecommendedNextStepsResult {
+                project_id,
+                strategy: "rule_based".into(),
+                recommendations: recommendations
+                    .into_iter()
+                    .map(RecommendedNextStepResult::from)
+                    .collect(),
             })
             .map(Json)
             .map_err(safe_error)
@@ -148,7 +270,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tool_surface_is_exactly_the_five_read_only_tools() {
+    fn tool_surface_is_exactly_the_eleven_read_only_tools() {
         let names = ForgeOsMcpServer::tool_router()
             .list_all()
             .into_iter()
@@ -159,15 +281,21 @@ mod tests {
             [
                 "build_context_pack",
                 "get_current_snapshot",
+                "get_current_state",
+                "get_development_history",
+                "get_project_evidence_summary",
                 "get_project_identity",
+                "get_project_overview",
+                "get_recent_git_activity",
                 "get_recent_sessions",
+                "get_recommended_next_steps",
                 "list_evidence",
             ]
         );
-        assert!(names
-            .iter()
-            .all(|name| !["create", "update", "delete", "accept"]
-                .iter()
-                .any(|verb| name.contains(verb))));
+        assert!(names.iter().all(|name| ![
+            "create", "update", "delete", "accept", "write", "execute"
+        ]
+        .iter()
+        .any(|verb| name.contains(verb))));
     }
 }

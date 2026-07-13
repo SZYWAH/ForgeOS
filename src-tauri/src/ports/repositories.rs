@@ -1,11 +1,23 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::domain::{
     AiCandidate, AiProvider, CodexExecutionRecord, CodexTaskProposal, ContextExport,
-    DevelopmentSession, Evidence, EvidenceLink, GitHubConnector, GitHubImportDraft, Project,
-    ProjectSnapshot, Repository, WorkingCopy, Workspace,
+    DevelopmentSession, Evidence, EvidenceLink, EvidenceType, GitHubConnector, GitHubImportDraft,
+    Project, ProjectSnapshot, Repository, VerificationStatus, WorkingCopy, Workspace,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpGitEvidenceRecord {
+    pub evidence_id: String,
+    pub title: String,
+    pub description: String,
+    pub evidence_type: EvidenceType,
+    pub verification_status: VerificationStatus,
+    pub commit_sha: Option<String>,
+    pub captured_at: DateTime<Utc>,
+}
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -143,7 +155,23 @@ pub trait McpQueryRepository: Send + Sync {
         &self,
         project_id: &str,
     ) -> Result<Vec<DevelopmentSession>, RepositoryError>;
+    async fn get_current_session(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DevelopmentSession>, RepositoryError>;
     async fn list_evidences(&self, project_id: &str) -> Result<Vec<Evidence>, RepositoryError>;
+    async fn list_evidence_links_for_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<EvidenceLink>, RepositoryError>;
+    async fn list_ai_candidates(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<AiCandidate>, RepositoryError>;
+    async fn list_git_evidence_activity(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<McpGitEvidenceRecord>, RepositoryError>;
 }
 
 #[async_trait]

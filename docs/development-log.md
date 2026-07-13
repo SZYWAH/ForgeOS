@@ -673,3 +673,45 @@ D5：Codex Execution Foundation 完成
 ### 下一步计划
 
 等待用户确认 D5。确认前不提交 Git，不进入真实 Codex Runner、Agent、MCP 写入或 Git 自动化。
+
+## 2026-07-13 — ForgeOS D5 MCP Intelligence Layer
+
+### 当前阶段
+
+D5：MCP Intelligence Layer 完成，等待用户验收
+
+### 方向调整
+
+停止继续开发 Codex Execution。已存在的 Execution Foundation 仅保留为记录层，不接入真实 Runner。当前方向改为增强 ForgeOS MCP 的只读研发知识查询，让 Codex 负责代码工作，ForgeOS 负责提供经过 Project 隔离的可靠上下文。
+
+### 本阶段范围
+
+- 在既有 D3 只读 MCP Tool 兼容面上新增 `get_project_overview`、`get_current_state`、`get_development_history`、`get_recent_git_activity`、`get_project_evidence_summary` 和 `get_recommended_next_steps`。
+- 所有查询继续经过 `forgeos-mcp → McpQueryKernel → Application Query → Repository Port → SQLite read-only connection`，MCP 层不直接执行 SQL。
+- Project Overview 返回 Project 身份、技术栈、生命周期和状态；Current State 返回当前 Snapshot 及其版本。
+- Development History 返回固定数量的最近 Session；Git Activity 返回经过安全投影的 Commit 与 Working Copy 状态摘要。
+- Evidence Summary 返回 Evidence 类型、验证状态与关系摘要，不返回 `source_uri` 或本地绝对路径。
+- Recommended Next Steps 只根据 Current Snapshot、Open Session、Pending Candidate 与尚未确认的 Evidence 执行固定规则；不调用 AI，不把建议写回正式领域。
+- `build_context_pack` 增强为稳定组织 Project Overview、Snapshot、Session、Evidence Summary 与 Git Activity，并继续只在内存中生成 Markdown 与哈希。
+- 新增 ADR-014，记录 Query Intelligence、确定性建议和安全 DTO 的架构决策。
+
+### 安全边界
+
+- MCP 保持只读，不创建、更新或删除 Project、Snapshot、Session、Evidence、Candidate 或 ContextExport。
+- 不返回 API Key、Credential、Token、Provider Secret、Repository 私有绝对路径或 Evidence 来源路径。
+- 不调用 AI，不运行 Agent，不执行 Codex，不启动 Shell，不执行 Git 读取或写入命令。
+- 不新增 MCP 写 Tool、HTTP Server、后台任务、自动代码修改、自动 Commit、Push 或 Merge。
+
+### 验证结果
+
+- `npm run build` 通过：TypeScript 编译和 Vite 生产构建成功。
+- `src-tauri` 的 `cargo fmt --check`、`cargo check`、`cargo test` 通过：58 个测试通过，0 失败，1 个真实 GitHub 网络测试按设计保持 Ignore。
+- `forgeos-mcp` 的 `cargo fmt --check`、`cargo check`、`cargo test` 通过：Tool Surface 单元测试与 STDIO Intelligence 端到端测试共 2 个测试通过，0 失败。
+- MCP 测试确认 11 个 Tool 均为只读工具，并覆盖新旧工具兼容、CodeLens-Pro/ForgeOS Project 隔离、Evidence 关系、Git Activity 安全投影和确定性推荐。
+- 连续两次生成相同 Project/Template 的 Context Pack，返回内容与哈希保持一致；调用前后 Project、Snapshot、Session、Evidence、Candidate 和 ContextExport 指纹不变。
+- 敏感信息测试确认 API Key/Provider Token、作者邮箱、Evidence `source_uri`、Repository 私有绝对路径，以及嵌入 Git Evidence 标题、Message 和描述的路径均不进入 MCP 输出；普通 HTTP/HTTPS URL 保持可用。
+- SQLite read-only 连接拒绝 `UPDATE`；测试数据库 `integrity_check = ok`、`foreign_key_check = 0`。
+
+### 下一步计划
+
+等待用户确认 D5 MCP Intelligence Layer 验收结果。确认前不提交 Git，不进入 Codex Execution、Agent、MCP 写入、Shell/Git 自动化或其他后续开发。

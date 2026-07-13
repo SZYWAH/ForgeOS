@@ -12,14 +12,18 @@ pub use ai::{
     ApiKeyStore, SecretStoreError,
 };
 pub use codex::{CodexExecutionRequest, CodexRunner, CodexRunnerError};
-pub use context::{ContextRenderError, ContextRenderInput, ContextRenderer};
+pub use context::{
+    redact_external_text, redact_git_evidence_description, ContextRenderError, ContextRenderInput,
+    ContextRenderer,
+};
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitInspection};
 pub use github::{GitHubClient, GitHubClientError};
 pub use repositories::{
     AiCandidateKernelRepository, AiCandidateRepository, AiProviderRepository,
     CodexExecutionKernelRepository, CodexExecutionRepository, CodexTaskProposalKernelRepository,
     CodexTaskProposalRepository, ContextExportRepository, ContextPackRepository,
-    EvidenceRepository, GitHubImportKernelRepository, GitHubImportRepository, McpQueryRepository,
-    ProjectKernelRepository, ProjectRepository, RepositoryError, RepositoryKernelStore,
-    RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
+    EvidenceRepository, GitHubImportKernelRepository, GitHubImportRepository, McpGitEvidenceRecord,
+    McpQueryRepository, ProjectKernelRepository, ProjectRepository, RepositoryError,
+    RepositoryKernelStore, RepositoryStore, SessionRepository, SnapshotRepository,
+    WorkspaceRepository,
 };
