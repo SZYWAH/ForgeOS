@@ -170,46 +170,46 @@ export function RepositoriesPage() {
     }
   }
 
-  if (loading) return <p className="loading-copy">Loading Repositories…</p>;
+  if (loading) return <p className="loading-copy">正在加载本地仓库…</p>;
   if (!project || !projectId) {
-    return <section className="panel not-found"><h1>Project unavailable</h1><p>{error}</p></section>;
+    return <section className="panel not-found"><h1>项目不可用</h1><p>{error}</p></section>;
   }
   const archived = project.status === "archived";
 
   return (
     <div className="page-stack repositories-page">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link><span>/</span>
+        <Link to="/projects">项目</Link><span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span>
-        <span>Repositories</span>
+        <span>本地仓库</span>
       </div>
       <header className="page-header">
-        <div><p className="eyebrow">D2 · Read-only Git</p><h1>Repositories</h1><p>观察本地 Git 工作区，并把明确选择的外部事实转换为 Evidence。</p></div>
+        <div><p className="eyebrow">D2 · 只读 Git</p><h1>本地仓库</h1><p>观察本地 Git 工作区，并把明确选择的外部事实转换为研发证据。</p></div>
       </header>
-      <div className="git-readonly-banner"><strong>Observer only</strong><span>ForgeOS 不提供 commit、push、pull、merge、checkout、reset 或 stash。</span></div>
+      <div className="git-readonly-banner"><strong>仅观察</strong><span>ForgeOS 不提供 commit、push、pull、merge、checkout、reset 或 stash。</span></div>
       {error ? <div className="error-banner repository-message">{error}</div> : null}
       {notice ? <div className="success-banner repository-message">{notice}</div> : null}
 
       {!archived ? (
         <form className="panel repository-register-panel" onSubmit={register}>
-          <div className="panel-header"><div><h2>Register Local Repository</h2><p>先检查路径，再由你明确注册。</p></div></div>
+          <div className="panel-header"><div><h2>注册本地仓库</h2><p>先检查路径，再由你明确注册。</p></div></div>
           <div className="repository-register-controls">
-            <label>Absolute repository path <span className="required">*</span>
+            <label>仓库绝对路径 <span className="required">*</span>
               <input required value={path} onChange={(event) => { setPath(event.target.value); setPreview(undefined); }} placeholder="D:\projects\CodeLens-Pro" />
             </label>
-            <button className="secondary-button" disabled={working || !path.trim()} onClick={() => void inspectPath()} type="button">Inspect</button>
-            <button className="primary-button" disabled={working || !preview} type="submit">Register</button>
+            <button className="secondary-button" disabled={working || !path.trim()} onClick={() => void inspectPath()} type="button">检查</button>
+            <button className="primary-button" disabled={working || !preview} type="submit">注册</button>
           </div>
           {preview ? <InspectionPreview inspection={preview} /> : null}
         </form>
-      ) : <div className="archive-banner">归档 Project 的 Repository 集成保持只读，不能新增、刷新或生成 Evidence。</div>}
+      ) : <div className="archive-banner">归档项目的仓库集成保持只读，不能新增、刷新或生成证据。</div>}
 
       <div className="repository-workbench">
         <section className="panel repository-list-panel">
-          <div className="panel-header"><div><h2>Registered</h2><p>{records.length} repositories</p></div></div>
-          {records.length === 0 ? <p className="empty-state">尚未注册 Repository。</p> : (
+          <div className="panel-header"><div><h2>已注册仓库</h2><p>{records.length} 个仓库</p></div></div>
+          {records.length === 0 ? <p className="empty-state">尚未注册本地仓库。</p> : (
             <div className="repository-list">
-              {records.map((item) => <button className={item.repository.id === selectedId ? "selected" : ""} key={item.repository.id} onClick={() => { setSelectedId(item.repository.id); setError(undefined); setNotice(undefined); }} type="button"><strong>{tail(item.repository.path)}</strong><small>{item.workingCopy.branch} · {item.workingCopy.headCommit.slice(0, 12)}</small><span className={item.workingCopy.isDirty ? "git-dirty" : "git-clean"}>{item.workingCopy.isDirty ? "Dirty" : "Clean"}</span></button>)}
+              {records.map((item) => <button className={item.repository.id === selectedId ? "selected" : ""} key={item.repository.id} onClick={() => { setSelectedId(item.repository.id); setError(undefined); setNotice(undefined); }} type="button"><strong>{tail(item.repository.path)}</strong><small>{item.workingCopy.branch} · {item.workingCopy.headCommit.slice(0, 12)}</small><span className={item.workingCopy.isDirty ? "git-dirty" : "git-clean"}>{item.workingCopy.isDirty ? "有改动" : "干净"}</span></button>)}
             </div>
           )}
         </section>
@@ -217,35 +217,35 @@ export function RepositoriesPage() {
         {selected ? (
           <div className="repository-detail-stack">
             <section className="panel repository-detail-panel">
-              <div className="panel-header repository-detail-header"><div><h2>{tail(selected.repository.path)}</h2><p title={selected.repository.path}>{selected.repository.path}</p></div><button className="secondary-button" disabled={working || archived} onClick={() => void refresh()} type="button">Refresh Status</button></div>
+              <div className="panel-header repository-detail-header"><div><h2>{tail(selected.repository.path)}</h2><p title={selected.repository.path}>{selected.repository.path}</p></div><button className="secondary-button" disabled={working || archived} onClick={() => void refresh()} type="button">刷新状态</button></div>
               <WorkingCopyView record={selected} />
-              <div className="repository-evidence-actions"><span>Evidence 创建是显式操作，不会改变 Git。</span><button className="secondary-button" disabled={working || archived} onClick={() => void createStatusEvidence()} type="button">Create Status Evidence</button></div>
+              <div className="repository-evidence-actions"><span>证据创建是显式操作，不会改变 Git。</span><button className="secondary-button" disabled={working || archived} onClick={() => void createStatusEvidence()} type="button">创建状态证据</button></div>
             </section>
 
             <section className="panel repository-commits-panel">
-              <div className="panel-header"><div><h2>Recent Commits</h2><p>{selected.recentCommits.length > 0 ? "Latest 10 from explicit inspection/refresh" : "Click Refresh Status to read commit log"}</p></div></div>
-              {selected.recentCommits.length === 0 ? <p className="empty-state">当前页面尚未读取 Commit Log。</p> : <div className="repository-commit-list">{selected.recentCommits.map((commit) => <article key={commit.sha}><div><code>{commit.sha.slice(0, 12)}</code><strong>{commit.message}</strong><small>{commit.authorName} · {formatUpdatedAt(commit.authoredAt)}</small></div><button className="secondary-button" disabled={working || archived} onClick={() => void createCommitEvidence(commit.sha)} type="button">Create Evidence</button></article>)}</div>}
+              <div className="panel-header"><div><h2>最近提交</h2><p>{selected.recentCommits.length > 0 ? "显式检查或刷新读取的最近 10 条" : "点击“刷新状态”读取提交记录"}</p></div></div>
+              {selected.recentCommits.length === 0 ? <p className="empty-state">当前页面尚未读取提交记录。</p> : <div className="repository-commit-list">{selected.recentCommits.map((commit) => <article key={commit.sha}><div><code>{commit.sha.slice(0, 12)}</code><strong>{commit.message}</strong><small>{commit.authorName} · {formatUpdatedAt(commit.authoredAt)}</small></div><button className="secondary-button" disabled={working || archived} onClick={() => void createCommitEvidence(commit.sha)} type="button">创建证据</button></article>)}</div>}
             </section>
 
             <section className="panel repository-evidence-panel">
-              <div className="panel-header"><div><h2>Git Evidence</h2><p>{evidences.length} records linked to this Repository</p></div><Link to={`/projects/${project.id}/evidence`}>Open all Evidence</Link></div>
-              {evidences.length === 0 ? <p className="empty-state">尚未创建 Git Evidence。</p> : <div className="repository-evidence-list">{evidences.map((evidence) => <article key={evidence.id}><span>{evidence.evidenceType === "git_commit" ? "Commit" : "Status"}</span><strong>{evidence.title}</strong><small>{evidence.verificationStatus} · {formatUpdatedAt(evidence.createdAt)}</small></article>)}</div>}
+              <div className="panel-header"><div><h2>Git 证据</h2><p>{evidences.length} 条记录关联到该仓库</p></div><Link to={`/projects/${project.id}/evidence`}>打开全部证据</Link></div>
+              {evidences.length === 0 ? <p className="empty-state">尚未创建 Git 证据。</p> : <div className="repository-evidence-list">{evidences.map((evidence) => <article key={evidence.id}><span>{evidence.evidenceType === "git_commit" ? "提交" : "状态"}</span><strong>{evidence.title}</strong><small>{evidence.verificationStatus === "verified" ? "已验证" : evidence.verificationStatus === "invalid" ? "已失效" : "未验证"} · {formatUpdatedAt(evidence.createdAt)}</small></article>)}</div>}
             </section>
           </div>
-        ) : <section className="panel provider-detail-empty"><strong>Select a Repository</strong><p>注册或选择本地 Git 工作区。</p></section>}
+        ) : <section className="panel provider-detail-empty"><strong>选择一个仓库</strong><p>注册或选择本地 Git 工作区。</p></section>}
       </div>
     </div>
   );
 }
 
 function InspectionPreview({ inspection }: { inspection: GitInspection }) {
-  return <div className="repository-inspection-preview"><div><span>Root</span><strong>{inspection.rootPath}</strong></div><div><span>Branch</span><strong>{inspection.branch}</strong></div><div><span>HEAD</span><strong>{inspection.headCommit.slice(0, 12)}</strong></div><div><span>Status</span><strong className={inspection.isDirty ? "git-dirty" : "git-clean"}>{inspection.isDirty ? "Dirty" : "Clean"}</strong></div></div>;
+  return <div className="repository-inspection-preview"><div><span>根路径</span><strong>{inspection.rootPath}</strong></div><div><span>分支</span><strong>{inspection.branch}</strong></div><div><span>HEAD</span><strong>{inspection.headCommit.slice(0, 12)}</strong></div><div><span>状态</span><strong className={inspection.isDirty ? "git-dirty" : "git-clean"}>{inspection.isDirty ? "有改动" : "干净"}</strong></div></div>;
 }
 
 function WorkingCopyView({ record }: { record: RepositoryRecord }) {
   const { repository, workingCopy } = record;
   const summary = workingCopy.diffSummary;
-  return <div className="working-copy-view"><dl><div><dt>Branch</dt><dd>{workingCopy.branch}</dd></div><div><dt>HEAD</dt><dd>{workingCopy.headCommit}</dd></div><div><dt>Dirty</dt><dd className={workingCopy.isDirty ? "git-dirty" : "git-clean"}>{workingCopy.isDirty ? "Yes" : "No"}</dd></div><div><dt>Default Branch</dt><dd>{repository.defaultBranch}</dd></div><div><dt>Remote</dt><dd>{repository.remoteUrl ?? "Not configured"}</dd></div><div><dt>Last Checked</dt><dd>{formatUpdatedAt(workingCopy.checkedAt)}</dd></div></dl><div className="diff-summary-grid"><div><span>Changed</span><strong>{summary.changedFiles}</strong></div><div><span>Staged</span><strong>{summary.stagedFiles}</strong></div><div><span>Unstaged</span><strong>{summary.unstagedFiles}</strong></div><div><span>Untracked</span><strong>{summary.untrackedFiles}</strong></div><div><span>Insertions</span><strong>+{summary.insertions}</strong></div><div><span>Deletions</span><strong>-{summary.deletions}</strong></div></div></div>;
+  return <div className="working-copy-view"><dl><div><dt>分支</dt><dd>{workingCopy.branch}</dd></div><div><dt>HEAD</dt><dd>{workingCopy.headCommit}</dd></div><div><dt>工作区改动</dt><dd className={workingCopy.isDirty ? "git-dirty" : "git-clean"}>{workingCopy.isDirty ? "有" : "无"}</dd></div><div><dt>默认分支</dt><dd>{repository.defaultBranch}</dd></div><div><dt>远程地址</dt><dd>{repository.remoteUrl ?? "未配置"}</dd></div><div><dt>最后检查</dt><dd>{formatUpdatedAt(workingCopy.checkedAt)}</dd></div></dl><div className="diff-summary-grid"><div><span>已变更</span><strong>{summary.changedFiles}</strong></div><div><span>已暂存</span><strong>{summary.stagedFiles}</strong></div><div><span>未暂存</span><strong>{summary.unstagedFiles}</strong></div><div><span>未跟踪</span><strong>{summary.untrackedFiles}</strong></div><div><span>新增行</span><strong>+{summary.insertions}</strong></div><div><span>删除行</span><strong>-{summary.deletions}</strong></div></div></div>;
 }
 
 function tail(path: string): string {

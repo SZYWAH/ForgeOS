@@ -31,23 +31,23 @@ const EMPTY_EVIDENCE: EvidenceContentInput = {
 };
 
 const TYPE_LABELS: Record<EvidenceType, string> = {
-  document: "Document",
-  screenshot: "Screenshot",
-  link: "Link",
-  test_result: "Test result",
-  note: "Note",
-  artifact: "Artifact",
-  git_commit: "Git commit",
-  git_status: "Git status",
+  document: "文档",
+  screenshot: "截图",
+  link: "链接",
+  test_result: "测试结果",
+  note: "人工记录",
+  artifact: "构建产物",
+  git_commit: "Git 提交",
+  git_status: "Git 状态",
   github_repository: "GitHub 仓库",
   github_commit: "GitHub 提交",
   github_release: "GitHub 发布版本",
 };
 
 const SOURCE_LABELS: Record<EvidenceSourceType, string> = {
-  local_file: "Local file path",
-  external_url: "External URL",
-  manual_note: "Manual note",
+  local_file: "本地文件路径",
+  external_url: "外部 URL",
+  manual_note: "人工记录",
   github_api: "GitHub API",
 };
 
@@ -76,7 +76,7 @@ export function EvidencePage() {
 
   const loadIndex = useCallback(async () => {
     if (!projectId) {
-      setError("Project ID 缺失。");
+      setError("项目 ID 缺失。");
       setLoading(false);
       return;
     }
@@ -161,7 +161,7 @@ export function EvidencePage() {
     if (targetType === "snapshot") {
       return snapshots.map((snapshot) => ({
         id: snapshot.id,
-        label: `Snapshot v${snapshot.version} · ${snapshot.currentGoal}`,
+        label: `快照 v${snapshot.version} · ${snapshot.currentGoal}`,
       }));
     }
     return sessions.map((session) => ({
@@ -197,7 +197,7 @@ export function EvidencePage() {
       setCreateDraft(EMPTY_EVIDENCE);
       setShowCreate(false);
       await refreshAfterChange(created.id);
-      setNotice("Evidence 已创建，当前状态为 unverified。");
+      setNotice("证据已创建，当前状态为未验证。");
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -218,7 +218,7 @@ export function EvidencePage() {
         { ...normalized(draft), expectedVersion: record.evidence.version },
       );
       await refreshAfterChange(updated.id);
-      setNotice("Evidence 内容已更新；验证状态已重置为 unverified。");
+      setNotice("证据内容已更新；验证状态已重置为未验证。");
     } catch (saveError) {
       setError(getErrorMessage(saveError));
       if (getErrorCode(saveError) === "evidence_version_conflict") {
@@ -241,7 +241,7 @@ export function EvidencePage() {
           ? await evidenceKernelApi.verifyEvidence(projectId, record.evidence.id, input)
           : await evidenceKernelApi.invalidateEvidence(projectId, record.evidence.id, input);
       await refreshAfterChange(updated.id);
-      setNotice(action === "verify" ? "Evidence 已人工确认。" : "Evidence 已标记为无效。");
+      setNotice(action === "verify" ? "证据已人工确认。" : "证据已标记为无效。");
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -262,7 +262,7 @@ export function EvidencePage() {
         relationType,
       });
       await refreshAfterChange(record.evidence.id);
-      setNotice("Evidence 关联已保存。");
+      setNotice("证据关联已保存。");
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -271,15 +271,15 @@ export function EvidencePage() {
   }
 
   if (loading) {
-    return <p className="loading-copy">Loading evidence kernel…</p>;
+    return <p className="loading-copy">正在加载证据模块…</p>;
   }
 
   if (!project || !projectId) {
     return (
       <section className="panel not-found">
-        <h1>Project unavailable</h1>
+        <h1>项目不可用</h1>
         <p>{error ?? "找不到该项目。"}</p>
-        <Link to="/projects">返回 Projects</Link>
+        <Link to="/projects">返回项目列表</Link>
       </section>
     );
   }
@@ -292,15 +292,15 @@ export function EvidencePage() {
   return (
     <div className="page-stack evidence-page">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link><span>/</span>
+        <Link to="/projects">项目</Link><span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span>
-        <span>Evidence</span>
+        <span>研发证据</span>
       </div>
 
       <header className="page-header evidence-page-header">
         <div>
-          <p className="evidence-kicker">D1.4 Evidence Kernel</p>
-          <h1>Engineering Evidence</h1>
+          <p className="evidence-kicker">D1.4 证据核心</p>
+          <h1>研发证据</h1>
           <p>记录支持项目状态、研发过程与成果判断的人工证据。</p>
         </div>
         <button
@@ -309,23 +309,23 @@ export function EvidencePage() {
           onClick={() => setShowCreate((value) => !value)}
           type="button"
         >
-          {showCreate ? "Cancel" : "Add Evidence"}
+          {showCreate ? "取消" : "添加证据"}
         </button>
       </header>
 
-      {archived ? <div className="archive-banner">该项目已归档，Evidence 仅可查看。</div> : null}
+      {archived ? <div className="archive-banner">该项目已归档，研发证据仅可查看。</div> : null}
       {error ? <div className="error-banner evidence-message">{error}</div> : null}
       {notice ? <div className="success-banner evidence-message">{notice}</div> : null}
 
       {showCreate ? (
         <form className="panel evidence-create-form" onSubmit={handleCreate}>
           <div className="panel-header">
-            <div><h2>New Evidence</h2><p>来源由用户提供，ForgeOS 不自动采集或验证。</p></div>
+            <div><h2>新建证据</h2><p>来源由用户提供，ForgeOS 不自动采集或验证。</p></div>
           </div>
           <EvidenceFields value={createDraft} onChange={setCreateDraft} />
           <div className="form-actions evidence-form-actions">
             <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving…" : "Create Evidence"}
+              {saving ? "正在保存…" : "创建证据"}
             </button>
           </div>
         </form>
@@ -334,10 +334,10 @@ export function EvidencePage() {
       <div className="evidence-workbench">
         <section className="panel evidence-list-panel">
           <div className="panel-header">
-            <div><h2>Project Evidence</h2><p>{items.length} durable records</p></div>
+            <div><h2>项目证据</h2><p>{items.length} 条持久记录</p></div>
           </div>
           {items.length === 0 ? (
-            <p className="empty-state">当前项目还没有 Evidence。</p>
+            <p className="empty-state">当前项目还没有研发证据。</p>
           ) : (
             <div className="evidence-list">
               {items.map((item) => (
@@ -348,7 +348,7 @@ export function EvidencePage() {
                   type="button"
                 >
                   <span className={`verification verification--${item.verificationStatus}`}>
-                    {item.verificationStatus}
+                    {item.verificationStatus === "verified" ? "已验证" : item.verificationStatus === "invalid" ? "已失效" : "未验证"}
                   </span>
                   <strong>{item.title}</strong>
                   <small>{TYPE_LABELS[item.evidenceType]} · v{item.version}</small>
@@ -361,17 +361,17 @@ export function EvidencePage() {
 
         <div className="evidence-detail-stack">
           {detailLoading ? (
-            <section className="panel"><p className="loading-copy">Loading evidence…</p></section>
+            <section className="panel"><p className="loading-copy">正在加载证据…</p></section>
           ) : record ? (
             <>
               <form className="panel evidence-editor" onSubmit={handleUpdate}>
                 <div className="panel-header evidence-editor-header">
                   <div>
                     <span className={`verification verification--${record.evidence.verificationStatus}`}>
-                      {record.evidence.verificationStatus}
+                      {record.evidence.verificationStatus === "verified" ? "已验证" : record.evidence.verificationStatus === "invalid" ? "已失效" : "未验证"}
                     </span>
                     <h2>{record.evidence.title}</h2>
-                    <p>v{record.evidence.version} · Updated {formatUpdatedAt(record.evidence.updatedAt)}</p>
+                    <p>v{record.evidence.version} · 更新于 {formatUpdatedAt(record.evidence.updatedAt)}</p>
                   </div>
                   <div className="evidence-status-actions">
                     <button
@@ -379,13 +379,13 @@ export function EvidencePage() {
                       disabled={saving || archived}
                       onClick={() => void handleStatus("verify")}
                       type="button"
-                    >Verify</button>
+                    >验证</button>
                     <button
                       className="danger-button"
                       disabled={saving || archived}
                       onClick={() => void handleStatus("invalidate")}
                       type="button"
-                    >Invalidate</button>
+                    >标记失效</button>
                   </div>
                 </div>
                 <fieldset className="editor-fields" disabled={archived || gitEvidence}>
@@ -394,18 +394,18 @@ export function EvidencePage() {
                 <div className="form-actions evidence-form-actions">
                   <span>{gitEvidence ? "Git/GitHub 证据内容来自只读采集，不能手动改写。" : "保存内容后必须重新人工验证。"}</span>
                   <button className="primary-button" disabled={saving || archived || gitEvidence} type="submit">
-                    {saving ? "Saving…" : "Save Changes"}
+                    {saving ? "正在保存…" : "保存修改"}
                   </button>
                 </div>
               </form>
 
               <section className="panel evidence-links-panel">
                 <div className="panel-header">
-                  <div><h2>Evidence Links</h2><p>统一关联 Project、Snapshot 或 Development Session。</p></div>
-                  <span className="history-count">{record.links.length} links</span>
+                  <div><h2>证据关联</h2><p>统一关联项目、快照或开发会话。</p></div>
+                  <span className="history-count">{record.links.length} 条关联</span>
                 </div>
                 {record.links.length === 0 ? (
-                  <p className="empty-state">尚未建立显式关联；Evidence 仍归属于当前 Project。</p>
+                  <p className="empty-state">尚未建立显式关联；证据仍归属于当前项目。</p>
                 ) : (
                   <div className="evidence-links-list">
                     {record.links.map((link) => (
@@ -419,30 +419,30 @@ export function EvidencePage() {
                 )}
                 {!archived ? (
                   <form className="evidence-link-form" onSubmit={handleLink}>
-                    <label>Target type
+                    <label>目标类型
                       <select value={targetType} onChange={(event) => setTargetType(event.target.value as EvidenceTargetType)}>
-                        {EVIDENCE_TARGET_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
+                        {EVIDENCE_TARGET_TYPES.map((value) => <option key={value} value={value}>{value === "project" ? "项目" : value === "snapshot" ? "快照" : "开发会话"}</option>)}
                       </select>
                     </label>
-                    <label>Target
+                    <label>目标
                       <select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-                        {targetOptions.length === 0 ? <option value="">No available targets</option> : null}
+                        {targetOptions.length === 0 ? <option value="">没有可用目标</option> : null}
                         {targetOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                       </select>
                     </label>
-                    <label>Relation
+                    <label>关系
                       <select value={relationType} onChange={(event) => setRelationType(event.target.value as EvidenceRelationType)}>
-                        {EVIDENCE_RELATION_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
+                        {EVIDENCE_RELATION_TYPES.map((value) => <option key={value} value={value}>{value === "supports" ? "支持" : "相关"}</option>)}
                       </select>
                     </label>
-                    <button className="secondary-button" disabled={saving || !targetId} type="submit">Add Link</button>
+                    <button className="secondary-button" disabled={saving || !targetId} type="submit">添加关联</button>
                   </form>
                 ) : null}
               </section>
             </>
           ) : (
             <section className="panel evidence-detail-empty">
-              <strong>选择一条 Evidence</strong>
+              <strong>选择一条证据</strong>
               <p>查看来源、验证状态和与研发事实的关联。</p>
             </section>
           )}
@@ -461,29 +461,29 @@ function EvidenceFields({ value, onChange }: EvidenceFieldsProps) {
   const sourceRequired = value.sourceType !== "manual_note";
   return (
     <div className="form-grid evidence-fields">
-      <label className="span-2">Title <span className="required">*</span>
+      <label className="span-2">标题 <span className="required">*</span>
         <input required maxLength={200} value={value.title} onChange={(event) => onChange({ ...value, title: event.target.value })} />
       </label>
-      <label>Type
+      <label>类型
         <select value={value.evidenceType} onChange={(event) => onChange({ ...value, evidenceType: event.target.value as EvidenceType })}>
           {MANUAL_EVIDENCE_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
         </select>
       </label>
-      <label>Source type
+      <label>来源类型
         <select value={value.sourceType} onChange={(event) => onChange({ ...value, sourceType: event.target.value as EvidenceSourceType, sourceUri: event.target.value === "manual_note" ? "" : value.sourceUri })}>
           {EVIDENCE_SOURCE_TYPES.filter((type) => type !== "github_api").map((type) => <option key={type} value={type}>{SOURCE_LABELS[type]}</option>)}
         </select>
       </label>
-      <label className="span-2">Description
+      <label className="span-2">描述
         <textarea rows={5} value={value.description} onChange={(event) => onChange({ ...value, description: event.target.value })} />
       </label>
-      <label className="span-2">Source {sourceRequired ? <span className="required">*</span> : null}
+      <label className="span-2">来源 {sourceRequired ? <span className="required">*</span> : null}
         <input
           disabled={!sourceRequired}
           required={sourceRequired}
           value={value.sourceUri}
           onChange={(event) => onChange({ ...value, sourceUri: event.target.value })}
-          placeholder={value.sourceType === "external_url" ? "https://…" : value.sourceType === "local_file" ? "D:\\project\\artifact.png" : "Manual note has no external location"}
+          placeholder={value.sourceType === "external_url" ? "https://…" : value.sourceType === "local_file" ? "D:\\project\\artifact.png" : "人工记录没有外部位置"}
         />
         <small>ForgeOS 仅保存路径或 URL，不复制文件，也不自动验证内容。</small>
       </label>

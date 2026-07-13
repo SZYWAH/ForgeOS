@@ -21,11 +21,11 @@ export function ProjectTable({ projects, emptyMessage }: ProjectTableProps) {
       <table className="project-table">
         <thead>
           <tr>
-            <th>Project</th>
-            <th>Status</th>
-            <th>Lifecycle</th>
-            <th>Priority</th>
-            <th>Updated</th>
+            <th>项目</th>
+            <th>状态</th>
+            <th>生命周期</th>
+            <th>优先级</th>
+            <th>更新时间</th>
           </tr>
         </thead>
         <tbody>

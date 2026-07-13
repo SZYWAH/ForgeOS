@@ -27,7 +27,7 @@ export function WorkspaceGate({ children }: WorkspaceGateProps) {
   }, []);
 
   if (state.kind === "loading") {
-    return <FullPageMessage title="正在打开 ForgeOS" detail="正在读取本地 Workspace…" />;
+    return <FullPageMessage title="正在打开 ForgeOS" detail="正在读取本地工作空间…" />;
   }
 
   if (state.kind === "error") {
@@ -52,7 +52,7 @@ export function WorkspaceGate({ children }: WorkspaceGateProps) {
 }
 
 function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => void }) {
-  const [name, setName] = useState("My Engineering Workspace");
+  const [name, setName] = useState("我的工程工作空间");
   const [timezone, setTimezone] = useState(
     Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
   );
@@ -80,14 +80,14 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
   return (
     <div className="setup-shell">
       <form className="setup-card" onSubmit={handleSubmit}>
-        <p className="eyebrow">First Run</p>
-        <h1>创建你的工程 Workspace</h1>
+        <p className="eyebrow">首次运行</p>
+        <h1>创建你的工程工作空间</h1>
         <p className="setup-copy">
-          ForgeOS 当前只维护一个本地 Workspace，用于隔离并组织你的软件项目身份。
+          ForgeOS 当前只维护一个本地工作空间，用于隔离并组织你的软件项目身份。
         </p>
 
         <label>
-          Workspace Name
+          工作空间名称
           <input
             autoFocus
             required
@@ -96,7 +96,7 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
           />
         </label>
         <label>
-          Timezone
+          时区
           <input
             required
             value={timezone}
@@ -106,7 +106,7 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
 
         {error ? <p className="form-error">{error}</p> : null}
         <button className="primary-button" disabled={submitting} type="submit">
-          {submitting ? "Creating…" : "Create Workspace"}
+          {submitting ? "正在创建…" : "创建工作空间"}
         </button>
       </form>
     </div>

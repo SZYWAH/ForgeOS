@@ -1,21 +1,21 @@
 const STATUS_LABELS: Record<string, string> = {
-  idea: "Idea",
-  planned: "Planned",
-  active: "Active",
-  paused: "Paused",
-  maintenance: "Maintenance",
-  archived: "Archived",
+  idea: "构想中",
+  planned: "已规划",
+  active: "进行中",
+  paused: "已暂停",
+  maintenance: "维护中",
+  archived: "已归档",
 };
 
 const LIFECYCLE_LABELS: Record<string, string> = {
-  discovery: "Discovery",
-  definition: "Definition",
-  design: "Design",
-  implementation: "Implementation",
-  validation: "Validation",
-  release: "Release",
-  operation: "Operation",
-  retrospective: "Retrospective",
+  discovery: "探索",
+  definition: "定义",
+  design: "设计",
+  implementation: "实现",
+  validation: "验证",
+  release: "发布",
+  operation: "运行",
+  retrospective: "复盘",
 };
 
 export function statusLabel(value: string): string {

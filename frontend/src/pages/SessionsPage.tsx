@@ -74,11 +74,11 @@ function resolveSessionState(
 function statusLabel(status: DevelopmentSession["status"]): string {
   switch (status) {
     case "open":
-      return "Open";
+      return "进行中";
     case "completed":
-      return "Completed";
+      return "已完成";
     case "abandoned":
-      return "Abandoned";
+      return "已放弃";
   }
 }
 
@@ -119,7 +119,7 @@ export function SessionsPage() {
       setOpenDraft(EMPTY_OPEN_DRAFT);
       setFinishDraft(EMPTY_FINISH_DRAFT);
       setSaving(false);
-      setError("Project ID 缺失。");
+      setError("项目 ID 缺失。");
       setLoading(false);
       return;
     }
@@ -249,7 +249,7 @@ export function SessionsPage() {
       applySavedSession(started);
       setStartGoal("");
       setFinishDraft(EMPTY_FINISH_DRAFT);
-      setNotice(`Development Session 已开始，当前版本 v${started.version}。`);
+      setNotice(`开发会话已开始，当前版本 v${started.version}。`);
       await refreshAfterMutation(generation, started);
     } catch (startError) {
       if (generation === loadGeneration.current) {
@@ -329,7 +329,7 @@ export function SessionsPage() {
     const validation = finishDraft.validation.trim();
     const handoff = finishDraft.handoff.trim();
     if (!outcome || !validation || !handoff) {
-      setError("完成会话前，请填写 Outcome、Validation 和 Handoff。");
+      setError("完成会话前，请填写结果、验证方式和接手信息。");
       return;
     }
 
@@ -354,7 +354,7 @@ export function SessionsPage() {
       }
       applySavedSession(completed);
       setFinishDraft(EMPTY_FINISH_DRAFT);
-      setNotice("Development Session 已完成并保留为只读历史。");
+      setNotice("开发会话已完成并保留为只读历史。");
       await refreshAfterMutation(generation, completed);
     } catch (completeError) {
       if (generation === loadGeneration.current) {
@@ -380,7 +380,7 @@ export function SessionsPage() {
 
     const handoff = finishDraft.handoff.trim();
     if (!handoff) {
-      setError("放弃会话前，请填写 Handoff，说明下次需要知道的信息。");
+      setError("放弃会话前，请填写接手信息，说明下次需要知道的内容。");
       return;
     }
     if (!window.confirm("确认放弃当前开发会话？记录会保留为只读历史。")) {
@@ -403,7 +403,7 @@ export function SessionsPage() {
       }
       applySavedSession(abandoned);
       setFinishDraft(EMPTY_FINISH_DRAFT);
-      setNotice("Development Session 已放弃并保留为只读历史。");
+      setNotice("开发会话已放弃并保留为只读历史。");
       await refreshAfterMutation(generation, abandoned);
     } catch (abandonError) {
       if (generation === loadGeneration.current) {
@@ -418,15 +418,15 @@ export function SessionsPage() {
   }
 
   if (loading) {
-    return <p className="loading-copy">Loading development sessions…</p>;
+    return <p className="loading-copy">正在加载开发会话…</p>;
   }
 
   if (!project) {
     return (
       <section className="panel not-found">
-        <h1>Sessions unavailable</h1>
+        <h1>开发会话不可用</h1>
         <p>{error ?? "找不到该项目。"}</p>
-        <Link to="/projects">返回 Projects</Link>
+        <Link to="/projects">返回项目列表</Link>
       </section>
     );
   }
@@ -436,16 +436,16 @@ export function SessionsPage() {
   return (
     <div className="page-stack sessions-page">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link>
+        <Link to="/projects">项目</Link>
         <span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link>
         <span>/</span>
-        <span>Development Sessions</span>
+        <span>开发会话</span>
       </div>
 
       <header className="page-header">
         <div>
-          <p className="eyebrow">Development Session</p>
+          <p className="eyebrow">开发会话 · Development Session</p>
           <h1>{project.name}</h1>
           <p>记录一次研发活动为何开始、做了什么、如何验证，以及下次如何继续。</p>
         </div>
@@ -453,15 +453,15 @@ export function SessionsPage() {
           className="secondary-button button-link"
           to={`/projects/${project.id}`}
         >
-          Back to Overview
+          返回项目概览
         </Link>
       </header>
 
       {isArchived ? (
         <div className="archive-banner">
           {current
-            ? "该项目已经归档。当前 Open Session 的目标和过程记录只读，但仍可填写收尾信息并完成或放弃会话。"
-            : "该项目已经归档。Development Session 保留为只读研发记录。"}
+            ? "该项目已经归档。当前进行中会话的目标和过程记录只读，但仍可填写收尾信息并完成或放弃会话。"
+            : "该项目已经归档。开发会话保留为只读研发记录。"}
         </div>
       ) : null}
 
@@ -482,7 +482,7 @@ export function SessionsPage() {
               }}
               type="button"
             >
-              Reload Latest
+              重新加载最新版本
             </button>
           ) : null}
         </div>
@@ -497,18 +497,18 @@ export function SessionsPage() {
             <section className="panel">
               <div className="panel-header session-editor-header">
                 <div>
-                  <p className="session-kicker">Current Session</p>
+                  <p className="session-kicker">当前会话</p>
                   <h2>{current.goal}</h2>
                   <p>
-                    Started {formatUpdatedAt(current.startedAt)} · version {current.version}
+                    开始于 {formatUpdatedAt(current.startedAt)} · 版本 {current.version}
                   </p>
                 </div>
-                <span className="session-status session-status--open">Open</span>
+                <span className="session-status session-status--open">进行中</span>
               </div>
               <fieldset className="editor-fields" disabled={saving || isArchived}>
                 <div className="form-grid session-form-grid">
                   <label className="span-2">
-                    Goal <span className="required">*</span>
+                    目标 <span className="required">*</span>
                     <textarea
                       required
                       rows={3}
@@ -520,7 +520,7 @@ export function SessionsPage() {
                     />
                   </label>
                   <label className="span-2">
-                    Notes <span className="markdown-hint">Markdown</span>
+                    过程记录 <span className="markdown-hint">Markdown</span>
                     <textarea
                       className="session-notes-input"
                       rows={10}
@@ -547,10 +547,10 @@ export function SessionsPage() {
                   }}
                   type="button"
                 >
-                  Reset
+                  重置
                 </button>
                 <button className="primary-button" disabled={saving} type="submit">
-                  {saving ? "Saving…" : "Save Session"}
+                  {saving ? "正在保存…" : "保存会话"}
                 </button>
               </div>
             ) : null}
@@ -558,7 +558,7 @@ export function SessionsPage() {
 
           {isArchived ? (
             <div className="archive-banner session-close-banner">
-              归档项目仅允许收尾：不能修改 Goal 或 Notes，也不能开始新会话。
+              归档项目仅允许收尾：不能修改目标或过程记录，也不能开始新会话。
             </div>
           ) : null}
 
@@ -567,14 +567,14 @@ export function SessionsPage() {
               <section className="panel">
                 <div className="panel-header session-editor-header">
                   <div>
-                    <h2>Close Development Session</h2>
+                    <h2>结束开发会话</h2>
                     <p>确认结果、验证方式和下次接手信息后，结束这次研发活动。</p>
                   </div>
                 </div>
                 <fieldset className="editor-fields" disabled={saving}>
                   <div className="form-grid session-form-grid">
                     <label>
-                      Outcome <span className="required">*</span>
+                      结果 <span className="required">*</span>
                       <textarea
                         required
                         rows={6}
@@ -589,7 +589,7 @@ export function SessionsPage() {
                       />
                     </label>
                     <label>
-                      Validation <span className="required">*</span>
+                      验证方式 <span className="required">*</span>
                       <textarea
                         required
                         rows={6}
@@ -604,7 +604,7 @@ export function SessionsPage() {
                       />
                     </label>
                     <label className="span-2">
-                      Handoff <span className="required">*</span>
+                      接手信息 <span className="required">*</span>
                       <textarea
                         required
                         rows={5}
@@ -623,7 +623,7 @@ export function SessionsPage() {
               </section>
 
               <div className="sticky-actions session-close-actions">
-                <span>Completed 或 Abandoned 后，核心结果将成为只读历史。</span>
+                <span>完成或放弃后，核心结果将成为只读历史。</span>
                 <div>
                   <button
                     className="danger-button"
@@ -631,14 +631,14 @@ export function SessionsPage() {
                     onClick={() => void handleAbandon()}
                     type="button"
                   >
-                    Abandon Session
+                    放弃会话
                   </button>
                   <button
                     className="primary-button"
                     disabled={saving}
                     type="submit"
                   >
-                    {saving ? "Closing…" : "Complete Session"}
+                    {saving ? "正在结束…" : "完成会话"}
                   </button>
                 </div>
               </div>
@@ -648,7 +648,7 @@ export function SessionsPage() {
       ) : isArchived ? (
         <section className="panel session-empty-state">
           <div>
-            <strong>没有进行中的 Development Session</strong>
+          <strong>没有进行中的开发会话</strong>
             <p>该项目已经归档，只能查看下方会话历史。</p>
           </div>
         </section>
@@ -657,14 +657,14 @@ export function SessionsPage() {
           <section className="panel session-start-panel">
             <div className="panel-header">
               <div>
-                <p className="session-kicker">New Session</p>
+                <p className="session-kicker">新会话</p>
                 <h2>开始新的开发会话</h2>
-                <p>一个项目同一时间只能有一个 Open Session。</p>
+                <p>一个项目同一时间只能有一个进行中的会话。</p>
               </div>
             </div>
             <div className="form-grid">
               <label className="span-2">
-                Goal <span className="required">*</span>
+                目标 <span className="required">*</span>
                 <textarea
                   autoFocus
                   required
@@ -678,7 +678,7 @@ export function SessionsPage() {
             </div>
             <div className="form-actions session-start-actions">
               <button className="primary-button" disabled={saving} type="submit">
-                {saving ? "Starting…" : "Start Development Session"}
+                {saving ? "正在开始…" : "开始开发会话"}
               </button>
             </div>
           </section>
@@ -688,14 +688,14 @@ export function SessionsPage() {
       <section className="panel session-history-panel">
         <div className="panel-header">
           <div>
-            <h2>Session History</h2>
+            <h2>会话历史</h2>
             <p>已完成和已放弃的研发活动，按开始时间倒序保留。</p>
           </div>
-          <span className="history-count">{history.length} sessions</span>
+          <span className="history-count">{history.length} 条会话</span>
         </div>
 
         {history.length === 0 ? (
-          <p className="empty-state">结束第一个 Session 后，历史记录会显示在这里。</p>
+          <p className="empty-state">结束第一个会话后，历史记录会显示在这里。</p>
         ) : (
           <div className="session-history">
             {history.map((session) => (
@@ -710,34 +710,34 @@ export function SessionsPage() {
                     <span className="session-version">v{session.version}</span>
                   </div>
                   <div className="session-history-times">
-                    <span>Started {formatUpdatedAt(session.startedAt)}</span>
+                    <span>开始于 {formatUpdatedAt(session.startedAt)}</span>
                     {session.completedAt ? (
-                      <span>Closed {formatUpdatedAt(session.completedAt)}</span>
+                      <span>结束于 {formatUpdatedAt(session.completedAt)}</span>
                     ) : null}
                   </div>
                 </header>
                 <div className="session-history-goal">
-                  <h3>Goal</h3>
+                  <h3>目标</h3>
                   <p>{session.goal}</p>
                 </div>
                 {session.notes ? (
                   <div className="session-history-field">
-                    <h3>Notes</h3>
+                    <h3>过程记录</h3>
                     <p>{session.notes}</p>
                   </div>
                 ) : null}
                 <div className="session-result-grid">
                   <div>
-                    <h3>Outcome</h3>
+                    <h3>结果</h3>
                     <p>{session.outcome || "未记录结果。"}</p>
                   </div>
                   <div>
-                    <h3>Validation</h3>
+                    <h3>验证方式</h3>
                     <p>{session.validation || "未记录验证。"}</p>
                   </div>
                 </div>
                 <div className="session-history-field session-handoff-field">
-                  <h3>Handoff</h3>
+                  <h3>接手信息</h3>
                   <p>{session.handoff || "未记录接手信息。"}</p>
                 </div>
               </article>

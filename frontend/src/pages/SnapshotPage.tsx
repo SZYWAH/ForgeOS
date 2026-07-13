@@ -103,7 +103,7 @@ export function SnapshotPage() {
       setCurrent(undefined);
       setHistory([]);
       setDraft(EMPTY_DRAFT);
-      setError("Project ID 缺失。");
+      setError("项目 ID 缺失。");
       setLoading(false);
       return;
     }
@@ -212,7 +212,7 @@ export function SnapshotPage() {
         setHistory(resolved.history);
         if (resolved.current && resolved.current.version > saved.version) {
           setNotice(
-            `已保存 Snapshot v${saved.version}；同时检测到更新的 Current v${resolved.current.version}，已载入最新版本。`,
+            `已保存快照 v${saved.version}；同时检测到更新的当前版本 v${resolved.current.version}，已载入最新版本。`,
           );
         }
       } catch (historyError) {
@@ -239,15 +239,15 @@ export function SnapshotPage() {
   }
 
   if (loading) {
-    return <p className="loading-copy">Loading snapshot context…</p>;
+    return <p className="loading-copy">正在加载快照上下文…</p>;
   }
 
   if (!project) {
     return (
       <section className="panel not-found">
-        <h1>Snapshot unavailable</h1>
+        <h1>快照不可用</h1>
         <p>{error ?? "找不到该项目。"}</p>
-        <Link to="/projects">返回 Projects</Link>
+        <Link to="/projects">返回项目列表</Link>
       </section>
     );
   }
@@ -257,23 +257,23 @@ export function SnapshotPage() {
   return (
     <div className="page-stack snapshot-page">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link>
+        <Link to="/projects">项目</Link>
         <span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link>
         <span>/</span>
-        <span>Current Snapshot</span>
+        <span>当前快照</span>
       </div>
 
       <header className="page-header">
         <div>
-          <p className="eyebrow">Current Snapshot</p>
+          <p className="eyebrow">当前快照 · Current Snapshot</p>
           <h1>{project.name}</h1>
           <p>
             人工确认项目当前真实状态。每次保存都会创建一个不可变的历史版本。
           </p>
         </div>
         <Link className="secondary-button button-link" to={`/projects/${project.id}`}>
-          Back to Overview
+          返回项目概览
         </Link>
       </header>
 
@@ -288,7 +288,7 @@ export function SnapshotPage() {
           <section className="panel">
             <div className="panel-header snapshot-editor-header">
               <div>
-                <h2>{current ? `Confirm Snapshot v${current.version + 1}` : "Create Snapshot v1"}</h2>
+                <h2>{current ? `确认快照 v${current.version + 1}` : "创建快照 v1"}</h2>
                 <p>
                   {current
                     ? `基于当前 v${current.version} 确认新状态；保存不会覆盖已有版本。`
@@ -296,7 +296,7 @@ export function SnapshotPage() {
                 </p>
               </div>
               {current ? (
-                <span className="version-badge">Current v{current.version}</span>
+                <span className="version-badge">当前 v{current.version}</span>
               ) : null}
             </div>
 
@@ -385,7 +385,7 @@ export function SnapshotPage() {
                   }}
                   type="button"
                 >
-                  Reload Latest
+                  重新加载最新版本
                 </button>
               ) : null}
             </div>
@@ -396,8 +396,8 @@ export function SnapshotPage() {
             <div className="sticky-actions snapshot-actions">
               <span>
                 {current
-                  ? `Saving confirms v${current.version + 1}; v${current.version} remains in history.`
-                  : "Saving creates the first confirmed snapshot."}
+                  ? `保存后将确认 v${current.version + 1}；v${current.version} 会保留在历史中。`
+                  : "保存后将创建第一份已确认快照。"}
               </span>
               <div>
                 <button
@@ -410,7 +410,7 @@ export function SnapshotPage() {
                   }}
                   type="button"
                 >
-                  Reset
+                  重置
                 </button>
                 <button
                   className="primary-button"
@@ -418,10 +418,10 @@ export function SnapshotPage() {
                   type="submit"
                 >
                   {saving
-                    ? "Confirming…"
+                    ? "正在确认…"
                     : current
-                      ? "Confirm New Version"
-                      : "Create Snapshot"}
+                      ? "确认新版本"
+                      : "创建快照"}
                 </button>
               </div>
             </div>
@@ -437,14 +437,14 @@ export function SnapshotPage() {
       <section className="panel snapshot-history-panel">
         <div className="panel-header">
           <div>
-            <h2>Snapshot History</h2>
+            <h2>快照历史</h2>
             <p>所有已确认版本，按最新版本优先展示。</p>
           </div>
-          <span className="history-count">{history.length} versions</span>
+          <span className="history-count">{history.length} 个版本</span>
         </div>
 
         {history.length === 0 ? (
-          <p className="empty-state">创建首个 Snapshot 后，版本历史会显示在这里。</p>
+          <p className="empty-state">创建首个快照后，版本历史会显示在这里。</p>
         ) : (
           <div className="snapshot-history">
             {history.map((snapshot) => (
@@ -453,11 +453,11 @@ export function SnapshotPage() {
                   <div>
                     <span className="version-badge">v{snapshot.version}</span>
                     {snapshot.id === current?.id ? (
-                      <span className="current-badge">Current</span>
+                      <span className="current-badge">当前</span>
                     ) : null}
                   </div>
                   <time dateTime={snapshot.confirmedAt}>
-                    Confirmed {formatUpdatedAt(snapshot.confirmedAt)}
+                    确认于 {formatUpdatedAt(snapshot.confirmedAt)}
                   </time>
                 </header>
                 <div className="history-summary-grid">

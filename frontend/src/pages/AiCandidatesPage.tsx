@@ -7,18 +7,18 @@ import type { Project } from "../types/project";
 import { formatUpdatedAt } from "../utils/format";
 
 const TYPE_LABELS: Record<AiCandidateType, string> = {
-  snapshot_update: "Snapshot Update",
-  session_summary: "Session Summary",
-  evidence_suggestion: "Evidence Suggestion",
-  risk_finding: "Risk Finding",
-  general_note: "General Note",
+  snapshot_update: "快照更新建议",
+  session_summary: "会话总结",
+  evidence_suggestion: "证据建议",
+  risk_finding: "风险发现",
+  general_note: "一般记录",
 };
 
 const STATUS_LABELS: Record<AiCandidateStatus, string> = {
-  pending: "Pending",
-  accepted: "Accepted",
-  rejected: "Rejected",
-  archived: "Archived",
+  pending: "待审核",
+  accepted: "已接受",
+  rejected: "已拒绝",
+  archived: "已归档",
 };
 
 type Filter = "all" | AiCandidateStatus;
@@ -54,7 +54,7 @@ export function AiCandidatesPage() {
   const load = useCallback(async (preferId?: string) => {
     const requestGeneration = ++generation.current;
     if (!projectId) {
-      setError("Project ID 缺失。");
+      setError("项目 ID 缺失。");
       setLoading(false);
       return;
     }
@@ -91,10 +91,10 @@ export function AiCandidatesPage() {
   async function review(action: ReviewAction) {
     if (!projectId || !selected || selected.status !== "pending") return;
     const explanation = action === "accept"
-      ? "Accept 只记录你认可这条建议，不会修改 Snapshot、Session 或 Evidence。确认继续？"
+      ? "接受操作只记录你认可这条建议，不会修改快照、会话或证据。确认继续？"
       : action === "reject"
-        ? "Reject 会保留完整历史，不会删除 Candidate。确认继续？"
-        : "Archive 会保留 Candidate，但从默认 Pending 审核流移出。确认继续？";
+        ? "拒绝操作会保留完整历史，不会删除候选建议。确认继续？"
+        : "归档操作会保留候选建议，但将其移出默认待审核流程。确认继续？";
     if (!window.confirm(explanation)) return;
     setReviewing(true);
     setError(undefined);
@@ -114,39 +114,39 @@ export function AiCandidatesPage() {
     }
   }
 
-  if (loading) return <p className="loading-copy">Loading AI Candidates…</p>;
+  if (loading) return <p className="loading-copy">正在加载 AI 候选建议…</p>;
   if (!project || !projectId) {
-    return <section className="panel not-found"><h1>Project unavailable</h1><p>{error}</p></section>;
+    return <section className="panel not-found"><h1>项目不可用</h1><p>{error}</p></section>;
   }
 
   return (
     <div className="page-stack candidate-page">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link><span>/</span>
+        <Link to="/projects">项目</Link><span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span>
-        <span>AI Candidates</span>
+        <span>AI 候选建议</span>
       </div>
 
       <header className="page-header">
         <div>
-          <p className="eyebrow">D1.6 · AI Governance</p>
-          <h1>AI Candidates</h1>
-          <p>审核 AI 建议。Candidate 不是事实，Accept 也不会自动修改正式领域。</p>
+          <p className="eyebrow">D1.6 · AI 治理</p>
+          <h1>AI 候选建议</h1>
+          <p>审核 AI 建议。候选建议不是事实，接受后也不会自动修改正式领域。</p>
         </div>
-        <Link className="secondary-button button-link" to={`/projects/${project.id}/context`}>Generate from AI Response</Link>
+        <Link className="secondary-button button-link" to={`/projects/${project.id}/context`}>从 AI 响应生成</Link>
       </header>
 
       <div className="ai-boundary-banner">
         <strong>候选层边界</strong>
-        <span>所有状态操作只写 ai_candidates；Project、Snapshot、Session、Evidence 保持不变。</span>
+        <span>所有状态操作只写候选建议记录；项目、快照、会话和证据保持不变。</span>
       </div>
       {error ? <div className="error-banner candidate-message">{error}</div> : null}
       {notice ? <div className="success-banner candidate-message">{notice}</div> : null}
 
-      <div className="candidate-filters" role="group" aria-label="Candidate status filter">
+      <div className="candidate-filters" role="group" aria-label="候选建议状态筛选">
         {(["all", "pending", "accepted", "rejected", "archived"] as const).map((value) => (
           <button className={filter === value ? "selected" : ""} key={value} onClick={() => setFilter(value)} type="button">
-            {value === "all" ? "All" : STATUS_LABELS[value]}
+            {value === "all" ? "全部" : STATUS_LABELS[value]}
             <span>{value === "all" ? candidates.length : counts[value]}</span>
           </button>
         ))}
@@ -154,8 +154,8 @@ export function AiCandidatesPage() {
 
       <div className="candidate-workbench">
         <section className="panel candidate-list-panel">
-          <div className="panel-header"><div><h2>{filter === "all" ? "All Candidates" : STATUS_LABELS[filter]}</h2><p>{visible.length} records</p></div></div>
-          {visible.length === 0 ? <p className="empty-state">该状态下没有 Candidate。</p> : (
+          <div className="panel-header"><div><h2>{filter === "all" ? "全部候选建议" : STATUS_LABELS[filter]}</h2><p>{visible.length} 条记录</p></div></div>
+          {visible.length === 0 ? <p className="empty-state">该状态下没有候选建议。</p> : (
             <div className="candidate-list">
               {visible.map((candidate) => (
                 <button className={candidate.id === selectedId ? "selected" : ""} key={candidate.id} onClick={() => { setSelectedId(candidate.id); setError(undefined); setNotice(undefined); }} type="button">
@@ -174,26 +174,26 @@ export function AiCandidatesPage() {
               <div>
                 <span className={`candidate-status candidate-status--${selected.status}`}>{STATUS_LABELS[selected.status]}</span>
                 <h2>{selected.title}</h2>
-                <p>{TYPE_LABELS[selected.candidateType]} · Created {formatUpdatedAt(selected.createdAt)}</p>
+                <p>{TYPE_LABELS[selected.candidateType]} · 创建于 {formatUpdatedAt(selected.createdAt)}</p>
               </div>
-              <Link to={`/projects/${project.id}/context`}>Source Context Pack</Link>
+              <Link to={`/projects/${project.id}/context`}>来源上下文包</Link>
             </div>
-            <div className="candidate-source-id">Source · {selected.sourceContextExportId}</div>
+            <div className="candidate-source-id">来源 · {selected.sourceContextExportId}</div>
             <pre className="candidate-content">{selected.contentMarkdown}</pre>
             <div className="candidate-review-actions">
               {selected.status === "pending" ? (
                 <>
                   <span>人工审核只改变 Candidate 状态。</span>
                   <div>
-                    <button className="primary-button" disabled={reviewing} onClick={() => void review("accept")} type="button">Accept</button>
-                    <button className="danger-button" disabled={reviewing} onClick={() => void review("reject")} type="button">Reject</button>
-                    <button className="secondary-button" disabled={reviewing} onClick={() => void review("archive")} type="button">Archive</button>
+                    <button className="primary-button" disabled={reviewing} onClick={() => void review("accept")} type="button">接受</button>
+                    <button className="danger-button" disabled={reviewing} onClick={() => void review("reject")} type="button">拒绝</button>
+                    <button className="secondary-button" disabled={reviewing} onClick={() => void review("archive")} type="button">归档</button>
                   </div>
                 </>
-              ) : <span>该 Candidate 已进入终态，内容与审核结果保持只读。</span>}
+              ) : <span>该候选建议已进入终态，内容与审核结果保持只读。</span>}
             </div>
           </section>
-        ) : <section className="panel provider-detail-empty"><strong>Select a Candidate</strong><p>从左侧选择候选建议进行审核。</p></section>}
+        ) : <section className="panel provider-detail-empty"><strong>选择一条候选建议</strong><p>从左侧选择候选建议进行审核。</p></section>}
       </div>
     </div>
   );

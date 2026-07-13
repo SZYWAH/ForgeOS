@@ -50,8 +50,8 @@ export function CurrentSessionCard({
     >
       <div className="panel-header session-card-header">
         <div>
-          <p className="session-kicker">Development Session</p>
-          <h2 id="current-session-title">Current Development Session</h2>
+          <p className="session-kicker">开发会话 · Development Session</p>
+          <h2 id="current-session-title">当前开发会话</h2>
           <p>记录 {projectName} 当前这次研发活动为什么开始，以及如何继续。</p>
         </div>
         {session !== undefined ? (
@@ -71,9 +71,9 @@ export function CurrentSessionCard({
           >
             {session
               ? archived
-                ? "Close Session"
-                : "Continue Session"
-              : "Start Session"}
+                ? "关闭会话"
+                : "继续会话"
+              : "开始会话"}
           </Link>
         ) : null}
       </div>
@@ -86,11 +86,11 @@ export function CurrentSessionCard({
             onClick={() => void loadSession()}
             type="button"
           >
-            Retry
+            重试
           </button>
         </div>
       ) : session === undefined ? (
-        <p className="loading-copy">Loading current session…</p>
+        <p className="loading-copy">正在加载当前会话…</p>
       ) : session === null ? (
         <div className="session-empty-state">
           <div>
@@ -113,7 +113,7 @@ export function CurrentSessionCard({
               className="secondary-button button-link"
               to={`/projects/${projectId}/sessions`}
             >
-              View History
+              查看历史
             </Link>
           )}
         </div>
@@ -131,7 +131,7 @@ export function CurrentSessionCard({
             <div>
               <dt>状态</dt>
               <dd>
-                <span className="session-status session-status--open">Open</span>
+                <span className="session-status session-status--open">进行中</span>
               </dd>
             </div>
             <div>

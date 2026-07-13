@@ -167,15 +167,15 @@ export function ProjectOverviewPage() {
   }
 
   if (loading) {
-    return <p className="loading-copy">Loading project…</p>;
+    return <p className="loading-copy">正在加载项目…</p>;
   }
 
   if (!project || !draft) {
     return (
       <section className="panel not-found">
-        <h1>Project unavailable</h1>
+        <h1>项目不可用</h1>
         <p>{error ?? "找不到该项目。"}</p>
-        <Link to="/projects">返回 Projects</Link>
+        <Link to="/projects">返回项目列表</Link>
       </section>
     );
   }
@@ -185,7 +185,7 @@ export function ProjectOverviewPage() {
   return (
     <div className="page-stack">
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link>
+        <Link to="/projects">项目</Link>
         <span>/</span>
         <span>{project.name}</span>
       </div>
@@ -199,7 +199,7 @@ export function ProjectOverviewPage() {
             </span>
           </div>
           <p className="project-identity">
-            {project.slug} · v{project.version} · Updated {formatUpdatedAt(project.updatedAt)}
+            {project.slug} · v{project.version} · 更新于 {formatUpdatedAt(project.updatedAt)}
           </p>
         </div>
         <button
@@ -208,7 +208,7 @@ export function ProjectOverviewPage() {
           onClick={handleArchive}
           type="button"
         >
-          {draft.status === "archived" ? "Archived" : "Archive Project"}
+          {draft.status === "archived" ? "已归档" : "归档项目"}
         </button>
       </header>
 
@@ -231,18 +231,18 @@ export function ProjectOverviewPage() {
       <GitHubRepositoryCard projectId={project.id} />
 
       <section className="panel context-overview-card">
-        <div className="panel-header"><div><p className="snapshot-kicker">Proposal only</p><h2>Codex Task Proposals</h2><p>定义绑定 Context Pack 的编码任务请求；不会执行 Codex 或修改代码。</p></div><Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>Open Proposals</Link></div>
+        <div className="panel-header"><div><p className="snapshot-kicker">仅任务提案</p><h2>Codex 任务提案</h2><p>定义绑定上下文包的编码任务请求；不会执行 Codex 或修改代码。</p></div><Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>打开任务提案</Link></div>
       </section>
 
       <section className="panel context-overview-card">
         <div className="panel-header">
           <div>
-            <p className="snapshot-kicker">Derived Context</p>
-            <h2>Context Pack</h2>
+            <p className="snapshot-kicker">派生上下文</p>
+            <h2>上下文包（Context Pack）</h2>
             <p>从 Project、Current Snapshot、最近 Session 与 Evidence 生成稳定 Markdown。</p>
           </div>
           <Link className="secondary-button button-link" to={`/projects/${project.id}/context`}>
-            Open Context Pack
+            打开上下文包
           </Link>
         </div>
       </section>
@@ -250,12 +250,12 @@ export function ProjectOverviewPage() {
       <section className="panel candidate-overview-card">
         <div className="panel-header">
           <div>
-            <p className="snapshot-kicker">AI Governance</p>
-            <h2>AI Candidates</h2>
+            <p className="snapshot-kicker">AI 输出治理</p>
+            <h2>AI 候选建议</h2>
             <p>审核 AI 输出；Accept 仅记录人工认可，不自动修改任何正式事实。</p>
           </div>
           <Link className="secondary-button button-link" to={`/projects/${project.id}/candidates`}>
-            Review Candidates
+            审核候选建议
           </Link>
         </div>
       </section>
@@ -270,13 +270,13 @@ export function ProjectOverviewPage() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>Identity</h2>
+              <h2>项目身份</h2>
               <p>项目的稳定名称与边界标识。</p>
             </div>
           </div>
           <div className="form-grid">
             <label>
-              Name <span className="required">*</span>
+              名称 <span className="required">*</span>
               <input
                 required
                 value={draft.name}
@@ -286,7 +286,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label>
-              Slug <span className="required">*</span>
+              Slug 标识 <span className="required">*</span>
               <input
                 required
                 minLength={2}
@@ -299,7 +299,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label className="span-2">
-              Description
+              描述
               <textarea
                 rows={3}
                 value={draft.description}
@@ -314,13 +314,13 @@ export function ProjectOverviewPage() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>Product Context</h2>
+              <h2>产品上下文</h2>
               <p>说明项目为何存在、服务谁，以及明确的范围边界。</p>
             </div>
           </div>
           <div className="form-grid">
             <label className="span-2">
-              Vision
+              产品愿景
               <textarea
                 rows={3}
                 value={draft.vision}
@@ -330,7 +330,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label className="span-2">
-              Target User
+              目标用户
               <textarea
                 rows={2}
                 value={draft.targetUser}
@@ -340,7 +340,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label>
-              Scope
+              范围
               <textarea
                 rows={5}
                 value={draft.scope}
@@ -350,7 +350,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label>
-              Non-goals
+              非目标
               <textarea
                 rows={5}
                 value={draft.nonGoals}
@@ -365,13 +365,13 @@ export function ProjectOverviewPage() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>Engineering & Lifecycle</h2>
+              <h2>工程与生命周期</h2>
               <p>维护技术栈、当前状态和研发生命周期阶段。</p>
             </div>
           </div>
           <div className="form-grid">
             <label className="span-2">
-              Tech Stack
+              技术栈
               <textarea
                 rows={3}
                 value={draft.techStack}
@@ -382,7 +382,7 @@ export function ProjectOverviewPage() {
               />
             </label>
             <label>
-              Status
+              状态
               <select
                 value={draft.status}
                 onChange={(event) =>
@@ -402,7 +402,7 @@ export function ProjectOverviewPage() {
               </select>
             </label>
             <label>
-              Lifecycle
+              生命周期
               <select
                 value={draft.lifecycleStage}
                 onChange={(event) =>
@@ -420,7 +420,7 @@ export function ProjectOverviewPage() {
               </select>
             </label>
             <label>
-              Priority
+              优先级
               <input
                 max={100}
                 min={0}
@@ -448,7 +448,7 @@ export function ProjectOverviewPage() {
                 }}
                 type="button"
               >
-                Reload Latest
+                重新加载最新版本
               </button>
             ) : null}
           </div>
@@ -456,7 +456,7 @@ export function ProjectOverviewPage() {
         {notice ? <div className="success-banner">{notice}</div> : null}
 
         <div className="sticky-actions">
-          <span>Changes use version {draft.version} for conflict protection.</span>
+          <span>当前修改基于版本 {draft.version}，保存时会进行冲突保护。</span>
           <div>
             <button
               className="secondary-button"
@@ -468,14 +468,14 @@ export function ProjectOverviewPage() {
               }}
               type="button"
             >
-              Reset
+              重置
             </button>
             <button
               className="primary-button"
               disabled={saving || isArchived}
               type="submit"
             >
-              {saving ? "Saving…" : "Save Changes"}
+              {saving ? "正在保存…" : "保存修改"}
             </button>
           </div>
         </div>

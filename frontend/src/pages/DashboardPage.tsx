@@ -31,26 +31,26 @@ export function DashboardPage() {
     <div className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Workspace Overview</p>
-          <h1>Dashboard</h1>
+          <p className="eyebrow">工作空间总览</p>
+          <h1>仪表盘</h1>
           <p>查看当前 Workspace 中的软件项目身份与生命周期状态。</p>
         </div>
         <Link className="primary-button button-link" to="/projects">
-          Manage Projects
+          管理项目
         </Link>
       </header>
 
-      <section className="metrics" aria-label="Project summary">
+      <section className="metrics" aria-label="项目汇总">
         <article>
-          <span>Total Projects</span>
+          <span>项目总数</span>
           <strong>{state.kind === "loading" ? "—" : projects.length}</strong>
         </article>
         <article>
-          <span>Active</span>
+          <span>进行中</span>
           <strong>{state.kind === "loading" ? "—" : activeCount}</strong>
         </article>
         <article>
-          <span>Archived</span>
+          <span>已归档</span>
           <strong>{state.kind === "loading" ? "—" : archivedCount}</strong>
         </article>
       </section>
@@ -58,19 +58,19 @@ export function DashboardPage() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>Current Projects</h2>
+            <h2>当前项目</h2>
             <p>按最近更新时间查看项目。</p>
           </div>
         </div>
 
-        {state.kind === "loading" ? <p className="loading-copy">Loading projects…</p> : null}
+        {state.kind === "loading" ? <p className="loading-copy">正在加载项目…</p> : null}
         {state.kind === "error" ? (
           <div className="error-banner">{state.message}</div>
         ) : null}
         {state.kind === "ready" ? (
           <ProjectTable
             projects={state.projects}
-            emptyMessage="尚未创建项目。前往 Projects 建立第一个项目身份。"
+            emptyMessage="尚未创建项目。前往项目页面建立第一个项目身份。"
           />
         ) : null}
       </section>

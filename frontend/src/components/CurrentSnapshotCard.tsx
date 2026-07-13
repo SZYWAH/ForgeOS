@@ -72,7 +72,7 @@ export function CurrentSnapshotCard({
     <section className="panel snapshot-card" aria-labelledby="current-snapshot-title">
       <div className="panel-header snapshot-card-header">
         <div>
-          <p className="snapshot-kicker">Current Snapshot</p>
+          <p className="snapshot-kicker">当前快照 · Current Snapshot</p>
           <h2 id="current-snapshot-title">{projectName} 当前状态</h2>
           <p>经人工确认的项目状态，用于快速恢复研发上下文。</p>
         </div>
@@ -87,7 +87,7 @@ export function CurrentSnapshotCard({
             }}
             to={`/projects/${projectId}/snapshot`}
           >
-            {snapshot ? (archived ? "View History" : "Edit & History") : "Create Snapshot"}
+            {snapshot ? (archived ? "查看历史" : "编辑与历史") : "创建快照"}
           </Link>
         ) : null}
       </div>
@@ -96,11 +96,11 @@ export function CurrentSnapshotCard({
         <div className="load-error-state">
           <div className="error-banner">{error}</div>
           <button className="secondary-button" onClick={() => void loadSnapshot()} type="button">
-            Retry
+            重试
           </button>
         </div>
       ) : snapshot === undefined ? (
-        <p className="loading-copy">Loading current snapshot…</p>
+        <p className="loading-copy">正在加载当前快照…</p>
       ) : snapshot === null ? (
         <div className="snapshot-empty-state">
           <strong>尚未确认当前状态</strong>
@@ -111,7 +111,7 @@ export function CurrentSnapshotCard({
           </p>
           {!archived ? (
             <Link className="primary-button button-link" to={`/projects/${projectId}/snapshot`}>
-              Create Snapshot
+              创建快照
             </Link>
           ) : null}
         </div>
@@ -149,7 +149,7 @@ export function CurrentSnapshotCard({
 
           <footer className="snapshot-meta">
             <span>最后确认 {formatUpdatedAt(snapshot.confirmedAt)}</span>
-            <span>Snapshot v{snapshot.version}</span>
+            <span>快照版本 v{snapshot.version}</span>
           </footer>
         </div>
       )}

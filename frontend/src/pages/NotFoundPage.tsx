@@ -4,9 +4,9 @@ export function NotFoundPage() {
   return (
     <section className="panel not-found">
       <p className="eyebrow">404</p>
-      <h1>Page not found</h1>
+      <h1>页面不存在</h1>
       <p>这个 ForgeOS 页面不存在。</p>
-      <Link to="/">返回 Dashboard</Link>
+      <Link to="/">返回仪表盘</Link>
     </section>
   );
 }

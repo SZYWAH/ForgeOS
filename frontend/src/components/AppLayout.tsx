@@ -17,17 +17,17 @@ export function AppLayout({ workspace }: AppLayoutProps) {
           </div>
         </div>
 
-        <nav className="main-nav" aria-label="Main navigation">
+        <nav className="main-nav" aria-label="主导航">
           <NavLink to="/" end>
-            Dashboard
+            总览
           </NavLink>
-          <NavLink to="/projects">Projects</NavLink>
-          <NavLink to="/settings/ai-providers">AI Providers</NavLink>
+          <NavLink to="/projects">项目</NavLink>
+          <NavLink to="/settings/ai-providers">AI 服务配置</NavLink>
           <NavLink to="/github-import">GitHub 导入</NavLink>
         </nav>
 
         <div className="workspace-card">
-          <span>Workspace</span>
+          <span>工作空间</span>
           <strong>{workspace.name}</strong>
           <small>{workspace.timezone}</small>
         </div>
@@ -35,8 +35,8 @@ export function AppLayout({ workspace }: AppLayoutProps) {
 
       <div className="app-main">
         <header className="topbar">
-          <span>Personal Engineering Workspace</span>
-          <span className="kernel-state">Engineering Memory + Read-only Git · Local</span>
+          <span>个人软件研发工作空间</span>
+          <span className="kernel-state">研发记忆 + 只读 Git · 本地运行</span>
         </header>
         <main className="content">
           <Outlet />

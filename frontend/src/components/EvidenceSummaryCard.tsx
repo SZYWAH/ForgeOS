@@ -49,8 +49,8 @@ export function EvidenceSummaryCard({
     <section className="panel evidence-summary-card">
       <div className="panel-header evidence-summary-header">
         <div>
-          <p className="evidence-kicker">Evidence</p>
-          <h2>Engineering Evidence</h2>
+          <p className="evidence-kicker">成果证据 · Evidence</p>
+          <h2>研发证据</h2>
           <p>保存支持 {projectName} 研发事实的文档、测试结果和人工记录。</p>
         </div>
         {items ? (
@@ -58,7 +58,7 @@ export function EvidenceSummaryCard({
             className="secondary-button button-link"
             to={`/projects/${projectId}/evidence`}
           >
-            Manage Evidence
+            管理证据
           </Link>
         ) : null}
       </div>
@@ -67,11 +67,11 @@ export function EvidenceSummaryCard({
         <div className="load-error-state">
           <div className="error-banner">{error}</div>
           <button className="secondary-button" onClick={() => void load()} type="button">
-            Retry
+            重试
           </button>
         </div>
       ) : items === undefined ? (
-        <p className="loading-copy">Loading evidence…</p>
+        <p className="loading-copy">正在加载证据…</p>
       ) : items.length === 0 ? (
         <div className="evidence-empty-state">
           <div>
@@ -79,22 +79,22 @@ export function EvidenceSummaryCard({
             <p>添加文档、截图路径、链接、测试结果或人工记录。</p>
           </div>
           <Link className="primary-button button-link" to={`/projects/${projectId}/evidence`}>
-            Add Evidence
+            添加证据
           </Link>
         </div>
       ) : (
         <div className="evidence-summary-body">
           <dl className="evidence-metrics">
             <div>
-              <dt>Total</dt>
+              <dt>总数</dt>
               <dd>{items.length}</dd>
             </div>
             <div>
-              <dt>Verified</dt>
+              <dt>已验证</dt>
               <dd>{verified}</dd>
             </div>
             <div>
-              <dt>Needs review</dt>
+              <dt>待审核</dt>
               <dd>{items.length - (verified ?? 0)}</dd>
             </div>
           </dl>
@@ -102,7 +102,11 @@ export function EvidenceSummaryCard({
             {items.slice(0, 3).map((item) => (
               <Link key={item.id} to={`/projects/${projectId}/evidence?selected=${item.id}`}>
                 <span className={`verification verification--${item.verificationStatus}`}>
-                  {item.verificationStatus}
+                  {item.verificationStatus === "verified"
+                    ? "已验证"
+                    : item.verificationStatus === "invalid"
+                      ? "已失效"
+                      : "未验证"}
                 </span>
                 <strong>{item.title}</strong>
                 <small>{formatUpdatedAt(item.updatedAt)}</small>

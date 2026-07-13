@@ -84,12 +84,12 @@ export function ProjectsPage() {
     <div className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Project Registry</p>
-          <h1>Projects</h1>
+          <p className="eyebrow">项目注册表</p>
+          <h1>项目</h1>
           <p>建立并维护当前 Workspace 中的软件项目身份。</p>
         </div>
         <button className="primary-button" onClick={() => setFormOpen((open) => !open)}>
-          {formOpen ? "Close Form" : "New Project"}
+          {formOpen ? "关闭表单" : "新建项目"}
         </button>
       </header>
 
@@ -97,14 +97,14 @@ export function ProjectsPage() {
         <section className="panel create-panel">
           <div className="panel-header">
             <div>
-              <h2>Create Project</h2>
-              <p>先建立稳定身份，产品与技术上下文可在 Overview 中补充。</p>
+              <h2>创建项目</h2>
+              <p>先建立稳定身份，产品与技术上下文可在项目概览中补充。</p>
             </div>
           </div>
           <form className="project-form compact-form" onSubmit={handleCreate}>
             <div className="form-grid">
               <label>
-                Name <span className="required">*</span>
+                名称 <span className="required">*</span>
                 <input
                   autoFocus
                   required
@@ -114,7 +114,7 @@ export function ProjectsPage() {
                 />
               </label>
               <label>
-                Slug <span className="required">*</span>
+                Slug 标识 <span className="required">*</span>
                 <input
                   required
                   minLength={2}
@@ -130,7 +130,7 @@ export function ProjectsPage() {
                 <small>小写字母、数字与连字符</small>
               </label>
               <label className="span-2">
-                Description
+                描述
                 <textarea
                   rows={3}
                   value={form.description}
@@ -144,7 +144,7 @@ export function ProjectsPage() {
                 />
               </label>
               <label>
-                Status
+                状态
                 <select
                   value={form.status}
                   onChange={(event) =>
@@ -164,7 +164,7 @@ export function ProjectsPage() {
                 </select>
               </label>
               <label>
-                Lifecycle
+                生命周期
                 <select
                   value={form.lifecycleStage}
                   onChange={(event) =>
@@ -183,7 +183,7 @@ export function ProjectsPage() {
                 </select>
               </label>
               <label>
-                Priority
+                优先级
                 <input
                   max={100}
                   min={0}
@@ -205,10 +205,10 @@ export function ProjectsPage() {
                 onClick={() => setFormOpen(false)}
                 type="button"
               >
-                Cancel
+                取消
               </button>
               <button className="primary-button" disabled={submitting} type="submit">
-                {submitting ? "Creating…" : "Create Project"}
+                {submitting ? "正在创建…" : "创建项目"}
               </button>
             </div>
           </form>
@@ -218,8 +218,8 @@ export function ProjectsPage() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>All Projects</h2>
-            <p>{loading ? "Loading…" : `${projects.length} projects in this workspace`}</p>
+            <h2>全部项目</h2>
+            <p>{loading ? "正在加载…" : `当前工作空间共有 ${projects.length} 个项目`}</p>
           </div>
         </div>
         {listError ? (
@@ -230,17 +230,17 @@ export function ProjectsPage() {
               onClick={() => void loadProjects()}
               type="button"
             >
-              Retry
+              重试
             </button>
           </div>
         ) : null}
         {!loading && !listError ? (
           <ProjectTable
             projects={projects}
-            emptyMessage="尚未创建项目。点击 New Project 开始。"
+            emptyMessage="尚未创建项目。点击“新建项目”开始。"
           />
         ) : loading ? (
-          <p className="loading-copy">Loading projects…</p>
+          <p className="loading-copy">正在加载项目…</p>
         ) : null}
       </section>
     </div>
