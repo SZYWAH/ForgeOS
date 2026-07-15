@@ -310,6 +310,9 @@ fn inspection(path: &str, branch: &str, sha: &str, dirty: bool, hour: u32) -> Gi
             insertions: if dirty { 12 } else { 0 },
             deletions: if dirty { 3 } else { 0 },
         },
+        upstream_branch: Some(format!("origin/{branch}")),
+        ahead_count: Some(0),
+        behind_count: Some(0),
         checked_at: Utc.with_ymd_and_hms(2026, 7, 12, hour, 0, 0).unwrap(),
         recent_commits: vec![GitCommit {
             sha: sha.into(),

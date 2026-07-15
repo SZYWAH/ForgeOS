@@ -3,7 +3,8 @@ use serde::Serialize;
 
 use forgeos_lib::application::{
     ContextPackView, CurrentSnapshotView, EvidenceRelationView, EvidenceSummaryView, EvidenceView,
-    GitActivityView, ProjectIdentityView, RecentSessionView, RecommendedNextStepView,
+    GitActivityView, ProjectIdentityView, ProjectPulseView, RecentSessionView,
+    RecommendedNextStepView,
 };
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -34,6 +35,75 @@ impl From<ProjectIdentityView> for ProjectIdentityResult {
 }
 
 pub type ProjectOverviewResult = ProjectIdentityResult;
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct ProjectPulseResult {
+    pub project_id: String,
+    pub available: bool,
+    pub fact_status: Option<String>,
+    pub activity_type: Option<String>,
+    pub analysis_revision: Option<String>,
+    pub generated_at: Option<String>,
+    pub freshness: Option<String>,
+    pub current_goal: Option<String>,
+    pub status_summary: Option<String>,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+    pub validation_summary: Option<String>,
+    pub git_summary: Option<String>,
+    pub source_count: usize,
+    pub selected_source_count: i64,
+    pub available_source_count: i64,
+    pub content_hash: Option<String>,
+}
+
+impl ProjectPulseResult {
+    pub fn from_optional(project_id: String, value: Option<ProjectPulseView>) -> Self {
+        match value {
+            Some(value) => Self {
+                project_id,
+                available: true,
+                fact_status: Some(value.fact_status),
+                activity_type: Some(value.activity_type),
+                analysis_revision: Some(value.analysis_revision),
+                generated_at: Some(value.generated_at.to_rfc3339()),
+                freshness: Some(value.freshness),
+                current_goal: Some(value.current_goal),
+                status_summary: Some(value.status_summary),
+                achievements: value.achievements,
+                blockers: value.blockers,
+                next_steps: value.next_steps,
+                validation_summary: Some(value.validation_summary),
+                git_summary: Some(value.git_summary),
+                source_count: value.source_count,
+                selected_source_count: value.selected_source_count,
+                available_source_count: value.available_source_count,
+                content_hash: Some(value.content_hash),
+            },
+            None => Self {
+                project_id,
+                available: false,
+                fact_status: None,
+                activity_type: None,
+                analysis_revision: None,
+                generated_at: None,
+                freshness: None,
+                current_goal: None,
+                status_summary: None,
+                achievements: Vec::new(),
+                blockers: Vec::new(),
+                next_steps: Vec::new(),
+                validation_summary: None,
+                git_summary: None,
+                source_count: 0,
+                selected_source_count: 0,
+                available_source_count: 0,
+                content_hash: None,
+            },
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct CurrentSnapshotResult {

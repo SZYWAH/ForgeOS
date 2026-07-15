@@ -128,7 +128,7 @@ const GITHUB_DRAFT_COLUMNS: &str = "id, connector_id, github_repository_id, owne
 
 #[derive(Clone)]
 pub struct SqliteProjectRepository {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
 }
 
 impl SqliteProjectRepository {
@@ -226,6 +226,38 @@ impl McpQueryRepository for SqliteProjectRepository {
         rows.into_iter()
             .map(McpGitEvidenceRow::into_read_model)
             .collect()
+    }
+
+    async fn get_latest_project_pulse(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<crate::domain::ProjectPulse>, RepositoryError> {
+        crate::ports::ProjectActivityRepository::get_latest_project_pulse(self, project_id).await
+    }
+
+    async fn list_project_pulse_sources(
+        &self,
+        pulse_id: &str,
+    ) -> Result<Vec<crate::domain::CodexActivityObservation>, RepositoryError> {
+        crate::ports::ProjectActivityRepository::list_project_pulse_sources(self, pulse_id).await
+    }
+
+    async fn get_project_activity_settings(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<crate::domain::ProjectActivitySettings>, RepositoryError> {
+        crate::ports::ProjectActivityRepository::get_project_activity_settings(self, project_id)
+            .await
+    }
+
+    async fn get_latest_successful_activity_sync_at(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DateTime<Utc>>, RepositoryError> {
+        crate::ports::ProjectActivityRepository::get_latest_successful_activity_sync_at(
+            self, project_id,
+        )
+        .await
     }
 }
 
@@ -720,6 +752,9 @@ struct WorkingCopyRow {
     untracked_files: i64,
     insertions: i64,
     deletions: i64,
+    upstream_branch: Option<String>,
+    ahead_count: Option<i64>,
+    behind_count: Option<i64>,
     checked_at: String,
 }
 
@@ -748,6 +783,9 @@ impl WorkingCopyRow {
                 insertions: self.insertions,
                 deletions: self.deletions,
             },
+            self.upstream_branch,
+            self.ahead_count,
+            self.behind_count,
             parse_timestamp("working_copies.checked_at", &self.checked_at)?,
         )
         .map_err(corrupt)
@@ -755,7 +793,8 @@ impl WorkingCopyRow {
 }
 
 const WORKING_COPY_COLUMNS: &str = "id, repository_id, branch, head_commit, is_dirty, \
-    changed_files, staged_files, unstaged_files, untracked_files, insertions, deletions, checked_at";
+    changed_files, staged_files, unstaged_files, untracked_files, insertions, deletions, \
+    upstream_branch, ahead_count, behind_count, checked_at";
 
 impl EvidenceLinkRow {
     fn into_domain(self) -> Result<EvidenceLink, RepositoryError> {
@@ -2045,7 +2084,8 @@ async fn insert_working_copy(
     sqlx::query(
         "INSERT INTO working_copies (id, repository_id, branch, head_commit, is_dirty, \
          changed_files, staged_files, unstaged_files, untracked_files, insertions, \
-         deletions, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         deletions, upstream_branch, ahead_count, behind_count, checked_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(working_copy.id())
     .bind(working_copy.repository_id())
@@ -2058,6 +2098,9 @@ async fn insert_working_copy(
     .bind(summary.untracked_files)
     .bind(summary.insertions)
     .bind(summary.deletions)
+    .bind(working_copy.upstream_branch())
+    .bind(working_copy.ahead_count())
+    .bind(working_copy.behind_count())
     .bind(timestamp(working_copy.checked_at()))
     .execute(&mut **transaction)
     .await

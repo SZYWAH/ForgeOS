@@ -863,6 +863,9 @@ pub struct WorkingCopyDto {
     pub head_commit: String,
     pub is_dirty: bool,
     pub diff_summary: DiffSummaryDto,
+    pub upstream_branch: Option<String>,
+    pub ahead_count: Option<i64>,
+    pub behind_count: Option<i64>,
     pub checked_at: String,
 }
 
@@ -875,6 +878,9 @@ impl From<WorkingCopy> for WorkingCopyDto {
             head_commit: working_copy.head_commit().to_owned(),
             is_dirty: working_copy.is_dirty(),
             diff_summary: working_copy.diff_summary().into(),
+            upstream_branch: working_copy.upstream_branch().map(str::to_owned),
+            ahead_count: working_copy.ahead_count(),
+            behind_count: working_copy.behind_count(),
             checked_at: timestamp(working_copy.checked_at()),
         }
     }
@@ -912,6 +918,9 @@ pub struct GitInspectionDto {
     pub head_commit: String,
     pub is_dirty: bool,
     pub diff_summary: DiffSummaryDto,
+    pub upstream_branch: Option<String>,
+    pub ahead_count: Option<i64>,
+    pub behind_count: Option<i64>,
     pub checked_at: String,
     pub recent_commits: Vec<GitCommitDto>,
 }
@@ -926,6 +935,9 @@ impl From<GitInspection> for GitInspectionDto {
             head_commit: inspection.head_commit,
             is_dirty: inspection.is_dirty,
             diff_summary: inspection.diff_summary.into(),
+            upstream_branch: inspection.upstream_branch,
+            ahead_count: inspection.ahead_count,
+            behind_count: inspection.behind_count,
             checked_at: timestamp(inspection.checked_at),
             recent_commits: inspection
                 .recent_commits

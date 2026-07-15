@@ -46,6 +46,34 @@ impl ContextRenderer for MarkdownContextRenderer {
             writeln!(output).map_err(render_error)?;
         }
 
+        writeln!(output, "## Observed Activity - Unconfirmed").map_err(render_error)?;
+        if let Some(pulse) = input
+            .pulse
+            .filter(|pulse| pulse.status != crate::domain::PulseStatus::Confirmed)
+        {
+            field(&mut output, "Fact Status", "observed_unconfirmed")?;
+            field(
+                &mut output,
+                "Activity Type",
+                pulse.quality.activity_type.as_str(),
+            )?;
+            field(
+                &mut output,
+                "Generated At",
+                &pulse.generated_at.to_rfc3339(),
+            )?;
+            field(&mut output, "Current Goal", &pulse.details.current_goal)?;
+            field(&mut output, "Status Summary", &pulse.details.status_summary)?;
+            list(&mut output, "Achievements", &pulse.details.achievements)?;
+            list(&mut output, "Blockers", &pulse.details.blockers)?;
+            list(&mut output, "Next Steps", &pulse.details.next_steps)?;
+            field(&mut output, "Validation", &pulse.details.validation_summary)?;
+            field(&mut output, "Git Summary", &pulse.details.git_summary)?;
+        } else {
+            writeln!(output, "Not available.").map_err(render_error)?;
+            writeln!(output).map_err(render_error)?;
+        }
+
         writeln!(output, "## Recent Development Session").map_err(render_error)?;
         if let Some(session) = input.recent_session {
             field(&mut output, "Goal", session.goal())?;
@@ -192,6 +220,7 @@ mod tests {
                     template_type: ContextTemplateType::Planning,
                     project: &project,
                     snapshot: None,
+                    pulse: None,
                     recent_session: None,
                     evidences: &[],
                 })
@@ -202,11 +231,13 @@ mod tests {
         let project_at = first.find("## Project Overview").unwrap();
         let snapshot_at = first.find("## Current Snapshot").unwrap();
         let session_at = first.find("## Recent Development Session").unwrap();
+        let pulse_at = first.find("## Observed Activity - Unconfirmed").unwrap();
         let evidence_at = first.find("## Evidence").unwrap();
         let git_at = first.find("## Recent Git Activity").unwrap();
         assert!(
             project_at < snapshot_at
-                && snapshot_at < session_at
+                && snapshot_at < pulse_at
+                && pulse_at < session_at
                 && session_at < evidence_at
                 && evidence_at < git_at
         );

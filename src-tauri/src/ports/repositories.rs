@@ -3,10 +3,32 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::domain::{
-    AiCandidate, AiProvider, CodexExecutionRecord, CodexTaskProposal, ContextExport,
-    DevelopmentSession, Evidence, EvidenceLink, EvidenceType, GitHubConnector, GitHubImportDraft,
-    Project, ProjectSnapshot, Repository, VerificationStatus, WorkingCopy, Workspace,
+    ActivitySyncRun, AiCandidate, AiProvider, CodexActivityObservation, CodexConnectorSettings,
+    CodexExecutionRecord, CodexTaskProposal, ContextExport, DevelopmentSession, Evidence,
+    EvidenceLink, EvidenceType, GitHubConnector, GitHubImportDraft, Project,
+    ProjectActivitySettings, ProjectPulse, ProjectSnapshot, Repository, VerificationStatus,
+    WorkingCopy, Workspace,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodexSyncCursor {
+    pub repository_id: String,
+    pub project_id: String,
+    pub last_thread_updated_at: Option<DateTime<Utc>>,
+    pub last_success_at: Option<DateTime<Utc>>,
+    pub version: i64,
+}
+
+#[derive(Clone, Debug)]
+pub struct PulseConfirmationWrite {
+    pub pulse: ProjectPulse,
+    pub expected_pulse_version: i64,
+    pub snapshot: Option<ProjectSnapshot>,
+    pub expected_snapshot_version: Option<i64>,
+    pub session: Option<DevelopmentSession>,
+    pub expected_session_version: Option<i64>,
+    pub session_is_new: bool,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct McpGitEvidenceRecord {
@@ -172,6 +194,22 @@ pub trait McpQueryRepository: Send + Sync {
         &self,
         project_id: &str,
     ) -> Result<Vec<McpGitEvidenceRecord>, RepositoryError>;
+    async fn get_latest_project_pulse(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectPulse>, RepositoryError>;
+    async fn list_project_pulse_sources(
+        &self,
+        pulse_id: &str,
+    ) -> Result<Vec<CodexActivityObservation>, RepositoryError>;
+    async fn get_project_activity_settings(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectActivitySettings>, RepositoryError>;
+    async fn get_latest_successful_activity_sync_at(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DateTime<Utc>>, RepositoryError>;
 }
 
 #[async_trait]
@@ -320,6 +358,90 @@ pub trait RepositoryStore: Send + Sync {
 }
 
 #[async_trait]
+pub trait ProjectActivityRepository: Send + Sync {
+    async fn get_codex_connector_settings(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<CodexConnectorSettings>, RepositoryError>;
+    async fn upsert_codex_connector_settings(
+        &self,
+        settings: &CodexConnectorSettings,
+        expected_version: Option<i64>,
+    ) -> Result<(), RepositoryError>;
+    async fn get_project_activity_settings(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectActivitySettings>, RepositoryError>;
+    async fn get_latest_successful_activity_sync_at(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<DateTime<Utc>>, RepositoryError>;
+    async fn upsert_project_activity_settings(
+        &self,
+        settings: &ProjectActivitySettings,
+        expected_version: Option<i64>,
+    ) -> Result<(), RepositoryError>;
+    async fn insert_activity_sync_run(&self, run: &ActivitySyncRun) -> Result<(), RepositoryError>;
+    async fn update_activity_sync_run(&self, run: &ActivitySyncRun) -> Result<(), RepositoryError>;
+    async fn get_activity_sync_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<ActivitySyncRun>, RepositoryError>;
+    async fn list_activity_sync_runs(
+        &self,
+        project_id: &str,
+        limit: i64,
+    ) -> Result<Vec<ActivitySyncRun>, RepositoryError>;
+    async fn recover_interrupted_sync_runs(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<u64, RepositoryError>;
+    async fn get_codex_sync_cursor(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<CodexSyncCursor>, RepositoryError>;
+    async fn upsert_codex_sync_cursor(
+        &self,
+        cursor: &CodexSyncCursor,
+    ) -> Result<(), RepositoryError>;
+    async fn insert_codex_observation(
+        &self,
+        observation: &CodexActivityObservation,
+    ) -> Result<bool, RepositoryError>;
+    async fn list_codex_observations(
+        &self,
+        project_id: &str,
+        limit: i64,
+    ) -> Result<Vec<CodexActivityObservation>, RepositoryError>;
+    async fn insert_project_pulse(
+        &self,
+        pulse: &ProjectPulse,
+        observation_ids: &[String],
+    ) -> Result<(), RepositoryError>;
+    async fn get_latest_project_pulse(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectPulse>, RepositoryError>;
+    async fn list_project_pulses(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectPulse>, RepositoryError>;
+    async fn list_project_pulse_sources(
+        &self,
+        pulse_id: &str,
+    ) -> Result<Vec<CodexActivityObservation>, RepositoryError>;
+    async fn update_project_pulse(
+        &self,
+        pulse: &ProjectPulse,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+    async fn confirm_project_pulse(
+        &self,
+        write: PulseConfirmationWrite,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
 pub trait GitHubImportRepository: Send + Sync {
     async fn get_github_connector(&self) -> Result<Option<GitHubConnector>, RepositoryError>;
     async fn insert_github_connector(
@@ -418,6 +540,7 @@ pub trait ContextPackRepository:
     + SessionRepository
     + EvidenceRepository
     + ContextExportRepository
+    + ProjectActivityRepository
 {
 }
 
@@ -428,6 +551,7 @@ impl<T> ContextPackRepository for T where
         + SessionRepository
         + EvidenceRepository
         + ContextExportRepository
+        + ProjectActivityRepository
 {
 }
 
@@ -437,6 +561,32 @@ pub trait ProjectKernelRepository:
     + SnapshotRepository
     + SessionRepository
     + EvidenceRepository
+{
+}
+
+pub trait ProjectPulseKernelRepository:
+    WorkspaceRepository
+    + ProjectRepository
+    + SnapshotRepository
+    + SessionRepository
+    + EvidenceRepository
+    + AiCandidateRepository
+    + AiProviderRepository
+    + RepositoryStore
+    + ProjectActivityRepository
+{
+}
+
+impl<T> ProjectPulseKernelRepository for T where
+    T: WorkspaceRepository
+        + ProjectRepository
+        + SnapshotRepository
+        + SessionRepository
+        + EvidenceRepository
+        + AiCandidateRepository
+        + AiProviderRepository
+        + RepositoryStore
+        + ProjectActivityRepository
 {
 }
 

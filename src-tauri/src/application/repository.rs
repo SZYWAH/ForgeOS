@@ -355,6 +355,9 @@ fn working_copy(
         inspection.head_commit.clone(),
         inspection.is_dirty,
         inspection.diff_summary,
+        inspection.upstream_branch.clone(),
+        inspection.ahead_count,
+        inspection.behind_count,
         inspection.checked_at,
     )
 }

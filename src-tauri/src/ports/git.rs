@@ -22,6 +22,9 @@ pub struct GitInspection {
     pub head_commit: String,
     pub is_dirty: bool,
     pub diff_summary: DiffSummary,
+    pub upstream_branch: Option<String>,
+    pub ahead_count: Option<i64>,
+    pub behind_count: Option<i64>,
     pub checked_at: DateTime<Utc>,
     pub recent_commits: Vec<GitCommit>,
 }

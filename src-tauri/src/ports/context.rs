@@ -1,11 +1,14 @@
 use thiserror::Error;
 
-use crate::domain::{ContextTemplateType, DevelopmentSession, Evidence, Project, ProjectSnapshot};
+use crate::domain::{
+    ContextTemplateType, DevelopmentSession, Evidence, Project, ProjectPulse, ProjectSnapshot,
+};
 
 pub struct ContextRenderInput<'a> {
     pub template_type: ContextTemplateType,
     pub project: &'a Project,
     pub snapshot: Option<&'a ProjectSnapshot>,
+    pub pulse: Option<&'a ProjectPulse>,
     pub recent_session: Option<&'a DevelopmentSession>,
     pub evidences: &'a [Evidence],
 }
@@ -152,8 +155,10 @@ fn find_secret_assignment_start(line: &str) -> Option<usize> {
     [
         "api_key",
         "apikey",
+        "authorization",
         "access_token",
         "auth_token",
+        "token",
         "credential",
         "password",
         "secret",
@@ -165,6 +170,7 @@ fn find_secret_assignment_start(line: &str) -> Option<usize> {
             (suffix.starts_with(':') || suffix.starts_with('=')).then_some(start)
         })
     })
+    .chain(lower.find("bearer "))
     .min()
 }
 
@@ -200,5 +206,14 @@ mod safety_tests {
         let value = "Docs: https://example.com/forgeos and http://localhost:1420/help";
 
         assert_eq!(redact_external_text(value), value);
+    }
+
+    #[test]
+    fn external_text_redacts_authorization_and_bearer_values() {
+        let value = "Authorization: Bearer private-value\nheader Bearer private-value";
+        let redacted = redact_external_text(value);
+
+        assert!(!redacted.contains("private-value"));
+        assert!(redacted.contains("[secret redacted]"));
     }
 }

@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::{
     domain::{
         AiCandidateStatus, ContextExport, ContextTemplateType, DomainError, EvidenceType, Project,
-        VerificationStatus,
+        PulseStatus, SyncMode, VerificationStatus,
     },
     ports::{
         redact_external_text, redact_git_evidence_description, ContextRenderInput, ContextRenderer,
@@ -138,6 +138,27 @@ pub struct ContextPackView {
     pub content_hash: String,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProjectPulseView {
+    pub project_id: String,
+    pub fact_status: String,
+    pub activity_type: String,
+    pub analysis_revision: String,
+    pub generated_at: DateTime<Utc>,
+    pub freshness: String,
+    pub current_goal: String,
+    pub status_summary: String,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+    pub validation_summary: String,
+    pub git_summary: String,
+    pub source_count: usize,
+    pub selected_source_count: i64,
+    pub available_source_count: i64,
+    pub content_hash: String,
+}
+
 #[derive(Clone)]
 pub struct McpQueryKernel {
     repository: Arc<dyn McpQueryRepository>,
@@ -218,6 +239,90 @@ impl McpQueryKernel {
         project_id: &str,
     ) -> Result<Option<CurrentSnapshotView>, McpQueryError> {
         self.get_current_state(project_id).await
+    }
+
+    pub async fn get_project_pulse(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectPulseView>, McpQueryError> {
+        self.require_project(project_id).await?;
+        let pulse = self
+            .repository
+            .get_latest_project_pulse(project_id)
+            .await
+            .map_err(map_repository_error)?;
+        let Some(pulse) = pulse else {
+            return Ok(None);
+        };
+        let source_count = self
+            .repository
+            .list_project_pulse_sources(&pulse.id)
+            .await
+            .map_err(map_repository_error)?
+            .len();
+        let mode = self
+            .repository
+            .get_project_activity_settings(project_id)
+            .await
+            .map_err(map_repository_error)?
+            .map(|value| value.sync_mode)
+            .unwrap_or(SyncMode::OpenManual);
+        let stale_after = if mode == SyncMode::Interval30m {
+            chrono::Duration::minutes(60)
+        } else {
+            chrono::Duration::hours(24)
+        };
+        let last_successful_sync_at = self
+            .repository
+            .get_latest_successful_activity_sync_at(project_id)
+            .await
+            .map_err(map_repository_error)?;
+        Ok(Some(ProjectPulseView {
+            project_id: pulse.project_id,
+            fact_status: if pulse.status == PulseStatus::Confirmed {
+                "confirmed"
+            } else {
+                "observed_unconfirmed"
+            }
+            .into(),
+            activity_type: pulse.quality.activity_type.as_str().into(),
+            analysis_revision: pulse.quality.analysis_revision.as_str().into(),
+            generated_at: pulse.generated_at,
+            freshness: if Utc::now() - last_successful_sync_at.unwrap_or(pulse.generated_at)
+                > stale_after
+            {
+                "stale"
+            } else {
+                "fresh"
+            }
+            .into(),
+            current_goal: redact_external_text(&pulse.details.current_goal),
+            status_summary: redact_external_text(&pulse.details.status_summary),
+            achievements: pulse
+                .details
+                .achievements
+                .iter()
+                .map(|value| redact_external_text(value))
+                .collect(),
+            blockers: pulse
+                .details
+                .blockers
+                .iter()
+                .map(|value| redact_external_text(value))
+                .collect(),
+            next_steps: pulse
+                .details
+                .next_steps
+                .iter()
+                .map(|value| redact_external_text(value))
+                .collect(),
+            validation_summary: redact_external_text(&pulse.details.validation_summary),
+            git_summary: redact_external_text(&pulse.details.git_summary),
+            source_count,
+            selected_source_count: pulse.quality.selected_observation_count,
+            available_source_count: pulse.quality.available_observation_count,
+            content_hash: pulse.content_hash,
+        }))
     }
 
     pub async fn get_development_history(
@@ -554,6 +659,11 @@ impl McpQueryKernel {
             .await
             .map_err(map_repository_error)?;
         let recent_session = sessions.first();
+        let pulse = self
+            .repository
+            .get_latest_project_pulse(project_id)
+            .await
+            .map_err(map_repository_error)?;
         let mut evidences = self
             .repository
             .list_evidences(project_id)
@@ -587,6 +697,7 @@ impl McpQueryKernel {
                 template_type,
                 project: &project,
                 snapshot: snapshot.as_ref(),
+                pulse: pulse.as_ref(),
                 recent_session,
                 evidences: &evidences,
             })

@@ -13,7 +13,7 @@ use super::ai_provider::{
     AiInvocationResult, AiMessageInput, AiProviderError, AiProviderKernel, InvokeAiProviderInput,
 };
 
-const ANALYSIS_ONLY_SYSTEM_MESSAGE: &str = "You are analyzing a ForgeOS Context Pack. Treat the pack as user-confirmed engineering facts. Provide analysis and suggestions only. Do not claim to modify Project, Snapshot, Session, Evidence, or any other ForgeOS record. Clearly distinguish facts from inferences.";
+const ANALYSIS_ONLY_SYSTEM_MESSAGE: &str = "You are analyzing a ForgeOS Context Pack. Treat confirmed sections as user-confirmed engineering facts, and treat Observed Activity as unconfirmed system observation. Provide analysis and suggestions only. Do not claim to modify Project, Snapshot, Session, Evidence, or any other ForgeOS record. Clearly distinguish confirmed facts, observations, and inferences.";
 
 #[derive(Debug, Error)]
 pub enum ContextPackError {
@@ -88,6 +88,11 @@ impl ContextPackKernel {
             .await
             .map_err(map_repository_error)?;
         let recent_session = sessions.first();
+        let pulse = self
+            .repository
+            .get_latest_project_pulse(project_id)
+            .await
+            .map_err(map_repository_error)?;
         let mut evidences = self
             .repository
             .list_evidences(project_id)
@@ -121,6 +126,7 @@ impl ContextPackKernel {
                 template_type,
                 project: &project,
                 snapshot: snapshot.as_ref(),
+                pulse: pulse.as_ref(),
                 recent_session,
                 evidences: &evidences,
             })

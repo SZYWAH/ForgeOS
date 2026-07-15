@@ -11,7 +11,7 @@ use crate::{
         ContextPackResult, CurrentSnapshotResult, CurrentStateResult, DevelopmentHistoryResult,
         EvidenceListResult, EvidenceResult, EvidenceSummaryResult, GitActivityResult,
         ProjectEvidenceSummaryResult, ProjectIdentityResult, ProjectOverviewResult,
-        RecentGitActivityResult, RecentSessionResult, RecentSessionsResult,
+        ProjectPulseResult, RecentGitActivityResult, RecentSessionResult, RecentSessionsResult,
         RecommendedNextStepResult, RecommendedNextStepsResult,
     },
     tools::{
@@ -61,6 +61,22 @@ impl ForgeOsMcpServer {
             .get_project_overview(&project_id)
             .await
             .map(ProjectOverviewResult::from)
+            .map(Json)
+            .map_err(safe_error)
+    }
+
+    #[tool(
+        description = "Read the latest saved Project Pulse. The fact_status field explicitly distinguishes observed_unconfirmed from confirmed data. This tool never triggers synchronization."
+    )]
+    async fn get_project_pulse(
+        &self,
+        Parameters(ProjectScope { project_id }): Parameters<ProjectScope>,
+    ) -> Result<Json<ProjectPulseResult>, String> {
+        require_project_id(&project_id)?;
+        self.kernel
+            .get_project_pulse(&project_id)
+            .await
+            .map(|pulse| ProjectPulseResult::from_optional(project_id, pulse))
             .map(Json)
             .map_err(safe_error)
     }
@@ -270,7 +286,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tool_surface_is_exactly_the_eleven_read_only_tools() {
+    fn tool_surface_is_exactly_the_twelve_read_only_tools() {
         let names = ForgeOsMcpServer::tool_router()
             .list_all()
             .into_iter()
@@ -286,6 +302,7 @@ mod tests {
                 "get_project_evidence_summary",
                 "get_project_identity",
                 "get_project_overview",
+                "get_project_pulse",
                 "get_recent_git_activity",
                 "get_recent_sessions",
                 "get_recommended_next_steps",

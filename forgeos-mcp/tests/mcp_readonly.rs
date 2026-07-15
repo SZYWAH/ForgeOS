@@ -71,6 +71,7 @@ async fn stdio_intelligence_queries_are_stable_isolated_safe_and_read_only() -> 
             "get_project_evidence_summary",
             "get_project_identity",
             "get_project_overview",
+            "get_project_pulse",
             "get_recent_git_activity",
             "get_recent_sessions",
             "get_recommended_next_steps",
@@ -102,6 +103,15 @@ async fn stdio_intelligence_queries_are_stable_isolated_safe_and_read_only() -> 
     assert!(overview.contains("Fast code understanding"));
     assert!(overview.contains("implementation"));
     assert!(!overview.contains("ForgeOS secret vision"));
+
+    let pulse = call(
+        &client,
+        "get_project_pulse",
+        json!({"project_id": "project-a"}),
+    )
+    .await?;
+    assert!(pulse.contains("\"available\":false"));
+    assert_safe(&pulse);
 
     let snapshot = call(
         &client,
@@ -207,6 +217,7 @@ async fn stdio_intelligence_queries_are_stable_isolated_safe_and_read_only() -> 
     assert_eq!(context, context_again);
     assert!(context.contains("## Project Overview"));
     assert!(context.contains("## Current Snapshot"));
+    assert!(context.contains("## Observed Activity - Unconfirmed"));
     assert!(context.contains("## Recent Development Session"));
     assert!(context.contains("## Evidence"));
     assert!(context.contains("## Recent Git Activity"));

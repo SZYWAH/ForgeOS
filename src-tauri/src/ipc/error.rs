@@ -2,8 +2,9 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        AiCandidateError, AiProviderError, ApplicationError, CodexExecutionError,
-        CodexTaskProposalError, ContextPackError, GitHubImportError, RepositoryKernelError,
+        AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
+        CodexExecutionError, CodexTaskProposalError, ContextPackError, GitHubImportError,
+        ProjectPulseError, RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -14,6 +15,23 @@ pub struct IpcError {
     pub code: &'static str,
     pub message: String,
     pub retryable: bool,
+}
+
+impl From<AppPreferencesError> for IpcError {
+    fn from(error: AppPreferencesError) -> Self {
+        let (code, retryable) = match &error {
+            AppPreferencesError::Validation(_) => ("validation_error", false),
+            AppPreferencesError::NotFound => ("app_preferences_not_found", true),
+            AppPreferencesError::VersionConflict => ("app_preferences_version_conflict", false),
+            AppPreferencesError::CorruptData(_) => ("corrupt_data", false),
+            AppPreferencesError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
 }
 
 impl From<ApplicationError> for IpcError {
@@ -233,6 +251,29 @@ impl From<GitHubImportError> for IpcError {
     }
 }
 
+impl From<ProjectPulseError> for IpcError {
+    fn from(error: ProjectPulseError) -> Self {
+        let (code, retryable) = match &error {
+            ProjectPulseError::Validation(domain) => (validation_code(domain), false),
+            ProjectPulseError::WorkspaceNotFound => ("workspace_not_found", false),
+            ProjectPulseError::ProjectNotFound => ("project_not_found", false),
+            ProjectPulseError::PulseNotFound => ("project_pulse_not_found", false),
+            ProjectPulseError::RepositoryNotConnected => ("repository_not_connected", false),
+            ProjectPulseError::SyncRunNotFound => ("activity_sync_run_not_found", false),
+            ProjectPulseError::VersionConflict => ("project_pulse_version_conflict", false),
+            ProjectPulseError::BasisVersionConflict => ("project_pulse_basis_conflict", false),
+            ProjectPulseError::CodexUnavailable(_) => ("codex_unavailable", true),
+            ProjectPulseError::CorruptData(_) => ("corrupt_data", false),
+            ProjectPulseError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
 fn validation_code(error: &DomainError) -> &'static str {
     match error {
         DomainError::ArchiveRequiresDedicatedOperation => "archive_requires_dedicated_operation",
@@ -254,6 +295,10 @@ fn validation_code(error: &DomainError) -> &'static str {
         DomainError::InvalidCodexExecutionTransition { .. } => "codex_execution_invalid_transition",
         DomainError::CodexExecutionResultRequired => "codex_execution_result_required",
         DomainError::RepositoryProjectMismatch => "repository_project_mismatch",
+        DomainError::ProjectPulseProjectMismatch => "project_pulse_project_mismatch",
+        DomainError::ProjectPulseNotPending => "project_pulse_not_pending",
+        DomainError::ProjectPulseCompletionRequired => "project_pulse_completion_required",
+        DomainError::ProjectPulseQualityRequiresReview => "project_pulse_quality_requires_review",
         DomainError::InvalidGitHubRepositoryUrl => "invalid_github_repository_url",
         DomainError::InvalidGitHubImportTransition { .. } => "invalid_github_import_transition",
         DomainError::ArchivedProjectCannotAcceptRepositoryChanges => "archived_project_read_only",

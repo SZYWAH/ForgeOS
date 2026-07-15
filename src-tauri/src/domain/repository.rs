@@ -150,6 +150,9 @@ pub struct WorkingCopy {
     head_commit: String,
     is_dirty: bool,
     diff_summary: DiffSummary,
+    upstream_branch: Option<String>,
+    ahead_count: Option<i64>,
+    behind_count: Option<i64>,
     checked_at: DateTime<Utc>,
 }
 
@@ -161,6 +164,9 @@ impl WorkingCopy {
         head_commit: String,
         is_dirty: bool,
         diff_summary: DiffSummary,
+        upstream_branch: Option<String>,
+        ahead_count: Option<i64>,
+        behind_count: Option<i64>,
         checked_at: DateTime<Utc>,
     ) -> Result<Self, DomainError> {
         Self::restore(
@@ -170,6 +176,9 @@ impl WorkingCopy {
             head_commit,
             is_dirty,
             diff_summary,
+            upstream_branch,
+            ahead_count,
+            behind_count,
             checked_at,
         )
     }
@@ -181,8 +190,15 @@ impl WorkingCopy {
         head_commit: String,
         is_dirty: bool,
         diff_summary: DiffSummary,
+        upstream_branch: Option<String>,
+        ahead_count: Option<i64>,
+        behind_count: Option<i64>,
         checked_at: DateTime<Utc>,
     ) -> Result<Self, DomainError> {
+        if ahead_count.is_some_and(|value| value < 0) || behind_count.is_some_and(|value| value < 0)
+        {
+            return Err(DomainError::InvalidWorkingCopySummary);
+        }
         Ok(Self {
             id: required("Working Copy id", id, MAX_ID_LENGTH)?,
             repository_id: required("repository id", repository_id, MAX_ID_LENGTH)?,
@@ -190,6 +206,9 @@ impl WorkingCopy {
             head_commit: validate_commit_sha(&head_commit)?,
             is_dirty,
             diff_summary: diff_summary.validated()?,
+            upstream_branch: optional(upstream_branch, MAX_BRANCH_LENGTH)?,
+            ahead_count,
+            behind_count,
             checked_at,
         })
     }
@@ -211,6 +230,15 @@ impl WorkingCopy {
     }
     pub fn diff_summary(&self) -> DiffSummary {
         self.diff_summary
+    }
+    pub fn upstream_branch(&self) -> Option<&str> {
+        self.upstream_branch.as_deref()
+    }
+    pub fn ahead_count(&self) -> Option<i64> {
+        self.ahead_count
+    }
+    pub fn behind_count(&self) -> Option<i64> {
+        self.behind_count
     }
     pub fn checked_at(&self) -> DateTime<Utc> {
         self.checked_at
@@ -294,5 +322,24 @@ mod tests {
             Err(DomainError::InvalidGitCommitSha)
         );
         assert!(validate_commit_sha(&"a".repeat(40)).is_ok());
+    }
+
+    #[test]
+    fn working_copy_rejects_negative_upstream_counts() {
+        assert_eq!(
+            WorkingCopy::create(
+                "working-1".into(),
+                "repository-1".into(),
+                "main".into(),
+                "a".repeat(40),
+                false,
+                DiffSummary::default(),
+                Some("origin/main".into()),
+                Some(-1),
+                Some(0),
+                Utc::now(),
+            ),
+            Err(DomainError::InvalidWorkingCopySummary)
+        );
     }
 }

@@ -110,6 +110,38 @@ impl GitAdapter for GitCliAdapter {
             .await?,
         )?;
         let recent_commits = parse_commits(&log)?;
+        let upstream_branch = self
+            .run_optional(
+                &root_path,
+                &[
+                    "rev-parse",
+                    "--abbrev-ref",
+                    "--symbolic-full-name",
+                    "@{upstream}",
+                ],
+            )
+            .await?
+            .map(text)
+            .transpose()?
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        let (ahead_count, behind_count) = if upstream_branch.is_some() {
+            match self
+                .run_optional(
+                    &root_path,
+                    &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+                )
+                .await?
+            {
+                Some(output) => {
+                    let (ahead, behind) = parse_ahead_behind(&text(output)?)?;
+                    (Some(ahead), Some(behind))
+                }
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
 
         Ok(GitInspection {
             root_path,
@@ -119,6 +151,9 @@ impl GitAdapter for GitCliAdapter {
             head_commit,
             is_dirty,
             diff_summary,
+            upstream_branch,
+            ahead_count,
+            behind_count,
             checked_at: Utc::now(),
             recent_commits,
         })
@@ -275,6 +310,27 @@ fn parse_numstat(output: &str) -> Result<(i64, i64), GitAdapterError> {
     Ok((insertions, deletions))
 }
 
+fn parse_ahead_behind(output: &str) -> Result<(i64, i64), GitAdapterError> {
+    let fields = output.split_whitespace().collect::<Vec<_>>();
+    if fields.len() != 2 {
+        return Err(GitAdapterError::InvalidOutput(
+            "upstream count record is invalid".into(),
+        ));
+    }
+    let ahead = fields[0]
+        .parse::<i64>()
+        .map_err(|error| GitAdapterError::InvalidOutput(error.to_string()))?;
+    let behind = fields[1]
+        .parse::<i64>()
+        .map_err(|error| GitAdapterError::InvalidOutput(error.to_string()))?;
+    if ahead < 0 || behind < 0 {
+        return Err(GitAdapterError::InvalidOutput(
+            "upstream counts cannot be negative".into(),
+        ));
+    }
+    Ok((ahead, behind))
+}
+
 fn parse_commits(output: &str) -> Result<Vec<GitCommit>, GitAdapterError> {
     output
         .split('\x1e')
@@ -351,6 +407,7 @@ mod tests {
             parse_numstat("12\t3\tsrc/main.rs\n-\t-\timage.bin\n").unwrap(),
             (12, 3)
         );
+        assert_eq!(parse_ahead_behind("2\t4\n").unwrap(), (2, 4));
     }
 
     #[test]
@@ -368,6 +425,7 @@ mod tests {
             "\"commit\"",
             "\"push\"",
             "\"pull\"",
+            "\"fetch\"",
             "\"merge\"",
             "\"checkout\"",
             "\"reset\"",

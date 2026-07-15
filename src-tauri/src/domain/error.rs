@@ -2,6 +2,56 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("unsupported application language mode: {0}")]
+    InvalidLanguageMode(String),
+    #[error("application preferences version must be at least 1")]
+    InvalidAppPreferencesVersion,
+    #[error("application preferences timestamps are not chronologically valid")]
+    InvalidAppPreferencesTimestamps,
+    #[error("application preferences version cannot be incremented")]
+    AppPreferencesVersionOverflow,
+    #[error("unsupported activity sync mode: {0}")]
+    InvalidActivitySyncMode(String),
+    #[error("unsupported activity sync trigger: {0}")]
+    InvalidActivitySyncTrigger(String),
+    #[error("unsupported activity sync status: {0}")]
+    InvalidActivitySyncStatus(String),
+    #[error("unsupported activity sync stage: {0}")]
+    InvalidActivitySyncStage(String),
+    #[error("unsupported Project Pulse status: {0}")]
+    InvalidProjectPulseStatus(String),
+    #[error("unsupported Project Pulse analysis mode: {0}")]
+    InvalidProjectPulseAnalysisMode(String),
+    #[error("unsupported Project Pulse activity type: {0}")]
+    InvalidProjectPulseActivityType(String),
+    #[error("unsupported Project Pulse analysis revision: {0}")]
+    InvalidProjectPulseAnalysisRevision(String),
+    #[error("Project Pulse source window is not chronologically valid")]
+    InvalidProjectPulseSourceWindow,
+    #[error("Project Pulse observation counts are invalid")]
+    InvalidProjectPulseObservationCounts,
+    #[error("Project Pulse quality warnings must be resolved before confirmation")]
+    ProjectPulseQualityRequiresReview,
+    #[error("Project Pulse cannot be used through a different Project")]
+    ProjectPulseProjectMismatch,
+    #[error("only a pending Project Pulse can be edited, confirmed, or dismissed")]
+    ProjectPulseNotPending,
+    #[error("Project Pulse version cannot be incremented")]
+    ProjectPulseVersionOverflow,
+    #[error("Project Pulse content hash must be a lowercase SHA-256 value")]
+    InvalidProjectPulseHash,
+    #[error("Project Pulse timestamps are not chronologically valid")]
+    InvalidProjectPulseTimestamps,
+    #[error("Project Activity settings require an AI Provider when AI is enabled")]
+    ProjectActivityAiProviderRequired,
+    #[error("Project Activity version must be at least 1")]
+    InvalidProjectActivityVersion,
+    #[error("Codex Activity observation hash must be a lowercase SHA-256 value")]
+    InvalidCodexObservationHash,
+    #[error("Codex Activity observation belongs to another Project or Repository")]
+    CodexObservationProjectMismatch,
+    #[error("Project Pulse confirmation requires non-empty outcome, validation, and handoff")]
+    ProjectPulseCompletionRequired,
     #[error("invalid Codex Execution status: {0}")]
     InvalidCodexExecutionStatus(String),
     #[error("invalid Codex Execution version")]
