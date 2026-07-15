@@ -64,6 +64,8 @@ const DISPLAY_LABELS = {
     snapshot_update: "当前状态更新", session_summary: "开发记录摘要", evidence_suggestion: "项目资料建议", risk_finding: "风险提醒", general_note: "一般建议",
     reviewed: "已检查", imported: "已导入",
     generated: "已生成", sent_to_ai: "已发送给 AI",
+    feature: "功能", problem_solution: "问题解决", release: "发布", technical_highlight: "技术亮点",
+    confirmed: "已确认", pulse_rule: "系统草稿", manual: "人工记录",
   },
   "en-US": {
     open: "In progress", completed: "Completed", abandoned: "Stopped",
@@ -78,6 +80,8 @@ const DISPLAY_LABELS = {
     snapshot_update: "Current state update", session_summary: "Development log summary", evidence_suggestion: "Project material suggestion", risk_finding: "Risk finding", general_note: "General suggestion",
     reviewed: "Reviewed", imported: "Imported",
     generated: "Generated", sent_to_ai: "Sent to AI",
+    feature: "Feature", problem_solution: "Problem solution", release: "Release", technical_highlight: "Technical highlight",
+    confirmed: "Confirmed", pulse_rule: "System draft", manual: "Manual",
   },
 } as const;
 

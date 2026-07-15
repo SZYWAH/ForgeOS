@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ActivitySyncRun,
   CodexConnectorSettings,
+  ConfirmProjectPulseResult,
   ProjectActivitySettings,
   ProjectPulse,
   ProjectPulseSource,
@@ -22,6 +23,6 @@ export const projectPulseApi = {
   list: (projectId: string) => invoke<ProjectPulse[]>("list_project_pulses", { projectId }),
   sources: (projectId: string, pulseId: string) => invoke<ProjectPulseSource[]>("get_project_pulse_sources", { projectId, pulseId }),
   updateDraft: (projectId: string, pulseId: string, input: PulseDraftInput) => invoke<ProjectPulse>("update_project_pulse_draft", { projectId, pulseId, input }),
-  confirm: (projectId: string, pulseId: string, input: { expectedVersion: number; updateSnapshot: boolean; applySession: boolean; completeSession: boolean }) => invoke<ProjectPulse>("confirm_project_pulse", { projectId, pulseId, input }),
+  confirm: (projectId: string, pulseId: string, input: { expectedVersion: number; updateSnapshot: boolean; applySession: boolean; completeSession: boolean }) => invoke<ConfirmProjectPulseResult>("confirm_project_pulse", { projectId, pulseId, input }),
   dismiss: (projectId: string, pulseId: string, expectedVersion: number) => invoke<ProjectPulse>("dismiss_project_pulse", { projectId, pulseId, expectedVersion }),
 };

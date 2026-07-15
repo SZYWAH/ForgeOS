@@ -1,492 +1,101 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { evidenceKernelApi } from "../api/evidence-kernel";
-import { getErrorCode, getErrorMessage, projectKernelApi } from "../api/project-kernel";
-import { sessionKernelApi } from "../api/session-kernel";
-import { snapshotKernelApi } from "../api/snapshot-kernel";
-import {
-  EVIDENCE_RELATION_TYPES,
-  EVIDENCE_SOURCE_TYPES,
-  EVIDENCE_TARGET_TYPES,
-  MANUAL_EVIDENCE_TYPES,
-  type Evidence,
-  type EvidenceContentInput,
-  type EvidenceRecord,
-  type EvidenceRelationType,
-  type EvidenceSourceType,
-  type EvidenceTargetType,
-  type EvidenceType,
-} from "../types/evidence";
-import type { Project } from "../types/project";
-import type { DevelopmentSession } from "../types/session";
-import type { ProjectSnapshot } from "../types/snapshot";
-import { displayLabel, formatUpdatedAt } from "../utils/format";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { achievementApi } from "../api/achievements";
+import { evidenceKernelApi } from "../api/evidence-kernel";
+import { getErrorMessage, projectKernelApi } from "../api/project-kernel";
+import { ProjectMemoryNav } from "../components/ProjectMemoryNav";
+import { CollapsibleText, CompactIdentifier } from "../components/content/ContentGovernance";
 import { PageIntro } from "../components/ui/PlainLanguage";
+import type { AchievementCategory, AchievementInput, ProjectAchievement } from "../types/achievement";
+import type { Evidence, EvidenceContentInput, EvidenceSourceType, EvidenceType } from "../types/evidence";
+import type { Project } from "../types/project";
+import { displayLabel, formatUpdatedAt } from "../utils/format";
 
-const EMPTY_EVIDENCE: EvidenceContentInput = {
-  title: "",
-  description: "",
-  evidenceType: "document",
-  sourceType: "local_file",
-  sourceUri: "",
-};
+const EMPTY_ACHIEVEMENT: AchievementInput = { category: "feature", title: "", problem: "", approach: "", result: "", validation: "", impact: "", technologies: [], resumeBullet: "", featured: false };
+const EMPTY_MATERIAL: EvidenceContentInput = { title: "", description: "", evidenceType: "document", sourceType: "manual_note", sourceUri: "" };
 
 export function EvidencePage() {
   const { t } = useTranslation();
   const { projectId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [project, setProject] = useState<Project>();
-  const [items, setItems] = useState<Evidence[]>([]);
-  const [snapshots, setSnapshots] = useState<ProjectSnapshot[]>([]);
-  const [sessions, setSessions] = useState<DevelopmentSession[]>([]);
-  const [record, setRecord] = useState<EvidenceRecord>();
-  const [draft, setDraft] = useState<EvidenceContentInput>(EMPTY_EVIDENCE);
-  const [createDraft, setCreateDraft] = useState<EvidenceContentInput>(EMPTY_EVIDENCE);
-  const [showCreate, setShowCreate] = useState(false);
-  const [targetType, setTargetType] = useState<EvidenceTargetType>("project");
-  const [targetId, setTargetId] = useState("");
-  const [relationType, setRelationType] = useState<EvidenceRelationType>("supports");
+  const [achievements, setAchievements] = useState<ProjectAchievement[]>([]);
+  const [materials, setMaterials] = useState<Evidence[]>([]);
+  const [editing, setEditing] = useState<ProjectAchievement | "new" | null>(null);
+  const [materialOpen, setMaterialOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const loadGeneration = useRef(0);
 
-  const selectedId = searchParams.get("selected") ?? "";
-
-  const loadIndex = useCallback(async () => {
-    if (!projectId) {
-      setError(t("projects.noProject"));
-      setLoading(false);
-      return;
-    }
-    const generation = ++loadGeneration.current;
-    setLoading(true);
-    setError(undefined);
-    try {
-      const [projectValue, evidenceValue, snapshotValue, sessionValue] =
-        await Promise.all([
-          projectKernelApi.getProject(projectId),
-          evidenceKernelApi.listEvidences(projectId),
-          snapshotKernelApi.getSnapshotHistory(projectId),
-          sessionKernelApi.listSessions(projectId),
-        ]);
-      if (generation !== loadGeneration.current) {
-        return;
-      }
-      setProject(projectValue);
-      setItems(evidenceValue);
-      setSnapshots(snapshotValue);
-      setSessions(sessionValue);
-      const requested = searchParams.get("selected");
-      if (!requested && evidenceValue.length > 0) {
-        setSearchParams({ selected: evidenceValue[0].id }, { replace: true });
-      }
-    } catch (loadError) {
-      if (generation === loadGeneration.current) {
-        setError(getErrorMessage(loadError));
-      }
-    } finally {
-      if (generation === loadGeneration.current) {
-        setLoading(false);
-      }
-    }
-  }, [projectId, searchParams, setSearchParams]);
-
-  const loadDetail = useCallback(async () => {
-    if (!projectId || !selectedId) {
-      setRecord(undefined);
-      return;
-    }
-    const generation = loadGeneration.current;
-    setDetailLoading(true);
-    setError(undefined);
-    try {
-      const value = await evidenceKernelApi.getEvidence(projectId, selectedId);
-      if (generation === loadGeneration.current) {
-        setRecord(value);
-        setDraft(contentFrom(value.evidence));
-      }
-    } catch (loadError) {
-      if (generation === loadGeneration.current) {
-        setError(getErrorMessage(loadError));
-      }
-    } finally {
-      if (generation === loadGeneration.current) {
-        setDetailLoading(false);
-      }
-    }
-  }, [projectId, selectedId]);
-
-  useEffect(() => {
-    void loadIndex();
-    return () => {
-      loadGeneration.current += 1;
-    };
-    // The query selection is handled by loadDetail; the index should reload only per Project.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-
-  useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
-
-  const targetOptions = useMemo(() => {
-    if (!project) {
-      return [];
-    }
-    if (targetType === "project") {
-      return [{ id: project.id, label: project.name }];
-    }
-    if (targetType === "snapshot") {
-      return snapshots.map((snapshot) => ({
-        id: snapshot.id,
-        label: `${t("snapshot.title")} v${snapshot.version} · ${snapshot.currentGoal}`,
-      }));
-    }
-    return sessions.map((session) => ({
-      id: session.id,
-      label: `${displayLabel(session.status)} · ${session.goal}`,
-    }));
-  }, [project, sessions, snapshots, targetType]);
-
-  useEffect(() => {
-    setTargetId(targetOptions[0]?.id ?? "");
-  }, [targetOptions]);
-
-  async function refreshAfterChange(evidenceId: string) {
-    if (!projectId) {
-      return;
-    }
-    const evidenceValue = await evidenceKernelApi.listEvidences(projectId);
-    setItems(evidenceValue);
-    setSearchParams({ selected: evidenceId }, { replace: true });
-    const value = await evidenceKernelApi.getEvidence(projectId, evidenceId);
-    setRecord(value);
-    setDraft(contentFrom(value.evidence));
-  }
-
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const load = useCallback(async () => {
     if (!projectId) return;
-    setSaving(true);
-    setError(undefined);
-    setNotice(undefined);
+    setLoading(true); setError(undefined);
     try {
-      const created = await evidenceKernelApi.createEvidence(projectId, normalized(createDraft));
-      setCreateDraft(EMPTY_EVIDENCE);
-      setShowCreate(false);
-      await refreshAfterChange(created.id);
-      setNotice(t("evidence.createdNotice"));
-    } catch (saveError) {
-      setError(getErrorMessage(saveError));
-    } finally {
-      setSaving(false);
-    }
+      const [projectValue, achievementValues, materialValues] = await Promise.all([
+        projectKernelApi.getProject(projectId), achievementApi.list(projectId), evidenceKernelApi.listEvidences(projectId),
+      ]);
+      setProject(projectValue); setAchievements(achievementValues); setMaterials(materialValues);
+    } catch (reason) { setError(getErrorMessage(reason)); }
+    finally { setLoading(false); }
+  }, [projectId]);
+  useEffect(() => { void load(); }, [load]);
+
+  const drafts = useMemo(() => achievements.filter((value) => value.status === "draft"), [achievements]);
+  const confirmed = useMemo(() => achievements.filter((value) => value.status === "confirmed").sort((a, b) => Number(b.featured) - Number(a.featured)), [achievements]);
+  const archived = useMemo(() => achievements.filter((value) => value.status === "archived"), [achievements]);
+
+  async function confirm(value: ProjectAchievement) {
+    if (!projectId) return; setWorking(true); setError(undefined);
+    try { await achievementApi.confirm(projectId, value.id, value.version); setNotice(t("memory.achievementConfirmed")); await load(); }
+    catch (reason) { setError(getErrorMessage(reason)); } finally { setWorking(false); }
+  }
+  async function archive(value: ProjectAchievement) {
+    if (!projectId) return; setWorking(true); setError(undefined);
+    try { await achievementApi.archive(projectId, value.id, value.version); await load(); }
+    catch (reason) { setError(getErrorMessage(reason)); } finally { setWorking(false); }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!projectId || !record) return;
-    setSaving(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const updated = await evidenceKernelApi.updateEvidence(
-        projectId,
-        record.evidence.id,
-        { ...normalized(draft), expectedVersion: record.evidence.version },
-      );
-      await refreshAfterChange(updated.id);
-      setNotice(t("evidence.updatedNotice"));
-    } catch (saveError) {
-      setError(getErrorMessage(saveError));
-      if (getErrorCode(saveError) === "evidence_version_conflict") {
-        await loadDetail();
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
+  if (loading) return <p className="loading-copy">{t("common.loading")}…</p>;
+  if (!project || !projectId) return <div className="error-banner">{error ?? t("projects.noProject")}</div>;
+  const mainAction = drafts.length > 0 ? () => setEditing(drafts[0]) : () => setEditing("new");
 
-  async function handleStatus(action: "verify" | "invalidate") {
-    if (!projectId || !record) return;
-    setSaving(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const input = { expectedVersion: record.evidence.version };
-      const updated =
-        action === "verify"
-          ? await evidenceKernelApi.verifyEvidence(projectId, record.evidence.id, input)
-          : await evidenceKernelApi.invalidateEvidence(projectId, record.evidence.id, input);
-      await refreshAfterChange(updated.id);
-      setNotice(action === "verify" ? t("evidence.verifiedNotice") : t("evidence.invalidNotice"));
-    } catch (saveError) {
-      setError(getErrorMessage(saveError));
-    } finally {
-      setSaving(false);
-    }
-  }
+  return <div className="page-stack achievement-page">
+    <div className="breadcrumb"><Link to="/projects">{t("navigation.projects")}</Link><span>/</span><Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span><span>{t("memory.achievementsAndMaterials")}</span></div>
+    <PageIntro title={t("memory.achievementsAndMaterials")} description={t("memory.achievementsDescription")} primaryAction={<button className="primary-button" disabled={working || project.status === "archived"} onClick={mainAction} type="button">{drafts.length > 0 ? t("memory.reviewDrafts") : t("memory.recordAchievement")}</button>} />
+    <ProjectMemoryNav projectId={project.id} />
+    {error ? <div className="error-banner">{error}</div> : null}{notice ? <div className="success-banner">{notice}</div> : null}
+    {editing ? <AchievementEditor achievement={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} projectId={project.id} /> : null}
+    <AchievementGroup title={t("memory.draftAchievements")} values={drafts} empty={t("memory.noDraftAchievements")} onEdit={setEditing} onConfirm={confirm} onArchive={archive} working={working} />
+    <AchievementGroup title={t("memory.confirmedAchievements")} values={confirmed} empty={t("memory.noAchievements")} onEdit={setEditing} onConfirm={confirm} onArchive={archive} working={working} />
+    {archived.length > 0 ? <details className="archived-achievements"><summary>{t("memory.archivedAchievements")}（{archived.length}）</summary><AchievementGroup values={archived} onEdit={setEditing} onConfirm={confirm} onArchive={archive} working={working} /></details> : null}
 
-  async function handleLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!projectId || !record || !targetId) return;
-    setSaving(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await evidenceKernelApi.linkEvidence(projectId, record.evidence.id, {
-        targetType,
-        targetId,
-        relationType,
-      });
-      await refreshAfterChange(record.evidence.id);
-      setNotice(t("evidence.linkSaved"));
-    } catch (saveError) {
-      setError(getErrorMessage(saveError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loading) {
-    return <p className="loading-copy">{t("common.loading")}…</p>;
-  }
-
-  if (!project || !projectId) {
-    return (
-      <section className="panel not-found">
-        <h1>{t("evidence.title")}</h1>
-        <p>{error ?? t("projects.noProject")}</p>
-        <Link to="/projects">{t("navigation.projectList")}</Link>
-      </section>
-    );
-  }
-
-  const archived = project.status === "archived";
-  const gitEvidence = record
-    ? ["git_commit", "git_status", "github_repository", "github_commit", "github_release"].includes(record.evidence.evidenceType)
-    : false;
-
-  return (
-    <div className="page-stack evidence-page">
-      <div className="breadcrumb">
-        <Link to="/projects">{t("navigation.projects")}</Link><span>/</span>
-        <Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span>
-        <span>{t("evidence.title")}</span>
-      </div>
-
-      <header className="page-header evidence-page-header">
-        <div>
-          <PageIntro title={t("evidence.title")} technicalTerm={t("terms.evidence")} description={t("evidence.description")} />
-        </div>
-        <button
-          className="primary-button"
-          disabled={archived}
-          onClick={() => setShowCreate((value) => !value)}
-          type="button"
-        >
-          {showCreate ? t("common.cancel") : t("evidence.add")}
-        </button>
-      </header>
-
-      {archived ? <div className="archive-banner">{t("evidence.archivedNotice")}</div> : null}
-      {error ? <div className="error-banner evidence-message">{error}</div> : null}
-      {notice ? <div className="success-banner evidence-message">{notice}</div> : null}
-
-      {showCreate ? (
-        <form className="panel evidence-create-form" onSubmit={handleCreate}>
-          <div className="panel-header">
-            <div><h2>{t("evidence.add")}</h2><p>{t("evidence.description")}</p></div>
-          </div>
-          <EvidenceFields value={createDraft} onChange={setCreateDraft} />
-          <div className="form-actions evidence-form-actions">
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? t("common.saving") : t("evidence.add")}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      <div className="evidence-workbench">
-        <section className="panel evidence-list-panel">
-          <div className="panel-header">
-            <div><h2>{t("evidence.title")}</h2><p>{t("evidence.recordCount", { count: items.length })}</p></div>
-          </div>
-          {items.length === 0 ? (
-            <p className="empty-state">{t("evidence.emptyDescription")}</p>
-          ) : (
-            <div className="evidence-list record-list-pane">
-              {items.map((item) => (
-                <button
-                  className={item.id === selectedId ? "selected" : ""}
-                  key={item.id}
-                  onClick={() => setSearchParams({ selected: item.id })}
-                  type="button"
-                >
-                  <span className={`verification verification--${item.verificationStatus}`}>
-                    {t(`evidence.${item.verificationStatus}`)}
-                  </span>
-                  <strong>{item.title}</strong>
-                  <small>{displayLabel(item.evidenceType)} · v{item.version}</small>
-                  <time>{formatUpdatedAt(item.updatedAt)}</time>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <div className="evidence-detail-stack">
-          {detailLoading ? (
-            <section className="panel"><p className="loading-copy">{t("common.loading")}…</p></section>
-          ) : record ? (
-            <>
-              <form className="panel evidence-editor" onSubmit={handleUpdate}>
-                <div className="panel-header evidence-editor-header">
-                  <div>
-                    <span className={`verification verification--${record.evidence.verificationStatus}`}>
-                      {t(`evidence.${record.evidence.verificationStatus}`)}
-                    </span>
-                    <h2>{record.evidence.title}</h2>
-                    <p>v{record.evidence.version} · {t("common.updatedAt")} {formatUpdatedAt(record.evidence.updatedAt)}</p>
-                  </div>
-                  <div className="evidence-status-actions">
-                    <button
-                      className="secondary-button"
-                      disabled={saving || archived}
-                      onClick={() => void handleStatus("verify")}
-                      type="button"
-                    >{t("evidence.verify")}</button>
-                    <button
-                      className="danger-button"
-                      disabled={saving || archived}
-                      onClick={() => void handleStatus("invalidate")}
-                      type="button"
-                    >{t("evidence.invalidate")}</button>
-                  </div>
-                </div>
-                <fieldset className="editor-fields" disabled={archived || gitEvidence}>
-                  <EvidenceFields value={draft} onChange={setDraft} />
-                </fieldset>
-                <div className="form-actions evidence-form-actions">
-                  <span>{gitEvidence ? t("evidence.readOnlySource") : t("evidence.saveReverify")}</span>
-                  <button className="primary-button" disabled={saving || archived || gitEvidence} type="submit">
-                    {saving ? t("common.saving") : t("evidence.saveChanges")}
-                  </button>
-                </div>
-              </form>
-
-              <section className="panel evidence-links-panel">
-                <div className="panel-header">
-                  <div><h2>{t("evidence.link")}</h2><p>{t("evidence.linkQuestion")}</p></div>
-                  <span className="history-count">{t("evidence.linkCount", { count: record.links.length })}</span>
-                </div>
-                {record.links.length === 0 ? (
-                  <p className="empty-state">{t("evidence.noLinks")}</p>
-                ) : (
-                  <div className="evidence-links-list">
-                    {record.links.map((link) => (
-                      <div key={link.id}>
-                        <span>{displayLabel(link.relationType)}</span>
-                        <strong>{link.targetType === "project" ? t("navigation.projects") : link.targetType === "snapshot" ? t("snapshot.title") : t("session.title")}</strong>
-                        <code>{link.targetId}</code>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!archived ? (
-                  <form className="evidence-link-form" onSubmit={handleLink}>
-                    <label>{t("evidence.targetType")}
-                      <select value={targetType} onChange={(event) => setTargetType(event.target.value as EvidenceTargetType)}>
-                        {EVIDENCE_TARGET_TYPES.map((value) => <option key={value} value={value}>{value === "project" ? t("navigation.projects") : value === "snapshot" ? t("snapshot.title") : t("session.title")}</option>)}
-                      </select>
-                    </label>
-                    <label>{t("evidence.target")}
-                      <select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-                        {targetOptions.length === 0 ? <option value="">{t("evidence.noTarget")}</option> : null}
-                        {targetOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label>{t("evidence.relation")}
-                      <select value={relationType} onChange={(event) => setRelationType(event.target.value as EvidenceRelationType)}>
-                        {EVIDENCE_RELATION_TYPES.map((value) => <option key={value} value={value}>{value === "supports" ? t("evidence.supports") : t("evidence.relatesTo")}</option>)}
-                      </select>
-                    </label>
-                    <button className="secondary-button" disabled={saving || !targetId} type="submit">{t("evidence.addLink")}</button>
-                  </form>
-                ) : null}
-              </section>
-            </>
-          ) : (
-            <section className="panel evidence-detail-empty">
-              <strong>{t("evidence.selectTitle")}</strong>
-              <p>{t("evidence.selectDescription")}</p>
-            </section>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+    <section className="project-materials-section">
+      <header><div><h2>{t("memory.materials")}</h2><p>{t("memory.importedMaterials")}</p></div><button className="secondary-button" disabled={project.status === "archived"} onClick={() => setMaterialOpen((value) => !value)} type="button">{t("evidence.add")}</button></header>
+      {materialOpen ? <MaterialCreateForm projectId={project.id} onCreated={async () => { setMaterialOpen(false); await load(); }} /> : null}
+      {materials.length === 0 ? <p className="memory-empty-copy">{t("evidence.emptyDescription")}</p> : <div className="materials-list">{materials.map((material) => <article key={material.id}><div><span>{displayLabel(material.evidenceType)}</span><span>{displayLabel(material.verificationStatus)}</span></div><strong>{material.title}</strong><CollapsibleText collapsedLines={2} value={material.description} />{material.sourceUri ? <CompactIdentifier copyable value={material.sourceUri} /> : null}<small>{formatUpdatedAt(material.updatedAt)}</small></article>)}</div>}
+    </section>
+  </div>;
 }
 
-type EvidenceFieldsProps = {
-  value: EvidenceContentInput;
-  onChange: (value: EvidenceContentInput) => void;
-};
-
-function EvidenceFields({ value, onChange }: EvidenceFieldsProps) {
+function AchievementGroup({ title, values, empty, onEdit, onConfirm, onArchive, working }: { title?: string; values: ProjectAchievement[]; empty?: string; onEdit: (value: ProjectAchievement) => void; onConfirm: (value: ProjectAchievement) => Promise<void>; onArchive: (value: ProjectAchievement) => Promise<void>; working: boolean }) {
   const { t } = useTranslation();
-  const sourceRequired = value.sourceType !== "manual_note";
-  return (
-    <div className="form-grid evidence-fields">
-      <label className="span-2">{t("common.title")} <span className="required">*</span>
-        <input required maxLength={200} value={value.title} onChange={(event) => onChange({ ...value, title: event.target.value })} />
-      </label>
-      <label>{t("evidence.type")}
-        <select value={value.evidenceType} onChange={(event) => onChange({ ...value, evidenceType: event.target.value as EvidenceType })}>
-          {MANUAL_EVIDENCE_TYPES.map((type) => <option key={type} value={type}>{displayLabel(type)}</option>)}
-        </select>
-      </label>
-      <label>{t("evidence.source")}
-        <select value={value.sourceType} onChange={(event) => onChange({ ...value, sourceType: event.target.value as EvidenceSourceType, sourceUri: event.target.value === "manual_note" ? "" : value.sourceUri })}>
-          {EVIDENCE_SOURCE_TYPES.filter((type) => type !== "github_api").map((type) => <option key={type} value={type}>{displayLabel(type)}</option>)}
-        </select>
-      </label>
-      <label className="span-2">{t("common.description")}
-        <textarea rows={5} value={value.description} onChange={(event) => onChange({ ...value, description: event.target.value })} />
-      </label>
-      <label className="span-2">{t("evidence.source")} {sourceRequired ? <span className="required">*</span> : null}
-        <input
-          disabled={!sourceRequired}
-          required={sourceRequired}
-          value={value.sourceUri}
-          onChange={(event) => onChange({ ...value, sourceUri: event.target.value })}
-          placeholder={value.sourceType === "external_url" ? "https://…" : value.sourceType === "local_file" ? "D:\\project\\artifact.png" : t("evidence.noExternalLocation")}
-        />
-        <small>{t("evidence.sourceStorageHelp")}</small>
-      </label>
-    </div>
-  );
+  return <section className="achievement-group">{title ? <header><h2>{title}</h2><span>{values.length}</span></header> : null}{values.length === 0 ? <p className="memory-empty-copy">{empty}</p> : <div className="achievement-list">{values.map((value) => <article key={value.id}><div className="achievement-card__meta"><span>{displayLabel(value.category)}</span>{value.featured ? <span>{t("memory.featured")}</span> : null}<time>{formatUpdatedAt(value.updatedAt)}</time></div><h3>{value.title}</h3><CollapsibleText collapsedLines={3} value={value.result} /><div className="achievement-card__actions"><button className="text-button" onClick={() => onEdit(value)} type="button">{t("common.edit")}</button>{value.status === "draft" ? <button className="secondary-button" disabled={working} onClick={() => void onConfirm(value)} type="button">{t("memory.confirmAchievement")}</button> : null}{value.resumeBullet ? <button className="text-button" onClick={() => void navigator.clipboard.writeText(value.resumeBullet)} type="button">{t("memory.copyResume")}</button> : null}{value.status !== "archived" ? <button className="text-button" disabled={working} onClick={() => void onArchive(value)} type="button">{t("memory.archiveAchievement")}</button> : null}</div></article>)}</div>}</section>;
 }
 
-function contentFrom(evidence: Evidence): EvidenceContentInput {
-  return {
-    title: evidence.title,
-    description: evidence.description,
-    evidenceType: evidence.evidenceType,
-    sourceType: evidence.sourceType,
-    sourceUri: evidence.sourceUri,
-  };
+function AchievementEditor({ achievement, projectId, onClose, onSaved }: { achievement?: ProjectAchievement; projectId: string; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<AchievementInput>(achievement ? { category: achievement.category, title: achievement.title, problem: achievement.problem, approach: achievement.approach, result: achievement.result, validation: achievement.validation, impact: achievement.impact, technologies: achievement.technologies, resumeBullet: achievement.resumeBullet, featured: achievement.featured } : EMPTY_ACHIEVEMENT);
+  const [technologyText, setTechnologyText] = useState(draft.technologies.join(", "));
+  const [working, setWorking] = useState(false); const [error, setError] = useState<string>();
+  async function save(event: FormEvent) { event.preventDefault(); setWorking(true); setError(undefined); const input = { ...draft, technologies: technologyText.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean) }; try { if (achievement) await achievementApi.update(projectId, achievement.id, achievement.version, input); else await achievementApi.create(projectId, input); await onSaved(); } catch (reason) { setError(getErrorMessage(reason)); } finally { setWorking(false); } }
+  return <form className="panel achievement-editor" onSubmit={save}><header><div><h2>{achievement ? t("common.edit") : t("memory.recordAchievement")}</h2><p>{t("memory.achievementDraftBoundary")}</p></div><button className="text-button" onClick={onClose} type="button">{t("common.close")}</button></header>{error ? <div className="error-banner">{error}</div> : null}<div className="form-grid"><label>{t("memory.achievementType")}<select value={draft.category} onChange={(event) => setDraft((value) => ({ ...value, category: event.target.value as AchievementCategory }))}>{["feature", "problem_solution", "release", "technical_highlight"].map((value) => <option key={value} value={value}>{displayLabel(value)}</option>)}</select></label><label className="check-row"><input checked={draft.featured} onChange={(event) => setDraft((value) => ({ ...value, featured: event.target.checked }))} type="checkbox" />{t("memory.featured")}</label><AchievementField label={t("memory.completedWhat")} required value={draft.title} onChange={(title) => setDraft((value) => ({ ...value, title }))} /><AchievementField label={t("memory.problem")} value={draft.problem} onChange={(problem) => setDraft((value) => ({ ...value, problem }))} /><AchievementField label={t("memory.approach")} value={draft.approach} onChange={(approach) => setDraft((value) => ({ ...value, approach }))} /><AchievementField label={t("memory.result")} required value={draft.result} onChange={(result) => setDraft((value) => ({ ...value, result }))} /><AchievementField label={t("memory.validation")} value={draft.validation} onChange={(validation) => setDraft((value) => ({ ...value, validation }))} /><AchievementField label={t("memory.impact")} value={draft.impact} onChange={(impact) => setDraft((value) => ({ ...value, impact }))} /><label className="span-2">{t("memory.technologies")}<input value={technologyText} onChange={(event) => setTechnologyText(event.target.value)} placeholder="React, Rust, SQLite" /></label><AchievementField label={t("memory.resumeBullet")} value={draft.resumeBullet} onChange={(resumeBullet) => setDraft((value) => ({ ...value, resumeBullet }))} /></div><div className="form-actions"><button className="secondary-button" onClick={onClose} type="button">{t("common.cancel")}</button><button className="primary-button" disabled={working} type="submit">{working ? t("common.saving") : t("common.save")}</button></div></form>;
 }
 
-function normalized(input: EvidenceContentInput): EvidenceContentInput {
-  return {
-    ...input,
-    title: input.title.trim(),
-    description: input.description.trim(),
-    sourceUri: input.sourceUri.trim(),
-  };
+function AchievementField({ label, value, onChange, required = false }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) { return <label className="span-2">{label}<textarea required={required} rows={3} maxLength={10000} value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
+
+function MaterialCreateForm({ projectId, onCreated }: { projectId: string; onCreated: () => Promise<void> }) {
+  const { t } = useTranslation(); const [draft, setDraft] = useState(EMPTY_MATERIAL); const [working, setWorking] = useState(false); const [error, setError] = useState<string>();
+  async function save(event: FormEvent) { event.preventDefault(); setWorking(true); try { await evidenceKernelApi.createEvidence(projectId, { ...draft, title: draft.title.trim(), description: draft.description.trim(), sourceUri: draft.sourceUri.trim() }); await onCreated(); } catch (reason) { setError(getErrorMessage(reason)); } finally { setWorking(false); } }
+  return <form className="panel material-create-form" onSubmit={save}>{error ? <div className="error-banner">{error}</div> : null}<div className="form-grid"><label>{t("common.title")}<input required value={draft.title} onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))} /></label><label>{t("evidence.type")}<select value={draft.evidenceType} onChange={(event) => setDraft((value) => ({ ...value, evidenceType: event.target.value as EvidenceType }))}>{["document", "screenshot", "link", "test_result", "note", "artifact"].map((value) => <option key={value} value={value}>{displayLabel(value)}</option>)}</select></label><label>{t("evidence.source")}<select value={draft.sourceType} onChange={(event) => setDraft((value) => ({ ...value, sourceType: event.target.value as EvidenceSourceType }))}>{["manual_note", "local_file", "external_url"].map((value) => <option key={value} value={value}>{displayLabel(value)}</option>)}</select></label><label>{t("memory.materialLocation")}<input value={draft.sourceUri} onChange={(event) => setDraft((value) => ({ ...value, sourceUri: event.target.value }))} /></label><label className="span-2">{t("common.description")}<textarea rows={3} value={draft.description} onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))} /></label></div><div className="form-actions"><button className="primary-button" disabled={working} type="submit">{t("evidence.add")}</button></div></form>;
 }

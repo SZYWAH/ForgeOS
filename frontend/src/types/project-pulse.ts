@@ -34,6 +34,7 @@ export type ActivitySyncRun = {
   threadsScanned: number;
   turnsImported: number;
   observationsCreated: number;
+  commitsImported: number;
   aiInvoked: boolean;
   startedAt: string;
   completedAt: string | null;
@@ -91,3 +92,8 @@ export type ProjectPulseSource = {
 };
 
 export type PulseDraftInput = Pick<ProjectPulse, "currentGoal" | "statusSummary" | "achievements" | "blockers" | "nextSteps" | "validationSummary" | "handoff" | "gitSummary"> & { expectedVersion: number };
+
+export type ConfirmProjectPulseResult = {
+  pulse: ProjectPulse;
+  achievementDraftId: string | null;
+};
