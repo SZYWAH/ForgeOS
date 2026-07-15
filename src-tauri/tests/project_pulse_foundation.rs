@@ -12,7 +12,7 @@ use forgeos_lib::{
     ports::{
         AiClientError, AiCompletion, AiMessage, AiProviderClient, ApiKeyStore, CodexActivityBatch,
         CodexActivitySource, CodexActivitySourceError, CodexConnectorHealth, CodexTurnActivity,
-        GitAdapter, GitAdapterError, GitCommit, GitInspection, SecretStoreError,
+        GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection, SecretStoreError,
     },
 };
 
@@ -54,7 +54,7 @@ impl CodexActivitySource for FakeCodex {
                 status: "completed".into(),
                 goal_hint: "Implement Project Pulse".into(),
                 activity_summary: "Added the observation pipeline".into(),
-                outcome_summary: "Project Pulse pipeline is ready".into(),
+                outcome_summary: "Implemented Project Pulse pipeline".into(),
                 validation_summary: "cargo: exit 0".into(),
                 handoff_summary: "Review the generated Pulse".into(),
                 blockers: vec![],
@@ -91,6 +91,25 @@ impl GitAdapter for FakeGit {
     }
     async fn get_commit(&self, _path: &str, _sha: &str) -> Result<GitCommit, GitAdapterError> {
         Err(GitAdapterError::InvalidOutput("unused".into()))
+    }
+    async fn list_commit_history(
+        &self,
+        _path: &str,
+        _previous_head: Option<&str>,
+        _since: chrono::DateTime<Utc>,
+        _limit: usize,
+    ) -> Result<GitCommitHistory, GitAdapterError> {
+        Ok(GitCommitHistory {
+            head_commit: "a".repeat(40),
+            commits: vec![GitCommit {
+                sha: "a".repeat(40),
+                message: "feat: add project memory".into(),
+                author_name: "ForgeOS Developer".into(),
+                author_email: "private@example.com".into(),
+                authored_at: Utc::now(),
+            }],
+            full_rescan: true,
+        })
     }
 }
 
@@ -200,6 +219,20 @@ async fn sync_is_idempotent_and_confirmation_is_the_only_formal_write() {
         1
     );
     assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM repository_commit_observations")
+            .fetch_one(&data.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM repository_history_cursors")
+            .fetch_one(&data.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM project_pulses")
             .fetch_one(&data.pool)
             .await
@@ -220,7 +253,8 @@ async fn sync_is_idempotent_and_confirmation_is_the_only_formal_write() {
         )
         .await
         .unwrap();
-    assert_eq!(confirmed.status.as_str(), "confirmed");
+    assert_eq!(confirmed.pulse.status.as_str(), "confirmed");
+    assert!(confirmed.achievement_draft_id.is_some());
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM project_snapshots")
             .fetch_one(&data.pool)

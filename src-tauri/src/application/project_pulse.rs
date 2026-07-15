@@ -9,10 +9,12 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        ActivitySyncRun, CodexActivityObservation, CodexConnectorSettings, DevelopmentSession,
-        DomainError, Project, ProjectActivitySettings, ProjectPulse, ProjectPulseDetails,
-        ProjectPulseQuality, ProjectSnapshot, PulseActivityType, PulseAnalysisMode,
-        PulseAnalysisRevision, SessionStatus, SnapshotDetails, SyncMode, SyncStage, SyncStatus,
+        AchievementCategory, AchievementDetails, AchievementSource, AchievementSourceMode,
+        AchievementSourceType, ActivitySyncRun, CodexActivityObservation, CodexConnectorSettings,
+        DevelopmentSession, DomainError, Project, ProjectAchievement, ProjectActivitySettings,
+        ProjectPulse, ProjectPulseDetails, ProjectPulseQuality, ProjectSnapshot, PulseActivityType,
+        PulseAnalysisMode, PulseAnalysisRevision, RepositoryCommitObservation,
+        RepositoryHistoryCursor, SessionStatus, SnapshotDetails, SyncMode, SyncStage, SyncStatus,
         SyncTrigger, WorkingCopy,
     },
     ports::{
@@ -21,6 +23,7 @@ use crate::{
     },
 };
 
+use super::activity_episode::{ActivityEpisode, ActivityEpisodeBuilder};
 use super::ai_provider::{
     AiMessageInput, AiProviderError, AiProviderKernel, InvokeAiProviderInput,
 };
@@ -28,9 +31,6 @@ use super::ai_provider::{
 const MAX_THREADS: usize = 50;
 const MAX_TURNS: usize = 500;
 const MAX_NORMALIZED_BYTES: usize = 2 * 1024 * 1024;
-const MAX_EPISODE_TURNS: usize = 20;
-const MAX_EPISODE_HOURS: i64 = 72;
-const EPISODE_GAP_HOURS: i64 = 8;
 const RECENT_EPISODE_DAYS: i64 = 14;
 const PULSE_QUALITY_ALGORITHM: &str = "episode-v2.1";
 
@@ -80,6 +80,12 @@ pub struct ConfirmPulseInput {
     pub update_snapshot: bool,
     pub apply_session: bool,
     pub complete_session: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConfirmPulseResult {
+    pub pulse: ProjectPulse,
+    pub achievement_draft_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -425,6 +431,68 @@ impl ProjectPulseKernel {
         for mut repository in repositories {
             match self.git.inspect(repository.path()).await {
                 Ok(inspection) => {
+                    let history_cursor = self
+                        .repository
+                        .get_repository_history_cursor(repository.id())
+                        .await
+                        .map_err(map_repository_error)?;
+                    match self
+                        .git
+                        .list_commit_history(
+                            repository.path(),
+                            history_cursor
+                                .as_ref()
+                                .and_then(|value| value.last_scanned_head_commit.as_deref()),
+                            Utc::now() - Duration::days(365),
+                            2_000,
+                        )
+                        .await
+                    {
+                        Ok(history) => {
+                            for commit in history.commits {
+                                let source_hash = stable_hash(&json!({
+                                    "sha": commit.sha,
+                                    "message": commit.message,
+                                    "author": commit.author_name,
+                                    "authored_at": commit.authored_at,
+                                }));
+                                let observation = RepositoryCommitObservation::create(
+                                    Uuid::now_v7().to_string(),
+                                    repository.id().to_owned(),
+                                    run.project_id.clone(),
+                                    commit.sha,
+                                    commit.message,
+                                    commit.author_name,
+                                    commit.authored_at,
+                                    Utc::now(),
+                                    source_hash,
+                                )?;
+                                if self
+                                    .repository
+                                    .insert_repository_commit_observation(&observation)
+                                    .await
+                                    .map_err(map_repository_error)?
+                                {
+                                    run.commits_imported += 1;
+                                }
+                            }
+                            self.repository
+                                .upsert_repository_history_cursor(&RepositoryHistoryCursor {
+                                    repository_id: repository.id().to_owned(),
+                                    project_id: run.project_id.clone(),
+                                    initial_backfill_completed: true,
+                                    last_scanned_head_commit: Some(history.head_commit),
+                                    last_success_at: Some(Utc::now()),
+                                    version: history_cursor.map_or(1, |value| value.version + 1),
+                                })
+                                .await
+                                .map_err(map_repository_error)?;
+                        }
+                        Err(error) => partial_messages.push(format!(
+                            "Git 历史读取失败: {}",
+                            redact_external_text(&error.to_string())
+                        )),
+                    }
                     let expected = repository.version();
                     repository.refresh(
                         inspection.remote_url.clone(),
@@ -839,7 +907,7 @@ impl ProjectPulseKernel {
         project_id: &str,
         pulse_id: &str,
         input: ConfirmPulseInput,
-    ) -> Result<ProjectPulse, ProjectPulseError> {
+    ) -> Result<ConfirmPulseResult, ProjectPulseError> {
         self.require_project(project_id).await?;
         let mut pulse = self.require_pulse(project_id, pulse_id).await?;
         if pulse.version != input.expected_version {
@@ -939,6 +1007,36 @@ impl ProjectPulseKernel {
         };
         let snapshot_id = snapshot.as_ref().map(|value| value.id().to_owned());
         let session_id = session.as_ref().map(|value| value.id().to_owned());
+        let pulse_sources = self
+            .repository
+            .list_project_pulse_sources(pulse_id)
+            .await
+            .map_err(map_repository_error)?;
+        let achievement = build_achievement_draft(&pulse, now)?;
+        let achievement_sources = achievement
+            .as_ref()
+            .map(|value| {
+                let mut sources = vec![AchievementSource::create(
+                    value.id.clone(),
+                    project_id.into(),
+                    AchievementSourceType::Pulse,
+                    pulse.id.clone(),
+                    0,
+                )?];
+                for observation in &pulse_sources {
+                    sources.push(AchievementSource::create(
+                        value.id.clone(),
+                        project_id.into(),
+                        AchievementSourceType::CodexObservation,
+                        observation.id.clone(),
+                        sources.len() as i64,
+                    )?);
+                }
+                Ok::<_, DomainError>(sources)
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let achievement_draft_id = achievement.as_ref().map(|value| value.id.clone());
         pulse.mark_confirmed(snapshot_id, session_id, now)?;
         self.repository
             .confirm_project_pulse(PulseConfirmationWrite {
@@ -949,13 +1047,18 @@ impl ProjectPulseKernel {
                 session,
                 expected_session_version: current_session.as_ref().map(|value| value.version()),
                 session_is_new,
+                achievement,
+                achievement_sources,
             })
             .await
             .map_err(|error| match error {
                 RepositoryError::OptimisticConflict => ProjectPulseError::BasisVersionConflict,
                 other => map_repository_error(other),
             })?;
-        Ok(pulse)
+        Ok(ConfirmPulseResult {
+            pulse,
+            achievement_draft_id,
+        })
     }
 
     async fn require_workspace(&self) -> Result<crate::domain::Workspace, ProjectPulseError> {
@@ -1005,87 +1108,49 @@ fn pulse_session_notes(pulse: &ProjectPulse) -> String {
     .join("\n")
 }
 
-#[derive(Clone, Debug)]
-struct ActivityEpisode {
-    observations: Vec<CodexActivityObservation>,
-}
-
-impl ActivityEpisode {
-    fn start(&self) -> DateTime<Utc> {
-        self.observations
-            .first()
-            .map(|value| value.source_updated_at)
-            .unwrap_or_else(Utc::now)
+fn build_achievement_draft(
+    pulse: &ProjectPulse,
+    now: DateTime<Utc>,
+) -> Result<Option<ProjectAchievement>, DomainError> {
+    let category = match pulse.quality.activity_type {
+        PulseActivityType::Implementation => AchievementCategory::Feature,
+        PulseActivityType::Debugging => AchievementCategory::ProblemSolution,
+        PulseActivityType::Release => AchievementCategory::Release,
+        PulseActivityType::Review
+        | PulseActivityType::SupportQuestion
+        | PulseActivityType::Unknown => return Ok(None),
+    };
+    if pulse.details.achievements.is_empty() {
+        return Ok(None);
     }
-
-    fn end(&self) -> DateTime<Utc> {
-        self.observations
-            .last()
-            .map(|value| value.source_updated_at)
-            .unwrap_or_else(Utc::now)
-    }
-
-    fn is_completed(&self) -> bool {
-        self.observations
-            .last()
-            .is_some_and(|value| value.turn_status == "completed")
-    }
-
-    fn root_goal(&self) -> Option<String> {
-        self.observations
-            .iter()
-            .find_map(|value| clean_goal(&value.goal_hint))
-    }
-
-    fn latest(&self) -> Option<&CodexActivityObservation> {
-        self.observations.last()
-    }
-
-    fn to_summary_json(&self) -> serde_json::Value {
-        json!({
-            "goal": self.root_goal(),
-            "started_at": self.start(),
-            "ended_at": self.end(),
-            "status": self.latest().map(|value| value.turn_status.as_str()),
-            "turn_count": self.observations.len()
-        })
-    }
-}
-
-struct ActivityEpisodeBuilder;
-
-impl ActivityEpisodeBuilder {
-    fn build(observations: &[CodexActivityObservation]) -> Vec<ActivityEpisode> {
-        let mut sorted = observations.to_vec();
-        sorted.sort_by(|left, right| {
-            left.source_updated_at
-                .cmp(&right.source_updated_at)
-                .then_with(|| left.id.cmp(&right.id))
-        });
-        let mut episodes: Vec<ActivityEpisode> = Vec::new();
-        for observation in sorted {
-            let starts_new = episodes.last().is_none_or(|episode| {
-                let Some(previous) = episode.observations.last() else {
-                    return true;
-                };
-                previous.thread_id != observation.thread_id
-                    || observation.source_updated_at - previous.source_updated_at
-                        > Duration::hours(EPISODE_GAP_HOURS)
-                    || observation.source_updated_at - episode.start()
-                        > Duration::hours(MAX_EPISODE_HOURS)
-                    || episode.observations.len() >= MAX_EPISODE_TURNS
-                    || !is_continuation_request(&observation.goal_hint)
-            });
-            if starts_new {
-                episodes.push(ActivityEpisode {
-                    observations: vec![observation],
-                });
-            } else if let Some(episode) = episodes.last_mut() {
-                episode.observations.push(observation);
-            }
-        }
-        episodes
-    }
+    let title = pulse
+        .details
+        .achievements
+        .first()
+        .map(|value| truncate_chars(&clean_text(value), 200))
+        .unwrap_or_default();
+    let value = ProjectAchievement::draft(
+        Uuid::now_v7().to_string(),
+        pulse.project_id.clone(),
+        AchievementDetails {
+            category,
+            title,
+            problem: (category == AchievementCategory::ProblemSolution)
+                .then(|| pulse.details.current_goal.clone())
+                .unwrap_or_default(),
+            approach: pulse.details.status_summary.clone(),
+            result: pulse.details.achievements.join("\n"),
+            validation: pulse.details.validation_summary.clone(),
+            impact: String::new(),
+            technologies: vec![],
+            resume_bullet: String::new(),
+            featured: false,
+        },
+        AchievementSourceMode::PulseRule,
+        Some(pulse.id.clone()),
+        now,
+    )?;
+    Ok(Some(value))
 }
 
 #[derive(Clone, Debug)]
@@ -1154,6 +1219,7 @@ fn build_rule_pulse(
     let current_episode = working_set.current.as_ref();
     let current_goal = current_episode
         .and_then(ActivityEpisode::root_goal)
+        .and_then(clean_goal)
         .or_else(|| {
             session.and_then(|value| {
                 (value.status() == SessionStatus::Open)
@@ -1306,31 +1372,6 @@ fn build_rule_pulse(
             git_summary,
         },
     }
-}
-
-fn is_continuation_request(value: &str) -> bool {
-    let value = clean_text(value).to_ascii_lowercase();
-    if value.chars().count() > 160 {
-        return false;
-    }
-    let value = value.trim_matches(|character: char| {
-        character.is_whitespace() || "，。！？,.!?：:".contains(character)
-    });
-    [
-        "继续",
-        "下一步",
-        "确认",
-        "按计划执行",
-        "测试无误",
-        "完成后汇报",
-        "continue",
-        "next",
-        "proceed",
-    ]
-    .iter()
-    .any(|prefix| {
-        value == *prefix || value.starts_with(&format!("{prefix} ")) || value.starts_with(prefix)
-    })
 }
 
 fn classify_activity_type(goal: &str) -> PulseActivityType {

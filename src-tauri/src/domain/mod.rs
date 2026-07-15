@@ -4,6 +4,7 @@
 //! integrations. Workspace, Project identity, Current Snapshot, and Development
 //! Session rules live here so every delivery surface observes the same invariants.
 
+mod achievement;
 mod ai_candidate;
 mod ai_provider;
 mod codex_execution;
@@ -13,12 +14,17 @@ mod error;
 mod evidence;
 mod github;
 mod project;
+mod project_memory;
 mod project_pulse;
 mod repository;
 mod session;
 mod snapshot;
 mod workspace;
 
+pub use achievement::{
+    AchievementCategory, AchievementDetails, AchievementSource, AchievementSourceMode,
+    AchievementSourceType, AchievementStatus, ProjectAchievement,
+};
 pub use ai_candidate::{AiCandidate, AiCandidateStatus, AiCandidateType};
 pub use ai_provider::{AiProvider, AiProviderDetails};
 pub use codex_execution::{CodexExecutionRecord, CodexExecutionStatus};
@@ -36,6 +42,7 @@ pub use github::{
     GitHubImportDraft, GitHubImportStatus, GitHubReleaseFact, GitHubRepositoryFacts,
 };
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
+pub use project_memory::{RepositoryCommitObservation, RepositoryHistoryCursor};
 pub use project_pulse::{
     ActivitySyncRun, CodexActivityObservation, CodexConnectorSettings, ProjectActivitySettings,
     ProjectPulse, ProjectPulseDetails, ProjectPulseQuality, PulseActivityType, PulseAnalysisMode,

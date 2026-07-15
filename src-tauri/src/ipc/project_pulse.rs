@@ -129,6 +129,7 @@ pub struct SyncRunDto {
     pub threads_scanned: i64,
     pub turns_imported: i64,
     pub observations_created: i64,
+    pub commits_imported: i64,
     pub ai_invoked: bool,
     pub started_at: String,
     pub completed_at: Option<String>,
@@ -147,6 +148,7 @@ impl From<ActivitySyncRun> for SyncRunDto {
             threads_scanned: value.threads_scanned,
             turns_imported: value.turns_imported,
             observations_created: value.observations_created,
+            commits_imported: value.commits_imported,
             ai_invoked: value.ai_invoked,
             started_at: timestamp(value.started_at),
             completed_at: value.completed_at.map(timestamp),
@@ -190,6 +192,13 @@ pub struct ProjectPulseDto {
     pub version: i64,
     pub confirmed_snapshot_id: Option<String>,
     pub confirmed_session_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmProjectPulseResultDto {
+    pub pulse: ProjectPulseDto,
+    pub achievement_draft_id: Option<String>,
 }
 
 fn pulse_dto(
@@ -298,6 +307,7 @@ struct SyncProgressEvent {
     threads_scanned: i64,
     turns_imported: i64,
     observations_created: i64,
+    commits_imported: i64,
 }
 
 #[tauri::command]
@@ -399,6 +409,7 @@ pub async fn sync_project_activity(
                         threads_scanned: 0,
                         turns_imported: 0,
                         observations_created: 0,
+                        commits_imported: 0,
                     }),
             };
             let _ = app.emit("project-pulse://sync-completed", payload);
@@ -521,10 +532,10 @@ pub async fn confirm_project_pulse(
     project_id: String,
     pulse_id: String,
     input: ConfirmPulseRequest,
-) -> Result<ProjectPulseDto, IpcError> {
+) -> Result<ConfirmProjectPulseResultDto, IpcError> {
     let mode = kernel.get_activity_settings(&project_id).await?.sync_mode;
     let last_sync = kernel.latest_successful_sync_at(&project_id).await?;
-    let pulse = kernel
+    let result = kernel
         .confirm_pulse(
             &project_id,
             &pulse_id,
@@ -537,10 +548,13 @@ pub async fn confirm_project_pulse(
         )
         .await?;
     let count = kernel
-        .get_pulse_sources(&project_id, &pulse.id)
+        .get_pulse_sources(&project_id, &result.pulse.id)
         .await?
         .len();
-    Ok(pulse_dto(pulse, mode, count, last_sync))
+    Ok(ConfirmProjectPulseResultDto {
+        pulse: pulse_dto(result.pulse, mode, count, last_sync),
+        achievement_draft_id: result.achievement_draft_id,
+    })
 }
 
 #[tauri::command]
@@ -583,6 +597,7 @@ fn progress_event(run: &ActivitySyncRun) -> SyncProgressEvent {
         threads_scanned: run.threads_scanned,
         turns_imported: run.turns_imported,
         observations_created: run.observations_created,
+        commits_imported: run.commits_imported,
     }
 }
 fn timestamp(value: DateTime<Utc>) -> String {

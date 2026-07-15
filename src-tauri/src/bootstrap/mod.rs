@@ -8,9 +8,9 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AiCandidateKernel, AiProviderKernel, AppPreferencesKernel, CodexExecutionKernel,
-        CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel, ProjectKernel,
-        ProjectPulseKernel, RepositoryKernel,
+        AchievementKernel, AiCandidateKernel, AiProviderKernel, AppPreferencesKernel,
+        CodexExecutionKernel, CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel,
+        ProjectKernel, ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
@@ -40,6 +40,8 @@ pub struct BootstrapState {
     pub codex_execution_kernel: CodexExecutionKernel,
     pub github_import_kernel: GitHubImportKernel,
     pub project_pulse_kernel: ProjectPulseKernel,
+    pub project_memory_kernel: ProjectMemoryQueryKernel,
+    pub achievement_kernel: AchievementKernel,
 }
 
 pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
@@ -59,11 +61,13 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         Arc::new(WindowsCredentialApiKeyStore::default()),
         Arc::new(OpenAiCompatibleClient::new()?),
     );
+    let project_memory_kernel = ProjectMemoryQueryKernel::new(repository.clone());
     let context_pack_kernel = ContextPackKernel::new(
         repository.clone(),
         Arc::new(MarkdownContextRenderer),
         Arc::new(ai_provider_kernel.clone()),
-    );
+    )
+    .with_project_memory(Arc::new(project_memory_kernel.clone()));
     let ai_candidate_kernel = AiCandidateKernel::new(repository.clone());
     let codex_task_proposal_kernel = CodexTaskProposalKernel::new(repository.clone());
     let codex_execution_kernel =
@@ -85,6 +89,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     );
     tauri::async_runtime::block_on(project_pulse_kernel.recover_interrupted_runs())
         .map_err(|error| BootstrapError::ProjectPulse(error.to_string()))?;
+    let achievement_kernel = AchievementKernel::new(repository.clone());
 
     println!("ForgeOS database ready: {}", database_path.display());
     Ok(BootstrapState {
@@ -99,6 +104,8 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         codex_execution_kernel,
         github_import_kernel,
         project_pulse_kernel,
+        project_memory_kernel,
+        achievement_kernel,
     })
 }
 

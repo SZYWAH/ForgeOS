@@ -26,6 +26,8 @@ pub fn run() {
             app.manage(state.codex_execution_kernel);
             app.manage(state.github_import_kernel);
             app.manage(state.project_pulse_kernel);
+            app.manage(state.project_memory_kernel);
+            app.manage(state.achievement_kernel);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -68,12 +70,8 @@ pub fn run() {
             ipc::context_packs::list_context_exports,
             ipc::context_packs::get_context_export,
             ipc::context_packs::invoke_context_with_ai,
-            ipc::ai_candidates::create_ai_candidate,
             ipc::ai_candidates::list_candidates,
             ipc::ai_candidates::get_candidate,
-            ipc::ai_candidates::accept_candidate,
-            ipc::ai_candidates::reject_candidate,
-            ipc::ai_candidates::archive_candidate,
             ipc::repositories::inspect_repository,
             ipc::repositories::register_repository,
             ipc::repositories::list_repositories,
@@ -81,20 +79,10 @@ pub fn run() {
             ipc::repositories::create_commit_evidence,
             ipc::repositories::create_status_evidence,
             ipc::repositories::list_repository_evidence,
-            ipc::codex_task_proposals::create_proposal,
             ipc::codex_task_proposals::list_proposals,
             ipc::codex_task_proposals::get_proposal,
-            ipc::codex_task_proposals::submit_proposal,
-            ipc::codex_task_proposals::approve_proposal,
-            ipc::codex_task_proposals::reject_proposal,
-            ipc::codex_task_proposals::archive_proposal,
-            ipc::codex_executions::create_codex_execution,
             ipc::codex_executions::list_codex_executions,
             ipc::codex_executions::get_codex_execution,
-            ipc::codex_executions::start_codex_execution,
-            ipc::codex_executions::complete_codex_execution,
-            ipc::codex_executions::fail_codex_execution,
-            ipc::codex_executions::cancel_codex_execution,
             ipc::github::get_github_connector,
             ipc::github::set_github_token,
             ipc::github::clear_github_token,
@@ -117,6 +105,17 @@ pub fn run() {
             ipc::project_pulse::update_project_pulse_draft,
             ipc::project_pulse::confirm_project_pulse,
             ipc::project_pulse::dismiss_project_pulse,
+            ipc::project_memory::list_project_memory_summaries,
+            ipc::project_memory::get_project_memory_overview,
+            ipc::project_memory::list_development_history,
+            ipc::project_memory::build_project_ai_context,
+            ipc::achievements::list_project_achievements,
+            ipc::achievements::get_project_achievement,
+            ipc::achievements::create_project_achievement,
+            ipc::achievements::create_achievement_draft_from_history,
+            ipc::achievements::update_project_achievement,
+            ipc::achievements::confirm_project_achievement,
+            ipc::achievements::archive_project_achievement,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run ForgeOS");

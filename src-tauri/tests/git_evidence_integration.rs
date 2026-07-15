@@ -13,7 +13,7 @@ use forgeos_lib::{
     },
     domain::{DiffSummary, DomainError},
     infrastructure::{database, repositories::SqliteProjectRepository},
-    ports::{GitAdapter, GitAdapterError, GitCommit, GitInspection},
+    ports::{GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection},
 };
 use tempfile::TempDir;
 
@@ -55,6 +55,27 @@ impl GitAdapter for FakeGitAdapter {
             })
             .cloned()
             .ok_or_else(|| GitAdapterError::InvalidOutput("commit not found".into()))
+    }
+
+    async fn list_commit_history(
+        &self,
+        path: &str,
+        _previous_head: Option<&str>,
+        _since: chrono::DateTime<Utc>,
+        limit: usize,
+    ) -> Result<GitCommitHistory, GitAdapterError> {
+        let inspection = self
+            .inspections
+            .lock()
+            .unwrap()
+            .get(path)
+            .cloned()
+            .ok_or(GitAdapterError::NotRepository)?;
+        Ok(GitCommitHistory {
+            head_commit: inspection.head_commit,
+            commits: inspection.recent_commits.into_iter().take(limit).collect(),
+            full_rescan: true,
+        })
     }
 }
 

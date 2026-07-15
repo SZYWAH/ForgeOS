@@ -2,9 +2,9 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
+        AchievementError, AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
         CodexExecutionError, CodexTaskProposalError, ContextPackError, GitHubImportError,
-        ProjectPulseError, RepositoryKernelError,
+        ProjectMemoryError, ProjectPulseError, RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -274,8 +274,55 @@ impl From<ProjectPulseError> for IpcError {
     }
 }
 
+impl From<ProjectMemoryError> for IpcError {
+    fn from(error: ProjectMemoryError) -> Self {
+        let (code, retryable) = match &error {
+            ProjectMemoryError::WorkspaceNotFound => ("workspace_not_found", false),
+            ProjectMemoryError::ProjectNotFound => ("project_not_found", false),
+            ProjectMemoryError::InvalidCursor => ("invalid_history_cursor", false),
+            ProjectMemoryError::InvalidProjectLocator => ("invalid_project_locator", false),
+            ProjectMemoryError::RepositoryPathNotConnected => ("repository_not_connected", false),
+            ProjectMemoryError::CorruptData(_) => ("corrupt_data", false),
+            ProjectMemoryError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
+impl From<AchievementError> for IpcError {
+    fn from(error: AchievementError) -> Self {
+        let (code, retryable) = match &error {
+            AchievementError::Validation(value) => (validation_code(value), false),
+            AchievementError::WorkspaceNotFound => ("workspace_not_found", false),
+            AchievementError::ProjectNotFound => ("project_not_found", false),
+            AchievementError::AchievementNotFound => ("achievement_not_found", false),
+            AchievementError::HistoryItemNotFound => ("history_item_not_found", false),
+            AchievementError::ProjectArchived => ("archived_project_read_only", false),
+            AchievementError::VersionConflict => ("achievement_version_conflict", false),
+            AchievementError::SourceProjectMismatch => {
+                ("achievement_source_project_mismatch", false)
+            }
+            AchievementError::CorruptData(_) => ("corrupt_data", false),
+            AchievementError::Storage(_) => ("storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
 fn validation_code(error: &DomainError) -> &'static str {
     match error {
+        DomainError::AchievementConfirmationRequired => "achievement_confirmation_required",
+        DomainError::AchievementNotDraft => "achievement_not_draft",
+        DomainError::AchievementArchived => "achievement_archived",
+        DomainError::AchievementProjectMismatch => "achievement_project_mismatch",
         DomainError::ArchiveRequiresDedicatedOperation => "archive_requires_dedicated_operation",
         DomainError::ArchivedProjectCannotBeEdited => "archived_project_read_only",
         DomainError::ArchivedProjectCannotAcceptSnapshots => "archived_project_read_only",

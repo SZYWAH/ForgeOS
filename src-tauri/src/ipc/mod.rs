@@ -1,3 +1,4 @@
+pub mod achievements;
 pub mod ai_candidates;
 pub mod ai_providers;
 pub mod codex_executions;
@@ -8,6 +9,7 @@ mod error;
 pub mod evidences;
 pub mod github;
 pub mod health;
+pub mod project_memory;
 pub mod project_pulse;
 pub mod projects;
 pub mod repositories;

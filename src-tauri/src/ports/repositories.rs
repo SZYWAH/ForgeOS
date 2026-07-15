@@ -3,10 +3,11 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::domain::{
-    ActivitySyncRun, AiCandidate, AiProvider, CodexActivityObservation, CodexConnectorSettings,
-    CodexExecutionRecord, CodexTaskProposal, ContextExport, DevelopmentSession, Evidence,
-    EvidenceLink, EvidenceType, GitHubConnector, GitHubImportDraft, Project,
-    ProjectActivitySettings, ProjectPulse, ProjectSnapshot, Repository, VerificationStatus,
+    AchievementSource, ActivitySyncRun, AiCandidate, AiProvider, CodexActivityObservation,
+    CodexConnectorSettings, CodexExecutionRecord, CodexTaskProposal, ContextExport,
+    DevelopmentSession, Evidence, EvidenceLink, EvidenceType, GitHubConnector, GitHubImportDraft,
+    Project, ProjectAchievement, ProjectActivitySettings, ProjectPulse, ProjectSnapshot,
+    Repository, RepositoryCommitObservation, RepositoryHistoryCursor, VerificationStatus,
     WorkingCopy, Workspace,
 };
 
@@ -28,6 +29,8 @@ pub struct PulseConfirmationWrite {
     pub session: Option<DevelopmentSession>,
     pub expected_session_version: Option<i64>,
     pub session_is_new: bool,
+    pub achievement: Option<ProjectAchievement>,
+    pub achievement_sources: Vec<AchievementSource>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -442,6 +445,53 @@ pub trait ProjectActivityRepository: Send + Sync {
 }
 
 #[async_trait]
+pub trait ProjectMemoryRepository: Send + Sync {
+    async fn get_repository_history_cursor(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<RepositoryHistoryCursor>, RepositoryError>;
+    async fn upsert_repository_history_cursor(
+        &self,
+        cursor: &RepositoryHistoryCursor,
+    ) -> Result<(), RepositoryError>;
+    async fn insert_repository_commit_observation(
+        &self,
+        observation: &RepositoryCommitObservation,
+    ) -> Result<bool, RepositoryError>;
+    async fn list_repository_commit_observations(
+        &self,
+        project_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RepositoryCommitObservation>, RepositoryError>;
+}
+
+#[async_trait]
+pub trait AchievementRepository: Send + Sync {
+    async fn insert_achievement(
+        &self,
+        achievement: &ProjectAchievement,
+        sources: &[AchievementSource],
+    ) -> Result<(), RepositoryError>;
+    async fn list_achievements(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectAchievement>, RepositoryError>;
+    async fn get_achievement(
+        &self,
+        achievement_id: &str,
+    ) -> Result<Option<ProjectAchievement>, RepositoryError>;
+    async fn list_achievement_sources(
+        &self,
+        achievement_id: &str,
+    ) -> Result<Vec<AchievementSource>, RepositoryError>;
+    async fn update_achievement(
+        &self,
+        achievement: &ProjectAchievement,
+        expected_version: i64,
+    ) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
 pub trait GitHubImportRepository: Send + Sync {
     async fn get_github_connector(&self) -> Result<Option<GitHubConnector>, RepositoryError>;
     async fn insert_github_connector(
@@ -574,6 +624,34 @@ pub trait ProjectPulseKernelRepository:
     + AiProviderRepository
     + RepositoryStore
     + ProjectActivityRepository
+    + ProjectMemoryRepository
+    + AchievementRepository
+{
+}
+
+pub trait ProjectMemoryKernelRepository:
+    WorkspaceRepository
+    + ProjectRepository
+    + SnapshotRepository
+    + SessionRepository
+    + EvidenceRepository
+    + RepositoryStore
+    + ProjectActivityRepository
+    + ProjectMemoryRepository
+    + AchievementRepository
+{
+}
+
+impl<T> ProjectMemoryKernelRepository for T where
+    T: WorkspaceRepository
+        + ProjectRepository
+        + SnapshotRepository
+        + SessionRepository
+        + EvidenceRepository
+        + RepositoryStore
+        + ProjectActivityRepository
+        + ProjectMemoryRepository
+        + AchievementRepository
 {
 }
 
@@ -587,6 +665,8 @@ impl<T> ProjectPulseKernelRepository for T where
         + AiProviderRepository
         + RepositoryStore
         + ProjectActivityRepository
+        + ProjectMemoryRepository
+        + AchievementRepository
 {
 }
 

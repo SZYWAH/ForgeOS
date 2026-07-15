@@ -14,6 +14,7 @@ use crate::{
     ports::{CodexSyncCursor, ProjectActivityRepository, PulseConfirmationWrite, RepositoryError},
 };
 
+use super::achievement_repository::insert_achievement_tx;
 use super::repositories::SqliteProjectRepository;
 
 #[derive(FromRow)]
@@ -86,6 +87,7 @@ struct SyncRunRow {
     threads_scanned: i64,
     turns_imported: i64,
     observations_created: i64,
+    commits_imported: i64,
     ai_invoked: i64,
     started_at: String,
     completed_at: Option<String>,
@@ -104,6 +106,7 @@ impl SyncRunRow {
             threads_scanned: self.threads_scanned,
             turns_imported: self.turns_imported,
             observations_created: self.observations_created,
+            commits_imported: self.commits_imported,
             ai_invoked: boolean("project_activity_sync_runs.ai_invoked", self.ai_invoked)?,
             started_at: timestamp_from("project_activity_sync_runs.started_at", &self.started_at)?,
             completed_at: optional_timestamp(
@@ -116,7 +119,7 @@ impl SyncRunRow {
     }
 }
 
-const SYNC_RUN_COLUMNS: &str = "id, project_id, trigger, status, stage, threads_scanned, turns_imported, observations_created, ai_invoked, started_at, completed_at, error_code, error_summary";
+const SYNC_RUN_COLUMNS: &str = "id, project_id, trigger, status, stage, threads_scanned, turns_imported, observations_created, commits_imported, ai_invoked, started_at, completed_at, error_code, error_summary";
 
 #[derive(FromRow)]
 struct CursorRow {
@@ -344,14 +347,14 @@ impl ProjectActivityRepository for SqliteProjectRepository {
     }
 
     async fn insert_activity_sync_run(&self, run: &ActivitySyncRun) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO project_activity_sync_runs (id, project_id, trigger, status, stage, threads_scanned, turns_imported, observations_created, ai_invoked, started_at, completed_at, error_code, error_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(&run.id).bind(&run.project_id).bind(run.trigger.as_str()).bind(run.status.as_str()).bind(run.stage.as_str()).bind(run.threads_scanned).bind(run.turns_imported).bind(run.observations_created).bind(i64::from(run.ai_invoked)).bind(time_string(run.started_at)).bind(run.completed_at.map(time_string)).bind(&run.error_code).bind(&run.error_summary).execute(&self.pool).await.map_err(write_error)?;
+        sqlx::query("INSERT INTO project_activity_sync_runs (id, project_id, trigger, status, stage, threads_scanned, turns_imported, observations_created, commits_imported, ai_invoked, started_at, completed_at, error_code, error_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(&run.id).bind(&run.project_id).bind(run.trigger.as_str()).bind(run.status.as_str()).bind(run.stage.as_str()).bind(run.threads_scanned).bind(run.turns_imported).bind(run.observations_created).bind(run.commits_imported).bind(i64::from(run.ai_invoked)).bind(time_string(run.started_at)).bind(run.completed_at.map(time_string)).bind(&run.error_code).bind(&run.error_summary).execute(&self.pool).await.map_err(write_error)?;
         Ok(())
     }
 
     async fn update_activity_sync_run(&self, run: &ActivitySyncRun) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE project_activity_sync_runs SET status = ?, stage = ?, threads_scanned = ?, turns_imported = ?, observations_created = ?, ai_invoked = ?, completed_at = ?, error_code = ?, error_summary = ? WHERE id = ? AND project_id = ?")
-            .bind(run.status.as_str()).bind(run.stage.as_str()).bind(run.threads_scanned).bind(run.turns_imported).bind(run.observations_created).bind(i64::from(run.ai_invoked)).bind(run.completed_at.map(time_string)).bind(&run.error_code).bind(&run.error_summary).bind(&run.id).bind(&run.project_id).execute(&self.pool).await.map_err(storage)?;
+        let result = sqlx::query("UPDATE project_activity_sync_runs SET status = ?, stage = ?, threads_scanned = ?, turns_imported = ?, observations_created = ?, commits_imported = ?, ai_invoked = ?, completed_at = ?, error_code = ?, error_summary = ? WHERE id = ? AND project_id = ?")
+            .bind(run.status.as_str()).bind(run.stage.as_str()).bind(run.threads_scanned).bind(run.turns_imported).bind(run.observations_created).bind(run.commits_imported).bind(i64::from(run.ai_invoked)).bind(run.completed_at.map(time_string)).bind(&run.error_code).bind(&run.error_summary).bind(&run.id).bind(&run.project_id).execute(&self.pool).await.map_err(storage)?;
         affected(result.rows_affected(), true)
     }
 
@@ -549,6 +552,10 @@ impl ProjectActivityRepository for SqliteProjectRepository {
                     .bind(session.status().as_str()).bind(session.goal()).bind(session.notes()).bind(session.outcome()).bind(session.validation()).bind(session.handoff()).bind(session.completed_at().map(time_string)).bind(time_string(session.updated_at())).bind(session.version()).bind(session.id()).bind(session.project_id()).bind(expected).execute(&mut *transaction).await.map_err(storage)?;
                 affected(result.rows_affected(), true)?;
             }
+        }
+        if let Some(achievement) = &write.achievement {
+            insert_achievement_tx(&mut transaction, achievement, &write.achievement_sources)
+                .await?;
         }
         let pulse_result = sqlx::query("UPDATE project_pulses SET status = 'confirmed', confirmed_snapshot_id = ?, confirmed_session_id = ?, updated_at = ?, version = ? WHERE id = ? AND project_id = ? AND status = 'pending_review' AND version = ?")
             .bind(&write.pulse.confirmed_snapshot_id).bind(&write.pulse.confirmed_session_id).bind(time_string(write.pulse.updated_at)).bind(write.pulse.version).bind(&write.pulse.id).bind(&write.pulse.project_id).bind(write.expected_pulse_version).execute(&mut *transaction).await.map_err(storage)?;

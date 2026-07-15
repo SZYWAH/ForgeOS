@@ -29,6 +29,13 @@ pub struct GitInspection {
     pub recent_commits: Vec<GitCommit>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitCommitHistory {
+    pub head_commit: String,
+    pub commits: Vec<GitCommit>,
+    pub full_rescan: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum GitAdapterError {
     #[error("Git executable is unavailable: {0}")]
@@ -54,4 +61,11 @@ pub enum GitAdapterError {
 pub trait GitAdapter: Send + Sync {
     async fn inspect(&self, path: &str) -> Result<GitInspection, GitAdapterError>;
     async fn get_commit(&self, path: &str, sha: &str) -> Result<GitCommit, GitAdapterError>;
+    async fn list_commit_history(
+        &self,
+        path: &str,
+        previous_head: Option<&str>,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<GitCommitHistory, GitAdapterError>;
 }

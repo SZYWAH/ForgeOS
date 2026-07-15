@@ -2,6 +2,30 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("unsupported achievement category: {0}")]
+    InvalidAchievementCategory(String),
+    #[error("unsupported achievement status: {0}")]
+    InvalidAchievementStatus(String),
+    #[error("unsupported achievement source mode: {0}")]
+    InvalidAchievementSourceMode(String),
+    #[error("unsupported achievement source type: {0}")]
+    InvalidAchievementSourceType(String),
+    #[error(
+        "achievement confirmation requires a title, result, and approach, validation, or impact"
+    )]
+    AchievementConfirmationRequired,
+    #[error("only a draft achievement can be confirmed")]
+    AchievementNotDraft,
+    #[error("archived achievements are read-only")]
+    AchievementArchived,
+    #[error("achievement cannot be used through another Project")]
+    AchievementProjectMismatch,
+    #[error("achievement lifecycle is invalid")]
+    InvalidAchievementLifecycle,
+    #[error("achievement version cannot be incremented")]
+    AchievementVersionOverflow,
+    #[error("achievement source order cannot be negative")]
+    InvalidAchievementSourceOrder,
     #[error("unsupported application language mode: {0}")]
     InvalidLanguageMode(String),
     #[error("application preferences version must be at least 1")]
@@ -48,6 +72,10 @@ pub enum DomainError {
     InvalidProjectActivityVersion,
     #[error("Codex Activity observation hash must be a lowercase SHA-256 value")]
     InvalidCodexObservationHash,
+    #[error("Repository Commit observation hash must be a lowercase SHA-256 value")]
+    InvalidRepositoryCommitHash,
+    #[error("Repository history cursor is invalid")]
+    InvalidRepositoryHistoryCursor,
     #[error("Codex Activity observation belongs to another Project or Repository")]
     CodexObservationProjectMismatch,
     #[error("Project Pulse confirmation requires non-empty outcome, validation, and handoff")]

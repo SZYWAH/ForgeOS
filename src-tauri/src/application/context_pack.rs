@@ -12,6 +12,7 @@ use crate::{
 use super::ai_provider::{
     AiInvocationResult, AiMessageInput, AiProviderError, AiProviderKernel, InvokeAiProviderInput,
 };
+use super::ProjectMemoryQueryKernel;
 
 const ANALYSIS_ONLY_SYSTEM_MESSAGE: &str = "You are analyzing a ForgeOS Context Pack. Treat confirmed sections as user-confirmed engineering facts, and treat Observed Activity as unconfirmed system observation. Provide analysis and suggestions only. Do not claim to modify Project, Snapshot, Session, Evidence, or any other ForgeOS record. Clearly distinguish confirmed facts, observations, and inferences.";
 
@@ -50,6 +51,7 @@ pub struct ContextPackKernel {
     repository: Arc<dyn ContextPackRepository>,
     renderer: Arc<dyn ContextRenderer>,
     ai_provider_kernel: Arc<AiProviderKernel>,
+    project_memory_kernel: Option<Arc<ProjectMemoryQueryKernel>>,
 }
 
 pub struct ContextAiInvocationResult {
@@ -67,7 +69,13 @@ impl ContextPackKernel {
             repository,
             renderer,
             ai_provider_kernel,
+            project_memory_kernel: None,
         }
+    }
+
+    pub fn with_project_memory(mut self, kernel: Arc<ProjectMemoryQueryKernel>) -> Self {
+        self.project_memory_kernel = Some(kernel);
+        self
     }
 
     pub async fn generate_context_pack(
@@ -120,17 +128,28 @@ impl ContextPackKernel {
             &evidence_project_ids,
         )?;
 
-        let markdown = self
-            .renderer
-            .render(ContextRenderInput {
-                template_type,
-                project: &project,
-                snapshot: snapshot.as_ref(),
-                pulse: pulse.as_ref(),
-                recent_session,
-                evidences: &evidences,
-            })
-            .map_err(|error| ContextPackError::Render(error.to_string()))?;
+        let markdown = if let Some(memory_kernel) = self.project_memory_kernel.as_ref() {
+            let context = memory_kernel
+                .build_project_ai_context(project_id)
+                .await
+                .map_err(|error| ContextPackError::Render(error.to_string()))?;
+            format!(
+                "{}\n\n## Intended Use\n\nTemplate: {}\n",
+                context.content_markdown.trim_end(),
+                template_type.as_str()
+            )
+        } else {
+            self.renderer
+                .render(ContextRenderInput {
+                    template_type,
+                    project: &project,
+                    snapshot: snapshot.as_ref(),
+                    pulse: pulse.as_ref(),
+                    recent_session,
+                    evidences: &evidences,
+                })
+                .map_err(|error| ContextPackError::Render(error.to_string()))?
+        };
         let export = ContextExport::generate(
             Uuid::now_v7().to_string(),
             project_id.to_owned(),

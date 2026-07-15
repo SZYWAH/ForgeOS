@@ -21,15 +21,16 @@ pub use context::{
     redact_external_text, redact_git_evidence_description, ContextRenderError, ContextRenderInput,
     ContextRenderer,
 };
-pub use git::{GitAdapter, GitAdapterError, GitCommit, GitInspection};
+pub use git::{GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection};
 pub use github::{GitHubClient, GitHubClientError};
 pub use repositories::{
-    AiCandidateKernelRepository, AiCandidateRepository, AiProviderRepository,
-    CodexExecutionKernelRepository, CodexExecutionRepository, CodexSyncCursor,
-    CodexTaskProposalKernelRepository, CodexTaskProposalRepository, ContextExportRepository,
-    ContextPackRepository, EvidenceRepository, GitHubImportKernelRepository,
-    GitHubImportRepository, McpGitEvidenceRecord, McpQueryRepository, ProjectActivityRepository,
-    ProjectKernelRepository, ProjectPulseKernelRepository, ProjectRepository,
+    AchievementRepository, AiCandidateKernelRepository, AiCandidateRepository,
+    AiProviderRepository, CodexExecutionKernelRepository, CodexExecutionRepository,
+    CodexSyncCursor, CodexTaskProposalKernelRepository, CodexTaskProposalRepository,
+    ContextExportRepository, ContextPackRepository, EvidenceRepository,
+    GitHubImportKernelRepository, GitHubImportRepository, McpGitEvidenceRecord, McpQueryRepository,
+    ProjectActivityRepository, ProjectKernelRepository, ProjectMemoryKernelRepository,
+    ProjectMemoryRepository, ProjectPulseKernelRepository, ProjectRepository,
     PulseConfirmationWrite, RepositoryError, RepositoryKernelStore, RepositoryStore,
     SessionRepository, SnapshotRepository, WorkspaceRepository,
 };

@@ -1,5 +1,7 @@
 //! Application use cases coordinate domain rules and repository ports.
 
+pub mod achievement;
+pub mod activity_episode;
 pub mod ai_candidate;
 pub mod ai_provider;
 pub mod codex_execution;
@@ -11,12 +13,14 @@ pub mod github_import;
 mod kernel;
 pub mod mcp_query;
 pub mod project;
+pub mod project_memory;
 pub mod project_pulse;
 pub mod repository;
 pub mod session;
 pub mod snapshot;
 pub mod workspace;
 
+pub use achievement::{AchievementError, AchievementInput, AchievementKernel};
 pub use ai_candidate::{AiCandidateError, AiCandidateKernel};
 pub use ai_provider::{AiProviderError, AiProviderKernel};
 pub use codex_execution::{CodexExecutionError, CodexExecutionKernel};
@@ -30,6 +34,10 @@ pub use mcp_query::{
     EvidenceSummaryView, EvidenceView, GitActivityView, McpQueryError, McpQueryKernel,
     ProjectIdentityView, ProjectOverviewView, ProjectPulseView, RecentSessionView,
     RecommendedNextStepView,
+};
+pub use project_memory::{
+    DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiContext,
+    ProjectMemoryError, ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
 };
 pub use project_pulse::{ProjectPulseError, ProjectPulseKernel};
 pub use repository::{RepositoryKernel, RepositoryKernelError};

@@ -1,3 +1,4 @@
+mod achievement_repository;
 mod activity_repository;
 pub mod ai_client;
 pub mod app_preferences;
@@ -7,5 +8,6 @@ pub mod context_renderer;
 pub mod database;
 pub mod git;
 pub mod github;
+mod memory_repository;
 pub mod repositories;
 pub mod secret_store;

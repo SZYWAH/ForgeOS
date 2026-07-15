@@ -6,7 +6,7 @@ use tokio::{process::Command, time::timeout};
 
 use crate::{
     domain::{validate_commit_sha, DiffSummary},
-    ports::{GitAdapter, GitAdapterError, GitCommit, GitInspection},
+    ports::{GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection},
 };
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -180,6 +180,70 @@ impl GitAdapter for GitCliAdapter {
             .into_iter()
             .next()
             .ok_or_else(|| GitAdapterError::InvalidOutput("commit record is empty".into()))
+    }
+
+    async fn list_commit_history(
+        &self,
+        path: &str,
+        previous_head: Option<&str>,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<GitCommitHistory, GitAdapterError> {
+        let head = text(
+            self.run_required(path, &["rev-parse", "--verify", "HEAD"])
+                .await?,
+        )?;
+        let head_commit = validate_commit_sha(head.trim())
+            .map_err(|error| GitAdapterError::InvalidOutput(error.to_string()))?;
+        let previous_head = previous_head
+            .map(validate_commit_sha)
+            .transpose()
+            .map_err(|error| GitAdapterError::InvalidOutput(error.to_string()))?;
+        if previous_head.as_deref() == Some(head_commit.as_str()) {
+            return Ok(GitCommitHistory {
+                head_commit,
+                commits: vec![],
+                full_rescan: false,
+            });
+        }
+
+        let incremental = if let Some(previous) = previous_head.as_deref() {
+            self.run_optional(path, &["merge-base", "--is-ancestor", previous, "HEAD"])
+                .await?
+                .is_some()
+        } else {
+            false
+        };
+        let limit = limit.clamp(1, 2_000).to_string();
+        let format = format!("--format={LOG_FORMAT}");
+        let output = if incremental {
+            let range = format!("{}..HEAD", previous_head.as_deref().unwrap_or_default());
+            self.run_required(
+                path,
+                &["log", "-n", &limit, "--date=iso-strict", &format, &range],
+            )
+            .await?
+        } else {
+            let since = format!("--since={}", since.to_rfc3339());
+            self.run_required(
+                path,
+                &[
+                    "log",
+                    "-n",
+                    &limit,
+                    "--date=iso-strict",
+                    &since,
+                    &format,
+                    "HEAD",
+                ],
+            )
+            .await?
+        };
+        Ok(GitCommitHistory {
+            head_commit,
+            commits: parse_commits(&text(output)?)?,
+            full_rescan: !incremental,
+        })
     }
 }
 

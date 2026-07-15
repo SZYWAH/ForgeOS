@@ -66,15 +66,43 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             'codex_connector_settings', 'project_activity_settings', \
             'project_activity_sync_runs', 'codex_sync_cursors', \
             'codex_activity_observations', 'project_pulses', 'project_pulse_sources', \
-            'app_preferences'\
+            'app_preferences', 'repository_commit_observations', \
+            'repository_history_cursors', 'project_achievements', \
+            'project_achievement_sources'\
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 27 {
+    if table_count != 31 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
+        ));
+    }
+
+    let project_history_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('repository_commit_observations') \
+         WHERE name IN ('repository_id', 'project_id', 'commit_sha', 'message', \
+         'author_name', 'authored_at', 'source_hash')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if project_history_columns != 7 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS repository history schema is incomplete".to_owned(),
+        ));
+    }
+
+    let achievement_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('project_achievements') \
+         WHERE name IN ('project_id', 'category', 'title', 'result', 'status', \
+         'source_mode', 'featured', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if achievement_columns != 8 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS achievement memory schema is incomplete".to_owned(),
         ));
     }
 
