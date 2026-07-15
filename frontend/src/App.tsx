@@ -1,7 +1,6 @@
-import { HashRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { WorkspaceGate } from "./components/WorkspaceGate";
-import { DashboardPage } from "./pages/DashboardPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProjectOverviewPage } from "./pages/ProjectOverviewPage";
@@ -26,7 +25,7 @@ function App() {
         <HashRouter>
           <Routes>
             <Route element={<AppLayout workspace={workspace} />}>
-              <Route index element={<DashboardPage />} />
+              <Route index element={<Navigate replace to="/projects" />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="projects/:projectId" element={<ProjectOverviewPage />} />
               <Route path="projects/:projectId/pulse" element={<ProjectPulsePage />} />

@@ -89,21 +89,13 @@ describe("ProjectOverviewPage document workbench", () => {
     const { container } = renderPage();
 
     await screen.findByRole("heading", { name: "ForgeOS" });
-    const navigation = screen.getByRole("navigation", { name: "工作区" });
+    const navigation = screen.getByRole("navigation", { name: "项目研发记忆" });
     expect(navigation).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "概览" })).toHaveAttribute("aria-current", "page");
-    for (const label of ["当前状态", "开发记录", "项目资料", "代码仓库", "AI 协作"]) {
+    for (const label of ["研发历史", "成果与资料", "AI 项目上下文"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
-
-    const more = screen.getByText("更多");
-    const disclosure = more.closest("details");
-    expect(disclosure).not.toHaveAttribute("open");
-    fireEvent.click(more);
-    expect(disclosure).toHaveAttribute("open");
-    for (const label of ["导入 GitHub 项目", "AI 建议", "给 Codex 的任务", "执行记录"]) {
-      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
-    }
+    expect(screen.queryByText("更多")).not.toBeInTheDocument();
 
     expect(screen.getByTestId("pulse-card")).toHaveAttribute("data-variant", "document");
     expect(screen.getByTestId("session-card")).toHaveAttribute("data-variant", "inline");

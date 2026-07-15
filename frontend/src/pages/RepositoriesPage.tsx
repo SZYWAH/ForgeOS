@@ -142,38 +142,6 @@ export function RepositoriesPage() {
     }
   }
 
-  async function createCommitEvidence(sha: string) {
-    if (!projectId || !selected) return;
-    setWorking(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const evidence = await repositoryApi.createCommitEvidence(projectId, selected.repository.id, sha);
-      setEvidences((current) => [evidence, ...current]);
-      setNotice(t("repository.commitMaterialCreated"));
-    } catch (createError) {
-      setError(getErrorMessage(createError));
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function createStatusEvidence() {
-    if (!projectId || !selected) return;
-    setWorking(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const evidence = await repositoryApi.createStatusEvidence(projectId, selected.repository.id);
-      setEvidences((current) => [evidence, ...current]);
-      setNotice(t("repository.statusMaterialCreated"));
-    } catch (createError) {
-      setError(getErrorMessage(createError));
-    } finally {
-      setWorking(false);
-    }
-  }
-
   if (loading) return <p className="loading-copy">{t("common.loading")}…</p>;
   if (!project || !projectId) {
     return <section className="panel not-found"><h1>{t("repository.title")}</h1><p>{error ?? t("repository.projectMissing")}</p></section>;
@@ -221,12 +189,11 @@ export function RepositoriesPage() {
             <section className="panel repository-detail-panel">
               <div className="panel-header repository-detail-header"><div><h2>{tail(selected.repository.path)}</h2><CompactIdentifier copyable label={t("repository.location")} value={selected.repository.path} /></div><button className="secondary-button" disabled={working || archived} onClick={() => void refresh()} type="button">{t("repository.refresh")}</button></div>
               <WorkingCopyView record={selected} />
-              <div className="repository-evidence-actions"><span>{t("repository.createMaterialDescription")}</span><button className="secondary-button" disabled={working || archived} onClick={() => void createStatusEvidence()} type="button">{t("repository.createStatusMaterial")}</button></div>
             </section>
 
             <section className="panel repository-commits-panel">
               <div className="panel-header"><div><h2>{t("repository.recentCommits")}</h2><p>{selected.recentCommits.length > 0 ? "10" : t("repository.refresh")}</p></div></div>
-              {selected.recentCommits.length === 0 ? <p className="empty-state">{t("repository.noCommits")}</p> : <div className="repository-commit-list">{selected.recentCommits.map((commit) => <article key={commit.sha}><div><code>{commit.sha.slice(0, 12)}</code><strong>{commit.message}</strong><small>{commit.authorName} · {formatUpdatedAt(commit.authoredAt)}</small></div><button className="secondary-button" disabled={working || archived} onClick={() => void createCommitEvidence(commit.sha)} type="button">{t("repository.createCommitMaterial")}</button></article>)}</div>}
+              {selected.recentCommits.length === 0 ? <p className="empty-state">{t("repository.noCommits")}</p> : <div className="repository-commit-list">{selected.recentCommits.map((commit) => <article key={commit.sha}><div><code>{commit.sha.slice(0, 12)}</code><strong>{commit.message}</strong><small>{commit.authorName} · {formatUpdatedAt(commit.authoredAt)}</small></div></article>)}</div>}
             </section>
 
             <section className="panel repository-evidence-panel">

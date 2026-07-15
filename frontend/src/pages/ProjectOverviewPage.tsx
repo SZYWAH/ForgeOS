@@ -5,9 +5,15 @@ import { CurrentSessionCard } from "../components/CurrentSessionCard";
 import { CurrentSnapshotCard } from "../components/CurrentSnapshotCard";
 import { ProjectPulseCard } from "../components/ProjectPulseCard";
 import { ProjectRuntimeStatusCard } from "../components/ProjectRuntimeStatusCard";
+import { ProjectMemoryNav } from "../components/ProjectMemoryNav";
+import { CollapsibleText } from "../components/content/ContentGovernance";
 import { useProjectOverviewWorkbench } from "../hooks/useProjectOverviewWorkbench";
+import { achievementApi } from "../api/achievements";
+import { projectMemoryApi } from "../api/project-memory";
 import type { Project } from "../types/project";
-import { formatUpdatedAt, lifecycleLabel, statusLabel } from "../utils/format";
+import type { ProjectAchievement } from "../types/achievement";
+import type { DevelopmentHistoryItem } from "../types/project-memory";
+import { displayLabel, formatUpdatedAt, lifecycleLabel, statusLabel } from "../utils/format";
 import { useTranslation } from "react-i18next";
 
 export function ProjectOverviewPage() {
@@ -44,6 +50,22 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
   const archived = project.status === "archived";
   const activity = useProjectOverviewWorkbench({ projectId: project.id, archived });
   const pendingReview = activity.pulse?.status === "pending_review";
+  const [history, setHistory] = useState<DevelopmentHistoryItem[]>([]);
+  const [achievements, setAchievements] = useState<ProjectAchievement[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      projectMemoryApi.overview(project.id),
+      achievementApi.list(project.id),
+    ]).then(([memory, achievementValues]) => {
+      if (!cancelled) {
+        setHistory(memory.recentHistory);
+        setAchievements(achievementValues.filter((value) => value.status === "confirmed").slice(0, 3));
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [project.id]);
 
   return (
     <div className="page-stack project-overview-document">
@@ -73,7 +95,19 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
         </div>
       </header>
 
-      <ProjectNavigation projectId={project.id} />
+      <ProjectMemoryNav projectId={project.id} />
+
+      <section className="project-identity-brief" aria-labelledby="project-identity-heading">
+        <header>
+          <div><h2 id="project-identity-heading">{t("memory.projectIdentity")}</h2><p>{t("memory.projectIdentityDescription")}</p></div>
+        </header>
+        <div className="project-identity-brief__grid">
+          <article><span>{t("memory.vision")}</span><CollapsibleText collapsedLines={2} value={project.vision || project.description || t("common.notProvided")} /></article>
+          <article><span>{t("memory.targetUser")}</span><CollapsibleText collapsedLines={2} value={project.targetUser || t("common.notProvided")} /></article>
+          <article><span>{t("memory.scope")}</span><CollapsibleText collapsedLines={2} value={project.scope || t("common.notProvided")} /></article>
+          <article><span>{t("memory.techStack")}</span><CollapsibleText collapsedLines={2} value={project.techStack || t("common.notProvided")} /></article>
+        </div>
+      </section>
 
       <ProjectPulseCard
         activityState={activity}
@@ -82,6 +116,8 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
         projectId={project.id}
         variant="document"
       />
+
+      <CurrentSnapshotCard archived={archived} projectId={project.id} projectName={project.name} variant="reference" />
 
       <section className="project-engineering" aria-labelledby="project-engineering-title">
         <header>
@@ -94,44 +130,19 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
         </div>
       </section>
 
-      <CurrentSnapshotCard archived={archived} projectId={project.id} projectName={project.name} variant="reference" />
+      <section className="memory-overview-section">
+        <header><div><h2>{t("memory.recentHistory")}</h2><p>{t("memory.historyDescription")}</p></div><Link to={`/projects/${project.id}/sessions`}>{t("memory.viewAllHistory")}</Link></header>
+        {history.length === 0 ? <p className="memory-empty-copy">{t("memory.noHistory")}</p> : <div className="memory-overview-list">{history.map((item) => <article key={item.id}><div><span className={`memory-trust memory-trust--${item.trustStatus}`}>{t(`memory.${item.trustStatus}`)}</span><time>{formatUpdatedAt(item.startedAt)}</time></div><strong>{item.title}</strong><p>{item.outcome || item.activity || item.goal}</p><small>{t("memory.turnCount", { count: item.codexTurnCount })} · {t("memory.commitCount", { count: item.gitCommits.length })}</small></article>)}</div>}
+      </section>
+
+      <section className="memory-overview-section">
+        <header><div><h2>{t("memory.recentAchievements")}</h2><p>{t("memory.achievementsDescription")}</p></div><Link to={`/projects/${project.id}/evidence`}>{t("memory.viewAllAchievements")}</Link></header>
+        {achievements.length === 0 ? <p className="memory-empty-copy">{t("memory.noAchievements")}</p> : <div className="memory-overview-list">{achievements.map((item) => <article key={item.id}><div><span>{displayLabel(item.category)}</span>{item.featured ? <span>{t("memory.featured")}</span> : null}</div><strong>{item.title}</strong><p>{item.result}</p></article>)}</div>}
+      </section>
     </div>
   );
 }
 
 function syncStageLabel(value: string, t: (key: string) => string) {
   return ({ connecting: t("projects.syncing"), reading_codex: t("pulse.readingCodex"), reading_git: t("pulse.readingGit"), analyzing: t("pulse.analyzing"), persisting: t("pulse.persisting") } as Record<string, string>)[value] ?? t("projects.syncing");
-}
-
-function ProjectNavigation({ projectId }: { projectId: string }) {
-  const { t } = useTranslation();
-  const projectNav = [
-    ["snapshot", t("navigation.currentState")],
-    ["sessions", t("navigation.developmentLog")],
-    ["evidence", t("navigation.projectMaterials")],
-    ["repositories", t("navigation.codeRepository")],
-    ["context", t("navigation.aiCollaboration")],
-  ] as const;
-  const moreNav = [
-    ["/github-import", t("navigation.importGithub")],
-    ["candidates", t("navigation.aiSuggestions")],
-    ["codex-tasks", t("navigation.codexTasks")],
-    ["codex-executions", t("navigation.executionRecords")],
-  ] as const;
-  return (
-    <nav className="project-tabs" aria-label={t("navigation.workspace")}>
-      <div className="project-tabs__scroll">
-        <div className="project-tabs__track">
-          <Link aria-current="page" className="active" to={`/projects/${projectId}`}>{t("navigation.overview")}</Link>
-          {projectNav.map(([path, label]) => <Link key={path} to={`/projects/${projectId}/${path}`}>{label}</Link>)}
-        </div>
-      </div>
-      <details className="project-tabs__more">
-        <summary>{t("navigation.more")}</summary>
-        <div className="project-tabs__menu">
-          {moreNav.map(([path, label]) => <Link key={path} to={path.startsWith("/") ? path : `/projects/${projectId}/${path}`}>{label}</Link>)}
-        </div>
-      </details>
-    </nav>
-  );
 }

@@ -86,6 +86,7 @@ function syncRun(status: SyncStatus = "succeeded"): ActivitySyncRun {
     threadsScanned: 7,
     turnsImported: 12,
     observationsCreated: 3,
+    commitsImported: 0,
     aiInvoked: true,
     startedAt: NOW,
     completedAt: status === "queued" || status === "running" ? null : NOW,

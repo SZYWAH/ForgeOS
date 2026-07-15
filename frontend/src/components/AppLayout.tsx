@@ -9,9 +9,7 @@ export function AppLayout({ workspace }: { workspace: Workspace }) {
       <div className="brand-block"><span className="brand-mark">F</span><div><strong>ForgeOS</strong><span>Personal Engineering OS</span></div></div>
       <nav className="main-nav" aria-label={t("navigation.workspace")}>
         <span className="main-nav__group">{t("navigation.workspace")}</span>
-        <NavLink end to="/">{t("navigation.dashboard")}</NavLink>
-        <NavLink to="/projects">{t("navigation.projectList")}</NavLink>
-        <NavLink to="/github-import">{t("navigation.importGithub")}</NavLink>
+        <NavLink to="/projects">{t("navigation.projects")}</NavLink>
         <span className="main-nav__group">{t("navigation.ai")}</span>
         <NavLink to="/settings/ai-providers">{t("navigation.aiServices")}</NavLink>
         <span className="main-nav__group">{t("navigation.settings")}</span>

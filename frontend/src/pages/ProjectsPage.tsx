@@ -1,16 +1,16 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getErrorMessage, projectKernelApi } from "../api/project-kernel";
-import { ProjectTable } from "../components/ProjectTable";
+import { useTranslation } from "react-i18next";
+import { projectKernelApi, getErrorMessage } from "../api/project-kernel";
+import { projectMemoryApi } from "../api/project-memory";
+import { EmptyState, PageIntro } from "../components/ui/PlainLanguage";
 import {
   LIFECYCLE_STAGES,
   PROJECT_STATUSES,
   type CreateProjectInput,
-  type ProjectSummary,
 } from "../types/project";
-import { lifecycleLabel, statusLabel, toProjectSlug } from "../utils/format";
-import { useTranslation } from "react-i18next";
-import { PageIntro } from "../components/ui/PlainLanguage";
+import type { ProjectMemorySummary } from "../types/project-memory";
+import { formatRelativeTime, lifecycleLabel, statusLabel, toProjectSlug } from "../utils/format";
 
 const INITIAL_FORM: CreateProjectInput = {
   slug: "",
@@ -29,45 +29,33 @@ const INITIAL_FORM: CreateProjectInput = {
 export function ProjectsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [form, setForm] = useState<CreateProjectInput>(INITIAL_FORM);
+  const [projects, setProjects] = useState<ProjectMemorySummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [listError, setListError] = useState<string>();
-  const [formError, setFormError] = useState<string>();
+  const [error, setError] = useState<string>();
   const [formOpen, setFormOpen] = useState(false);
-  const [slugWasEdited, setSlugWasEdited] = useState(false);
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    void loadProjects();
+    void load();
   }, []);
 
-  async function loadProjects() {
+  async function load() {
     setLoading(true);
-    setListError(undefined);
-
+    setError(undefined);
     try {
-      setProjects(await projectKernelApi.listProjects());
-    } catch (loadError) {
-      setListError(getErrorMessage(loadError));
+      setProjects(await projectMemoryApi.listSummaries());
+    } catch (reason) {
+      setError(getErrorMessage(reason));
     } finally {
       setLoading(false);
     }
   }
 
-  function updateName(name: string) {
-    setForm((current) => ({
-      ...current,
-      name,
-      slug: slugWasEdited ? current.slug : toProjectSlug(name),
-    }));
-  }
-
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function createProject(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setFormError(undefined);
-
+    setError(undefined);
     try {
       const project = await projectKernelApi.createProject({
         ...form,
@@ -76,167 +64,88 @@ export function ProjectsPage() {
         description: form.description.trim(),
       });
       navigate(`/projects/${project.id}`);
-    } catch (submissionError) {
-      setFormError(getErrorMessage(submissionError));
+    } catch (reason) {
+      setError(getErrorMessage(reason));
     } finally {
       setSubmitting(false);
     }
   }
 
+  const active = useMemo(
+    () => projects.filter((project) => project.status !== "archived"),
+    [projects],
+  );
+  const archived = useMemo(
+    () => projects.filter((project) => project.status === "archived"),
+    [projects],
+  );
+
   return (
-    <div className="page-stack">
-      <PageIntro title={t("projects.title")} description={t("projects.description")} primaryAction={<button className="primary-button" onClick={() => setFormOpen((open) => !open)}>{formOpen ? t("common.close") : t("projects.createProject")}</button>} />
+    <div className="page-stack memory-projects-page">
+      <PageIntro
+        title={t("projects.title")}
+        description={t("memory.projectListDescription")}
+        primaryAction={
+          <details className="add-project-menu">
+            <summary className="primary-button">{t("memory.addProject")}</summary>
+            <div className="add-project-menu__items">
+              <button type="button" onClick={() => setFormOpen(true)}>{t("memory.newProject")}</button>
+              <button type="button" onClick={() => navigate("/github-import")}>{t("memory.importFromGithub")}</button>
+            </div>
+          </details>
+        }
+      />
 
       {formOpen ? (
-        <section className="panel create-panel">
-          <div className="panel-header">
-            <div>
-              <h2>{t("projects.createProject")}</h2>
-              <p>{t("projects.createDescription")}</p>
-            </div>
+        <section className="memory-create-panel" aria-label={t("memory.newProject")}>
+          <div className="memory-create-panel__heading">
+            <div><h2>{t("memory.newProject")}</h2><p>{t("memory.createProjectHelp")}</p></div>
+            <button className="text-button" type="button" onClick={() => setFormOpen(false)}>{t("common.close")}</button>
           </div>
-          <form className="project-form compact-form" onSubmit={handleCreate}>
+          <form className="project-form compact-form" onSubmit={createProject}>
             <div className="form-grid">
-              <label>
-                {t("projects.name")} <span className="required">*</span>
-                <input
-                  autoFocus
-                  required
-                  value={form.name}
-                  onChange={(event) => updateName(event.target.value)}
-                  placeholder="CodeLens-Pro"
-                />
-              </label>
-              <label>
-                {t("projects.slug")} <span className="required">*</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={64}
-                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                  value={form.slug}
-                  onChange={(event) => {
-                    setSlugWasEdited(true);
-                    setForm((current) => ({ ...current, slug: event.target.value }));
-                  }}
-                  placeholder="codelens-pro"
-                />
-                <small>{t("projects.slugHelp")}</small>
-              </label>
-              <label className="span-2">
-                {t("projects.projectDescription")}
-                <textarea
-                  rows={3}
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  placeholder={t("projects.descriptionPlaceholder")}
-                />
-              </label>
-              <label>
-                {t("projects.projectStatus")}
-                <select
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      status: event.target.value as CreateProjectInput["status"],
-                    }))
-                  }
-                >
-                  {PROJECT_STATUSES.filter((status) => status !== "archived").map(
-                    (status) => (
-                      <option key={status} value={status}>
-                        {statusLabel(status)}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-              <label>
-                {t("projects.lifecycle")}
-                <select
-                  value={form.lifecycleStage}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      lifecycleStage: event.target
-                        .value as CreateProjectInput["lifecycleStage"],
-                    }))
-                  }
-                >
-                  {LIFECYCLE_STAGES.map((stage) => (
-                    <option key={stage} value={stage}>
-                      {lifecycleLabel(stage)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("projects.priority")}
-                <input
-                  max={100}
-                  min={0}
-                  type="number"
-                  value={form.priority}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      priority: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
+              <label>{t("projects.name")}<input autoFocus required maxLength={200} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value, slug: toProjectSlug(event.target.value) }))} /></label>
+              <label>{t("projects.slug")}<input required minLength={2} maxLength={64} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))} /></label>
+              <label className="span-2">{t("memory.shortDescription")}<textarea rows={2} maxLength={2000} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+              <label>{t("projects.projectStatus")}<select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CreateProjectInput["status"] }))}>{PROJECT_STATUSES.filter((value) => value !== "archived").map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></label>
+              <label>{t("projects.lifecycle")}<select value={form.lifecycleStage} onChange={(event) => setForm((current) => ({ ...current, lifecycleStage: event.target.value as CreateProjectInput["lifecycleStage"] }))}>{LIFECYCLE_STAGES.map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>
             </div>
-            {formError ? <div className="error-banner">{formError}</div> : null}
-            <div className="form-actions">
-              <button
-                className="secondary-button"
-                onClick={() => setFormOpen(false)}
-                type="button"
-              >
-                {t("common.cancel")}
-              </button>
-              <button className="primary-button" disabled={submitting} type="submit">
-                {submitting ? t("common.saving") : t("projects.createProject")}
-              </button>
-            </div>
+            <div className="form-actions"><button type="button" className="secondary-button" onClick={() => setFormOpen(false)}>{t("common.cancel")}</button><button className="primary-button" disabled={submitting} type="submit">{submitting ? t("common.saving") : t("projects.createProject")}</button></div>
           </form>
         </section>
       ) : null}
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>{t("projects.all")}</h2>
-            <p>{loading ? `${t("common.loading")}…` : t("projects.workspaceCount", { count: projects.length })}</p>
-          </div>
-        </div>
-        {listError ? (
-          <div className="load-error-state">
-            <div className="error-banner">{listError}</div>
-            <button
-              className="secondary-button"
-              onClick={() => void loadProjects()}
-              type="button"
-            >
-              {t("common.retry")}
-            </button>
-          </div>
-        ) : null}
-        {!loading && !listError ? (
-          <ProjectTable
-            projects={projects}
-            emptyMessage={t("projects.empty")}
-          />
-        ) : loading ? (
-          <p className="loading-copy">{t("common.loading")}…</p>
-        ) : null}
-      </section>
+      {error ? <div className="error-banner">{error}<button className="text-button" type="button" onClick={() => void load()}>{t("common.retry")}</button></div> : null}
+      {loading ? <p className="loading-copy">{t("memory.loadingProjects")}</p> : null}
+      {!loading && !error && active.length === 0 ? <EmptyState title={t("memory.noProjects")} description={t("memory.noProjectsHelp")} action={<button className="primary-button" type="button" onClick={() => setFormOpen(true)}>{t("memory.newProject")}</button>} /> : null}
+      {!loading && active.length > 0 ? <div className="memory-project-list">{active.map((project) => <ProjectMemoryRow key={project.projectId} project={project} onOpen={() => navigate(`/projects/${project.projectId}`)} />)}</div> : null}
+      {archived.length > 0 ? <details className="archived-projects"><summary>{t("memory.archivedProjects", { count: archived.length })}</summary><div className="memory-project-list">{archived.map((project) => <ProjectMemoryRow key={project.projectId} project={project} onOpen={() => navigate(`/projects/${project.projectId}`)} />)}</div></details> : null}
     </div>
+  );
+}
+
+function ProjectMemoryRow({ project, onOpen }: { project: ProjectMemorySummary; onOpen: () => void }) {
+  const { t } = useTranslation();
+  const needsReview = project.pulseStatus === "pending_review";
+  const warnings = [
+    project.blockerCount > 0 ? t("memory.currentProblemsCount", { count: project.blockerCount }) : null,
+    project.dirtyFiles > 0 ? t("memory.uncommittedFilesCount", { count: project.dirtyFiles }) : null,
+    (project.aheadCount ?? 0) > 0 ? t("projects.aheadCount", { count: project.aheadCount }) : null,
+    project.pulseFreshness === "stale" ? t("memory.staleProjectState") : null,
+  ].filter(Boolean) as string[];
+  return (
+    <article className="memory-project-row">
+      <button className="memory-project-row__main" type="button" onClick={onOpen}>
+        <span className="memory-project-row__title"><strong>{project.name}</strong><span>{statusLabel(project.status)} · {lifecycleLabel(project.lifecycleStage)}</span></span>
+        <span className="memory-project-row__goal"><small>{t("projects.currentGoal")}</small><strong>{project.currentGoal || t("memory.noCurrentGoal")}</strong></span>
+        <span className="memory-project-row__next"><small>{t("projects.nextSteps")}</small><span>{project.nextSteps[0] || t("memory.noNextStep")}</span></span>
+        <span className="memory-project-row__meta"><small>{t("memory.recentActivity")}</small><span>{project.recentActivityAt ? formatRelativeTime(project.recentActivityAt) : t("common.none")}</span></span>
+      </button>
+      <div className="memory-project-row__attention">
+        {needsReview ? <span className="status-badge warning">{t("projects.pendingReview")}</span> : null}
+        {project.pendingAchievementCount > 0 ? <span className="status-badge warning">{t("memory.draftAchievements")} {project.pendingAchievementCount}</span> : null}
+        {warnings.map((value) => <span key={value}>{value}</span>)}
+      </div>
+    </article>
   );
 }
