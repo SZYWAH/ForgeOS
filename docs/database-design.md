@@ -769,3 +769,22 @@ Activity Episode 是运行时投影。新 Pulse 的来源链只写入当前 Epis
 新增 nullable `upstream_branch`、`ahead_count`、`behind_count`。NULL 表示无 upstream 或本地引用无法计算；计数必须非负。不执行 `git fetch`，因此它们只代表本机最后一次远端引用状态。
 
 一个 Project 可以关联多个 Repository。每次同步为各 Repository 追加 WorkingCopy；Pulse 来源指纹和规则分析聚合全部 WorkingCopy，`working_copy_id` 仅保存本次同步的首个稳定引用，完整 Git 状态仍由 WorkingCopy 历史保存。
+
+## D7 Git 研发历史
+
+`0017_repository_commit_observations.sql` 增加：
+
+- `repository_commit_observations`：保存 Repository、Project、SHA、Commit Subject、作者名称、提交时间、观察时间和来源 Hash。`(repository_id, commit_sha)` 唯一。
+- `repository_history_cursors`：保存首次回溯完成状态、上次扫描 HEAD、成功时间和乐观版本。
+- `project_activity_sync_runs.commits_imported`：记录本次新增 Commit 元数据数量。
+
+Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对路径。Repository 与 Project 通过复合外键保持隔离。
+
+## D7 结构化成果
+
+`0018_project_achievements.sql` 增加：
+
+- `project_achievements`：保存 feature、problem_solution、release、technical_highlight 四类成果，以及问题、方案、结果、验证、影响、技术与简历表述。
+- `project_achievement_sources`：保存 Pulse、Snapshot、Session、Evidence、Codex Observation 或 Repository Commit 来源。
+
+状态为 `draft / confirmed / archived`。系统生成内容只能是 Draft；Confirmed 必须包含标题和结果，并且方案、验证或影响至少一项非空。同一 Pulse 最多生成一条成果草稿。触发器验证每种来源存在且属于同一 Project，跨项目来源写入会被拒绝。

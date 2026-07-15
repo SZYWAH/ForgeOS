@@ -217,3 +217,14 @@ ForgeOS 的页面只负责展示摘要和支持决策，数据库中的原始事
 - 桌面宽度大于 900px 时，`.content-scroll` 是唯一页面级滚动区域；窄窗口恢复自然文档滚动。
 - 概览允许清理旧 Codex 附件包装形成可读预览，但展开后必须显示未经修改的原始字段值。
 - 新增长内容页面优先复用 `CollapsibleText`、`BoundedList`、`RecordDisclosure` 和 `CompactIdentifier`，不得重新引入分散的固定高度。
+
+## Development Memory Contract
+
+- 项目一级导航只包含概览、研发历史、成果与资料、AI 项目上下文。
+- 页面首屏最多一个主操作；高级配置和兼容功能不得重新占据一级导航。
+- 研发历史必须使用共享 `ActivityEpisodeBuilder`，禁止在前端或另一个 Kernel 中复制 Episode 规则。
+- Dashboard 使用批量 Project Memory Summary IPC，禁止前端按项目发起 Pulse/Repository N+1 请求。
+- Git 历史只允许保存 Commit Subject、作者名称、SHA 和时间；禁止保存邮箱、Diff、Body 或文件内容。
+- 系统整理出的成果只能保存为 Draft，必须经过用户确认才能成为正式成果。
+- MCP 的 Repository Path 只用于本次定位，不得记录、返回或写入 Context。
+- Candidate、Task Proposal 与 Execution 已冻结；不得在新页面重新引入创建、审批或状态流转入口。

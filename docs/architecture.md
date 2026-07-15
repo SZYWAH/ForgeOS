@@ -533,3 +533,28 @@ i18next 静态资源 + 状态字典 + 错误本地化
 - 页面标题、说明、主要操作、空状态、日期、枚举和错误提示进入显示层；Project、Snapshot、Session 等领域对象仍使用原有模型。
 - 用户填写内容、Git/GitHub 原文、AI 回复、Context Pack、MCP 返回和哈希不经过翻译，也不会因语言切换重新计算。
 - 英文术语提示是中文界面的辅助显示，不进入导航、主要按钮或正式数据。
+
+## D7 研发记忆聚合架构
+
+```mermaid
+flowchart LR
+  Codex["Codex Observation"] --> Episode["ActivityEpisodeBuilder"]
+  Git["Repository Commit Observation"] --> History["ProjectMemoryQueryKernel"]
+  Episode --> History
+  Session["Development Session"] --> History
+  Pulse["Project Pulse"] --> History
+  History --> UI["四页项目工作台"]
+  History --> MCP["五个只读 MCP 工具"]
+  Pulse --> Draft["Achievement Draft"]
+  Draft --> Confirm["人工确认成果"]
+```
+
+- `ActivityEpisodeBuilder` 从 Pulse 中提取为共享 Application 组件，Pulse 与研发历史不得复制分段规则。
+- `ProjectMemoryQueryKernel` 提供项目批量摘要、概览、游标历史、确定性 AI Context 和 Repository Path 定位。
+- Git 首次回溯近一年、最多 2,000 条安全 Commit 元数据；不保存 Diff、正文、邮箱或绝对路径输出。
+- 研发历史不建立重复事件表。Codex Episode 为主要单位，时间窗内 Commit 附加到活动，未匹配 Commit 按仓库和自然日聚合。
+- Achievement 是正式成果领域。规则只生成 Draft；确认、更新与归档继续经过 Domain、Application、Repository 和 IPC。
+- Dashboard 与 Project List 合并；React 使用一个批量 IPC 获取项目记忆摘要，避免逐项目请求。
+- Candidate、Task Proposal 和 Execution 只保留 list/get Command；写 Command 不再注册到 Tauri。
+
+MCP 最终工具面为 `list_projects`、`get_project_context`、`get_project_history`、`get_project_achievements`、`build_ai_context`。所有核心工具接受 Project ID 或 Repository Path 二选一。路径只用于当前请求匹配，支持 Windows 大小写不敏感和子目录匹配，嵌套仓库选择最长注册路径；路径不进入日志和返回结果。

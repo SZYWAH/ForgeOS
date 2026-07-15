@@ -851,3 +851,46 @@ D6.4：应用级中英文切换、领域术语显示边界与全页面通俗表�
 ## 下一步计划
 
 等待用户验收 D6.4。当前不自动提交 Git，也不进入 Codex 执行、Agent、MCP 写入、自动翻译或新的业务领域开发。
+
+# 2026-07-15 — ForgeOS D7 研发记忆助手聚焦重构
+
+## 当前阶段
+
+D7：统一研发历史、结构化成果与四页项目工作台。
+
+## 完成内容
+
+- 新增 Migration 0017：安全 Commit 元数据观察、近一年/2,000 条首次回溯、增量游标与 SyncRun Commit 计数。
+- 从 Pulse 提取共享 `ActivityEpisodeBuilder`，新增 `ProjectMemoryQueryKernel`，将 Codex Episode、Git Commit 与人工 Session 聚合为游标分页研发历史。
+- 新增 Migration 0018 与 Achievement Domain，支持系统成果草稿、人工确认、来源链、重点成果、简历表述和归档。
+- Pulse 确认 eligible 活动时在同一事务创建一个成果草稿；重复确认不会重复生成，失败完整回滚。
+- 全局导航收敛为项目、AI 服务、应用设置；项目一级页面收敛为概览、研发历史、成果与资料、AI 项目上下文。
+- 项目总览改为批量记忆摘要；概览补充项目身份、最近活动和已确认成果；研发历史不再平铺 Codex Turn。
+- AI 页面以固定项目上下文与复制为主，应用内 AI 和旧 Context Export 收入折叠区域，移除 Candidate 保存入口。
+- Candidate、Task Proposal、Execution 从导航移除并冻结为只读兼容页面；Tauri 取消注册对应写 Command。
+- MCP 收敛为五个只读工具，并支持 Project ID 或本地仓库目录二选一定位；不返回路径、Secret、原始对话、Diff 或作者邮箱。
+- 新增 ADR-018 与 ADR-019。
+
+## 安全边界
+
+- 不删除或回改 0001–0016，不迁移旧 Evidence 为 Achievement。
+- 不读取 Codex reasoning 或完整对话，不保存完整命令输出。
+- 不执行 Git 写操作、Codex、Agent 或 MCP 写入。
+- 自动成果始终为 Draft；AI 与 MCP 均不能修改正式事实。
+
+## 验证结果
+
+- `npm run typecheck`、`npm run test -- --run` 与 `npm run build` 通过；4 个测试文件共 36 项测试通过。生产构建仅保留既有的主包大于 500 kB 提示。
+- `cargo fmt --check`、主程序与 MCP `cargo check` 通过。
+- 主程序 `cargo test` 通过：73 项单元测试中 72 项通过，1 项需要本机 Codex 历史的 Smoke Test 按设计忽略；全部领域和数据库集成测试通过。
+- `cargo test --manifest-path forgeos-mcp/Cargo.toml` 通过；五工具白名单、仓库根目录/子目录匹配、Windows 大小写归一、嵌套仓库最长路径、项目隔离与敏感信息保护均通过。
+- 本机现有数据库从 Migration 0016 前向升级至 0018；升级前后 2 个 Project、355 条 Codex Observation、10 条 Pulse、13 条 Evidence、1 条 Snapshot 与 1 条 Session 保持不变。
+- 真实数据库 `integrity_check = ok`，`foreign_key_check = 0`；新 Commit Observation 与 Achievement 表初始为空，等待下一次项目同步和人工审核填充。
+- 发现 D6 开发期曾在 Migration 0013 应用后调整文件注释/内容，SQLx 校验和与真实库不一致。确认 0013 的表、列、索引和外键结构完全一致后，已先备份数据库，再对已知旧校验值执行受保护的元数据修复；0014–0016 校验值原本一致。
+- `git diff --check` 无空白错误。
+
+## 待实机验收
+
+- 在两个真实项目中分别执行一次“同步最新进展”，验证近一年 Commit 首次回溯和 355 条 Observation 的活动聚合展示。
+- 审核一个 eligible Pulse，确认只生成一个成果草稿；补充影响和简历表述后再人工确认。
+- 重启 Codex MCP，确认工具列表只显示新的五个只读工具，并从仓库子目录定位正确项目。
