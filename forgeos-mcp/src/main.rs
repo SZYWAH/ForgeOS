@@ -2,10 +2,8 @@ use std::{env, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Context};
 use forgeos_lib::{
-    application::McpQueryKernel,
-    infrastructure::{
-        context_renderer::MarkdownContextRenderer, database, repositories::SqliteProjectRepository,
-    },
+    application::ProjectMemoryQueryKernel,
+    infrastructure::{database, repositories::SqliteProjectRepository},
 };
 use rmcp::{transport::stdio, ServiceExt};
 
@@ -18,10 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| "unable to open the ForgeOS database in read-only mode")?;
     let repository = Arc::new(SqliteProjectRepository::new(database.pool));
-    let kernel = Arc::new(McpQueryKernel::new(
-        repository,
-        Arc::new(MarkdownContextRenderer),
-    ));
+    let kernel = Arc::new(ProjectMemoryQueryKernel::new(repository));
 
     // stdout belongs exclusively to the MCP STDIO transport.
     let service = ForgeOsMcpServer::new(kernel).serve(stdio()).await?;
