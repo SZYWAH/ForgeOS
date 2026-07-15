@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { getErrorMessage } from "../api/project-kernel";
 import { sessionKernelApi } from "../api/session-kernel";
 import type { DevelopmentSession } from "../types/session";
 import { formatUpdatedAt } from "../utils/format";
+import { CollapsibleText } from "./content/ContentGovernance";
 
 type CurrentSessionCardProps = {
   projectId: string;
   projectName: string;
   archived: boolean;
+  variant?: "default" | "compact" | "inline";
 };
 
 export function CurrentSessionCard({
   projectId,
-  projectName,
   archived,
+  variant = "default",
 }: CurrentSessionCardProps) {
+  const { t } = useTranslation();
   const [session, setSession] = useState<DevelopmentSession | null>();
   const [error, setError] = useState<string>();
   const loadGeneration = useRef(0);
@@ -43,16 +47,45 @@ export function CurrentSessionCard({
     };
   }, [loadSession]);
 
+  if (variant === "inline") {
+    return (
+      <section className="workbench-signal workbench-signal--session" aria-labelledby="workbench-session-title">
+        <div className="workbench-signal__heading">
+          <h2 id="workbench-session-title">{t("workbench.session")}</h2>
+          <Link to={`/projects/${projectId}/sessions`}>{session ? t("workbench.viewSession") : archived ? t("workbench.viewHistory") : t("workbench.startSession")}</Link>
+        </div>
+        {error ? (
+          <div className="workbench-signal__error">{t("workbench.sessionLoadFailed")}：{error}</div>
+        ) : session === undefined ? (
+          <div className="workbench-signal__skeleton" aria-label={t("workbench.loadingSession")} />
+        ) : session === null ? (
+          <>
+            <strong className="workbench-signal__value">{t("workbench.noOpenSession")}</strong>
+            <span className="workbench-signal__meta">{archived ? t("workbench.projectArchived") : t("workbench.sessionHint")}</span>
+          </>
+        ) : (
+          <>
+            <CollapsibleText className="workbench-signal__value" collapsedLines={2} expandedMaxHeight={220} previewMode="fact" value={session.goal} />
+            <span className="workbench-signal__meta">{t("workbench.inProgressSince", { time: formatUpdatedAt(session.startedAt) })}</span>
+          </>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section
-      className="panel session-card"
+      className={`panel session-card session-card--${variant}`}
       aria-labelledby="current-session-title"
     >
       <div className="panel-header session-card-header">
         <div>
-          <p className="session-kicker">开发会话 · Development Session</p>
-          <h2 id="current-session-title">当前开发会话</h2>
-          <p>记录 {projectName} 当前这次研发活动为什么开始，以及如何继续。</p>
+          <div className="context-card-kicker-row">
+            <p className="session-kicker">{t("workbench.session")}</p>
+            <span className="context-source-label context-source-label--confirmed">{t("workbench.confirmed")}</span>
+          </div>
+          <h2 id="current-session-title">{t("workbench.currentActivity")}</h2>
+          <p>{t("session.description")}</p>
         </div>
         {session !== undefined ? (
           <Link
@@ -69,11 +102,7 @@ export function CurrentSessionCard({
             }}
             to={`/projects/${projectId}/sessions`}
           >
-            {session
-              ? archived
-                ? "关闭会话"
-                : "继续会话"
-              : "开始会话"}
+            {session ? t("workbench.viewSession") : t("workbench.startSession")}
           </Link>
         ) : null}
       </div>
@@ -86,19 +115,19 @@ export function CurrentSessionCard({
             onClick={() => void loadSession()}
             type="button"
           >
-            重试
+            {t("common.retry")}
           </button>
         </div>
       ) : session === undefined ? (
-        <p className="loading-copy">正在加载当前会话…</p>
+        <p className="loading-copy">{t("workbench.loadingSession")}…</p>
       ) : session === null ? (
         <div className="session-empty-state">
           <div>
-            <strong>当前没有进行中的开发会话</strong>
+            <strong>{t("workbench.noOpenSession")}</strong>
             <p>
               {archived
-                ? "该项目已经归档，历史会话仍可查看。"
-                : "开始新的开发会话，明确这次研发活动的目标。"}
+                ? t("workbench.projectArchived")
+                : t("session.emptyDescription")}
             </p>
           </div>
           {!archived ? (
@@ -106,36 +135,36 @@ export function CurrentSessionCard({
               className="primary-button button-link"
               to={`/projects/${projectId}/sessions`}
             >
-              开始新的开发会话
+              {t("session.start")}
             </Link>
           ) : (
             <Link
               className="secondary-button button-link"
               to={`/projects/${projectId}/sessions`}
             >
-              查看历史
+              {t("workbench.viewHistory")}
             </Link>
           )}
         </div>
       ) : (
         <div className="session-card-body">
           <div className="session-card-goal">
-            <span>目标</span>
-            <p>{session.goal}</p>
+            <span>{t("session.goal")}</span>
+            <CollapsibleText collapsedLines={2} expandedMaxHeight={variant === "compact" ? 220 : 480} previewMode="fact" value={session.goal} />
           </div>
           <dl className="session-card-meta">
             <div>
-              <dt>开始时间</dt>
+              <dt>{t("common.createdAt")}</dt>
               <dd>{formatUpdatedAt(session.startedAt)}</dd>
             </div>
             <div>
-              <dt>状态</dt>
+              <dt>{t("common.status")}</dt>
               <dd>
-                <span className="session-status session-status--open">进行中</span>
+                <span className="session-status session-status--open">{t("session.open")}</span>
               </dd>
             </div>
             <div>
-              <dt>版本</dt>
+              <dt>{t("common.version")}</dt>
               <dd>v{session.version}</dd>
             </div>
           </dl>

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import type { ProjectSummary } from "../types/project";
 import {
   formatUpdatedAt,
@@ -12,6 +13,7 @@ type ProjectTableProps = {
 };
 
 export function ProjectTable({ projects, emptyMessage }: ProjectTableProps) {
+  const { t } = useTranslation();
   if (projects.length === 0) {
     return <div className="empty-state">{emptyMessage}</div>;
   }
@@ -21,11 +23,11 @@ export function ProjectTable({ projects, emptyMessage }: ProjectTableProps) {
       <table className="project-table">
         <thead>
           <tr>
-            <th>项目</th>
-            <th>状态</th>
-            <th>生命周期</th>
-            <th>优先级</th>
-            <th>更新时间</th>
+            <th>{t("navigation.projects")}</th>
+            <th>{t("common.status")}</th>
+            <th>{t("projects.lifecycle")}</th>
+            <th>{t("projects.priority")}</th>
+            <th>{t("common.updatedAt")}</th>
           </tr>
         </thead>
         <tbody>

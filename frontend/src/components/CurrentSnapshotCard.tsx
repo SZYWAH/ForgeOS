@@ -1,44 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { getErrorMessage } from "../api/project-kernel";
 import { snapshotKernelApi } from "../api/snapshot-kernel";
 import type { ProjectSnapshot } from "../types/snapshot";
 import { formatUpdatedAt } from "../utils/format";
+import {
+  BoundedList,
+  CollapsibleText,
+  ExclusiveExpansionGroup,
+} from "./content/ContentGovernance";
 
 type CurrentSnapshotCardProps = {
   projectId: string;
   projectName: string;
   archived: boolean;
+  variant?: "default" | "reference";
 };
-
-function SnapshotList({
-  items,
-  ordered = false,
-  emptyLabel,
-}: {
-  items: string[];
-  ordered?: boolean;
-  emptyLabel: string;
-}) {
-  if (items.length === 0) {
-    return <p className="snapshot-empty-value">{emptyLabel}</p>;
-  }
-
-  const List = ordered ? "ol" : "ul";
-  return (
-    <List className="snapshot-list">
-      {items.map((item, index) => (
-        <li key={`${index}-${item}`}>{item}</li>
-      ))}
-    </List>
-  );
-}
 
 export function CurrentSnapshotCard({
   projectId,
   projectName,
   archived,
+  variant = "default",
 }: CurrentSnapshotCardProps) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>();
   const [error, setError] = useState<string>();
   const loadGeneration = useRef(0);
@@ -68,13 +54,82 @@ export function CurrentSnapshotCard({
     };
   }, [loadSnapshot]);
 
+  if (variant === "reference") {
+    return (
+      <section className="workbench-baseline" aria-labelledby="confirmed-baseline-title">
+        <header className="workbench-baseline__header">
+          <div>
+            <span>{t("workbench.confirmedFacts")}</span>
+            <h2 id="confirmed-baseline-title">{t("workbench.confirmedBaseline")}</h2>
+          </div>
+          {snapshot !== undefined ? (
+            <Link
+              aria-disabled={!snapshot && archived}
+              className={!snapshot && archived ? "disabled-link" : undefined}
+              onClick={(event) => {
+                if (!snapshot && archived) event.preventDefault();
+              }}
+              to={`/projects/${projectId}/snapshot`}
+            >
+              {snapshot ? t("workbench.viewFullState") : t("workbench.recordState")}
+            </Link>
+          ) : null}
+        </header>
+
+        {error ? (
+          <div className="workbench-baseline__message">
+            <span>{t("workbench.stateLoadFailed")}：{error}</span>
+            <button className="text-button" onClick={() => void loadSnapshot()} type="button">{t("common.retry")}</button>
+          </div>
+        ) : snapshot === undefined ? (
+          <div className="workbench-baseline__skeleton" aria-label={t("workbench.loadingState")}><span /><span /></div>
+        ) : snapshot === null ? (
+          <div className="workbench-baseline__empty">
+            <strong>{t("workbench.noState")}</strong>
+            <p>{archived ? t("workbench.archivedNoState") : t("workbench.stateHint")}</p>
+          </div>
+        ) : (
+          <ExclusiveExpansionGroup>
+            <div className="workbench-baseline__body">
+              <div className="workbench-baseline__meta">
+                <span>{t("workbench.lastConfirmed", { time: formatUpdatedAt(snapshot.confirmedAt) })}</span>
+                <span>{t("snapshot.stateVersion")} v{snapshot.version}</span>
+              </div>
+              <div className="workbench-baseline__lead">
+                <article>
+                  <h3>{t("workbench.currentGoal")}</h3>
+                  <CollapsibleText collapsedLines={2} expandedMaxHeight={320} previewMode="fact" value={snapshot.currentGoal} />
+                </article>
+                <article>
+                  <h3>{t("workbench.currentSituation")}</h3>
+                  <CollapsibleText collapsedLines={3} expandedMaxHeight={320} value={snapshot.statusSummary} />
+                </article>
+              </div>
+              <details className="workbench-baseline__details">
+                <summary>{t("workbench.expandFacts")}</summary>
+                <div className="workbench-baseline__facts">
+                  <section><h3>{t("workbench.achievements")}</h3><BoundedList items={snapshot.achievements} emptyLabel={t("workbench.noAchievements")} /></section>
+                  <section><h3>{t("workbench.blockers")}</h3><BoundedList items={snapshot.blockers} emptyLabel={t("workbench.noBlockers")} /></section>
+                  <section><h3>{t("workbench.nextSteps")}</h3><BoundedList items={snapshot.nextSteps} ordered emptyLabel={t("workbench.noNextSteps")} /></section>
+                </div>
+              </details>
+            </div>
+          </ExclusiveExpansionGroup>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="panel snapshot-card" aria-labelledby="current-snapshot-title">
       <div className="panel-header snapshot-card-header">
         <div>
-          <p className="snapshot-kicker">当前快照 · Current Snapshot</p>
-          <h2 id="current-snapshot-title">{projectName} 当前状态</h2>
-          <p>经人工确认的项目状态，用于快速恢复研发上下文。</p>
+          <div className="context-card-kicker-row">
+            <p className="snapshot-kicker">{t("snapshot.title")}</p>
+            <span className="context-source-label context-source-label--confirmed">{t("workbench.confirmed")}</span>
+          </div>
+          <h2 id="current-snapshot-title">{projectName} · {t("snapshot.title")}</h2>
+          <p>{t("snapshot.description")}</p>
         </div>
         {snapshot !== undefined ? (
           <Link
@@ -87,7 +142,7 @@ export function CurrentSnapshotCard({
             }}
             to={`/projects/${projectId}/snapshot`}
           >
-            {snapshot ? (archived ? "查看历史" : "编辑与历史") : "创建快照"}
+            {snapshot ? t("workbench.viewFullState") : t("snapshot.create")}
           </Link>
         ) : null}
       </div>
@@ -96,62 +151,66 @@ export function CurrentSnapshotCard({
         <div className="load-error-state">
           <div className="error-banner">{error}</div>
           <button className="secondary-button" onClick={() => void loadSnapshot()} type="button">
-            重试
+            {t("common.retry")}
           </button>
         </div>
       ) : snapshot === undefined ? (
-        <p className="loading-copy">正在加载当前快照…</p>
+        <p className="loading-copy">{t("workbench.loadingState")}…</p>
       ) : snapshot === null ? (
         <div className="snapshot-empty-state">
-          <strong>尚未确认当前状态</strong>
+          <strong>{t("workbench.noState")}</strong>
           <p>
             {archived
-              ? "该归档项目没有 Snapshot，当前状态不可再创建。"
-              : "创建第一份人工 Snapshot，记录当前目标、成果、阻塞和下一步。"}
+              ? t("workbench.archivedNoState")
+              : t("snapshot.emptyDescription")}
           </p>
           {!archived ? (
             <Link className="primary-button button-link" to={`/projects/${projectId}/snapshot`}>
-              创建快照
+              {t("snapshot.create")}
             </Link>
           ) : null}
         </div>
       ) : (
-        <div className="snapshot-card-body">
-          <div className="snapshot-primary-context">
-            <article>
-              <span>当前目标</span>
-              <p>{snapshot.currentGoal}</p>
-            </article>
-            <article>
-              <span>状态总结</span>
-              <p>{snapshot.statusSummary}</p>
-            </article>
-          </div>
+        <ExclusiveExpansionGroup>
+          <div className="snapshot-card-body">
+            <div className="snapshot-primary-context">
+              <article>
+                <span>{t("workbench.currentGoal")}</span>
+                <CollapsibleText collapsedLines={2} expandedMaxHeight={280} previewMode="fact" value={snapshot.currentGoal} />
+              </article>
+              <article>
+                <span>{t("workbench.currentSituation")}</span>
+                <CollapsibleText collapsedLines={3} expandedMaxHeight={280} value={snapshot.statusSummary} />
+              </article>
+            </div>
 
-          <div className="snapshot-context-grid">
-            <article>
-              <h3>最近成果</h3>
-              <SnapshotList items={snapshot.achievements} emptyLabel="暂无已确认成果" />
-            </article>
-            <article>
-              <h3>当前阻塞</h3>
-              <SnapshotList items={snapshot.blockers} emptyLabel="当前无已知阻塞" />
-            </article>
-            <article>
-              <h3>下一步方向</h3>
-              <SnapshotList
-                items={snapshot.nextSteps}
-                ordered
-                emptyLabel="暂无已确认下一步"
-              />
-            </article>
-          </div>
+            <div className="snapshot-context-grid">
+              <article>
+                <h3>{t("workbench.achievements")}</h3>
+                <BoundedList exclusiveExpansion expandedMaxHeight={280} items={snapshot.achievements} emptyLabel={t("workbench.noAchievements")} />
+              </article>
+              <article>
+                <h3>{t("workbench.blockers")}</h3>
+                <BoundedList exclusiveExpansion expandedMaxHeight={280} items={snapshot.blockers} emptyLabel={t("workbench.noBlockers")} />
+              </article>
+              <article>
+                <h3>{t("workbench.nextSteps")}</h3>
+                <BoundedList
+                  exclusiveExpansion
+                  expandedMaxHeight={280}
+                  items={snapshot.nextSteps}
+                  ordered
+                  emptyLabel={t("workbench.noNextSteps")}
+                />
+              </article>
+            </div>
 
-          <footer className="snapshot-meta">
-            <span>最后确认 {formatUpdatedAt(snapshot.confirmedAt)}</span>
-            <span>快照版本 v{snapshot.version}</span>
-          </footer>
-        </div>
+            <footer className="snapshot-meta">
+              <span>{t("workbench.lastConfirmed", { time: formatUpdatedAt(snapshot.confirmedAt) })}</span>
+              <span>{t("snapshot.stateVersion")} v{snapshot.version}</span>
+            </footer>
+          </div>
+        </ExclusiveExpansionGroup>
       )}
     </section>
   );

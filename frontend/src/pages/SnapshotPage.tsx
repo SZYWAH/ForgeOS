@@ -19,6 +19,10 @@ import type {
   SnapshotContentInput,
 } from "../types/snapshot";
 import { formatUpdatedAt } from "../utils/format";
+import { BoundedList, CollapsibleText, RecordDisclosure } from "../components/content/ContentGovernance";
+import { formatFactPreview } from "../utils/contentPreview";
+import { useTranslation } from "react-i18next";
+import { PageIntro } from "../components/ui/PlainLanguage";
 
 type SnapshotDraft = {
   currentGoal: string;
@@ -68,22 +72,8 @@ function resolveSnapshotState(
   return { current: ordered[0] ?? null, history: ordered };
 }
 
-function HistoryList({ items, ordered = false }: { items: string[]; ordered?: boolean }) {
-  if (items.length === 0) {
-    return <p className="snapshot-empty-value">无</p>;
-  }
-
-  const List = ordered ? "ol" : "ul";
-  return (
-    <List className="snapshot-list snapshot-history-list">
-      {items.map((item, index) => (
-        <li key={`${index}-${item}`}>{item}</li>
-      ))}
-    </List>
-  );
-}
-
 export function SnapshotPage() {
+  const { t } = useTranslation();
   const { projectId } = useParams();
   const [project, setProject] = useState<Project>();
   const [current, setCurrent] = useState<ProjectSnapshot | null>();
@@ -94,6 +84,8 @@ export function SnapshotPage() {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [hasVersionConflict, setHasVersionConflict] = useState(false);
+  const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(10);
   const loadGeneration = useRef(0);
 
   const loadPage = useCallback(async () => {
@@ -103,7 +95,7 @@ export function SnapshotPage() {
       setCurrent(undefined);
       setHistory([]);
       setDraft(EMPTY_DRAFT);
-      setError("项目 ID 缺失。");
+      setError(t("projects.noProject"));
       setLoading(false);
       return;
     }
@@ -115,6 +107,8 @@ export function SnapshotPage() {
     setCurrent(undefined);
     setHistory([]);
     setDraft(EMPTY_DRAFT);
+    setExpandedSnapshotId(null);
+    setHistoryLimit(10);
     setSaving(false);
     setError(undefined);
     setNotice(undefined);
@@ -142,7 +136,7 @@ export function SnapshotPage() {
         setLoading(false);
       }
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     void loadPage();
@@ -161,7 +155,7 @@ export function SnapshotPage() {
     }
 
     if (nextStepsExceeded) {
-      setError("下一步最多允许 3 项，请精简后再保存。");
+      setError(t("snapshot.nextStepsLimit"));
       return;
     }
 
@@ -197,8 +191,8 @@ export function SnapshotPage() {
       setHistory(optimistic.history);
       setNotice(
         wasUpdate
-          ? `已确认新版本 Snapshot v${saved.version}，历史版本保持不变。`
-          : `已创建首个 Snapshot v${saved.version}。`,
+          ? t("snapshot.savedNewVersion", { version: saved.version })
+          : t("snapshot.savedFirst", { version: saved.version }),
       );
 
       try {
@@ -212,13 +206,13 @@ export function SnapshotPage() {
         setHistory(resolved.history);
         if (resolved.current && resolved.current.version > saved.version) {
           setNotice(
-            `已保存快照 v${saved.version}；同时检测到更新的当前版本 v${resolved.current.version}，已载入最新版本。`,
+            t("snapshot.savedNewerLoaded", { version: saved.version, current: resolved.current.version }),
           );
         }
       } catch (historyError) {
         if (saveGeneration === loadGeneration.current) {
           setError(
-            `Snapshot v${saved.version} 已保存，但历史刷新失败：${getErrorMessage(historyError)}`,
+            t("snapshot.savedHistoryFailed", { version: saved.version, error: getErrorMessage(historyError) }),
           );
         }
       }
@@ -239,15 +233,15 @@ export function SnapshotPage() {
   }
 
   if (loading) {
-    return <p className="loading-copy">正在加载快照上下文…</p>;
+    return <p className="loading-copy">{t("common.loading")}…</p>;
   }
 
   if (!project) {
     return (
       <section className="panel not-found">
-        <h1>快照不可用</h1>
-        <p>{error ?? "找不到该项目。"}</p>
-        <Link to="/projects">返回项目列表</Link>
+        <h1>{t("snapshot.title")}</h1>
+        <p>{error ?? t("projects.noProject")}</p>
+        <Link to="/projects">{t("navigation.projects")}</Link>
       </section>
     );
   }
@@ -257,29 +251,23 @@ export function SnapshotPage() {
   return (
     <div className="page-stack snapshot-page">
       <div className="breadcrumb">
-        <Link to="/projects">项目</Link>
+        <Link to="/projects">{t("navigation.projects")}</Link>
         <span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link>
         <span>/</span>
-        <span>当前快照</span>
+        <span>{t("snapshot.title")}</span>
       </div>
 
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">当前快照 · Current Snapshot</p>
-          <h1>{project.name}</h1>
-          <p>
-            人工确认项目当前真实状态。每次保存都会创建一个不可变的历史版本。
-          </p>
-        </div>
-        <Link className="secondary-button button-link" to={`/projects/${project.id}`}>
-          返回项目概览
-        </Link>
-      </header>
+      <PageIntro
+        title={t("snapshot.title")}
+        technicalTerm={t("terms.snapshot")}
+        description={t("snapshot.description")}
+        secondaryActions={<Link className="secondary-button button-link" to={`/projects/${project.id}`}>{t("common.backToProject")}</Link>}
+      />
 
       {isArchived ? (
         <div className="archive-banner">
-          该项目已归档。Snapshot 及其历史版本保留为只读记录，不能创建或更新。
+          {t("snapshot.archivedNotice")}
         </div>
       ) : null}
 
@@ -288,83 +276,88 @@ export function SnapshotPage() {
           <section className="panel">
             <div className="panel-header snapshot-editor-header">
               <div>
-                <h2>{current ? `确认快照 v${current.version + 1}` : "创建快照 v1"}</h2>
+                <h2>{current ? t("snapshot.confirmVersion", { version: current.version + 1 }) : t("snapshot.createVersion")}</h2>
                 <p>
                   {current
-                    ? `基于当前 v${current.version} 确认新状态；保存不会覆盖已有版本。`
-                    : "记录项目第一份当前状态。"}
+                    ? t("snapshot.versionHint", { version: current.version })
+                    : t("snapshot.firstHint")}
                 </p>
               </div>
               {current ? (
-                <span className="version-badge">当前 v{current.version}</span>
+                <span className="version-badge">{t("snapshot.currentVersion", { version: current.version })}</span>
               ) : null}
             </div>
 
             <fieldset className="editor-fields" disabled={isArchived || saving}>
               <div className="form-grid snapshot-form-grid">
                 <label className="span-2">
-                  当前目标 <span className="required">*</span>
+                  {t("projects.currentGoal")} <span className="required">*</span>
                   <textarea
+                    maxLength={20_000}
                     required
                     rows={3}
                     value={draft.currentGoal}
                     onChange={(event) =>
                       setDraft({ ...draft, currentGoal: event.target.value })
                     }
-                    placeholder="当前项目最重要、最需要保持聚焦的目标"
+                    placeholder={t("snapshot.goalPlaceholder")}
                   />
                 </label>
                 <label className="span-2">
-                  状态总结 <span className="required">*</span>
+                  {t("projects.currentSituation")} <span className="required">*</span>
                   <textarea
+                    maxLength={20_000}
                     required
                     rows={4}
                     value={draft.statusSummary}
                     onChange={(event) =>
                       setDraft({ ...draft, statusSummary: event.target.value })
                     }
-                    placeholder="当前整体状态、已验证到哪里，以及仍然不确定的部分"
+                    placeholder={t("snapshot.situationPlaceholder")}
                   />
                 </label>
                 <label>
-                  最近成果
+                  {t("projects.achievements")}
                   <textarea
+                    maxLength={20_000}
                     rows={6}
                     value={draft.achievements}
                     onChange={(event) =>
                       setDraft({ ...draft, achievements: event.target.value })
                     }
-                    placeholder={"每行一项\n完成可运行原型\n验证核心数据流"}
+                    placeholder={t("snapshot.achievementsPlaceholder")}
                   />
-                  <small>每行会保存为一个结构化条目。</small>
+                  <small>{t("snapshot.achievementsHelp")}</small>
                 </label>
                 <label>
-                  当前阻塞
+                  {t("projects.blockers")}
                   <textarea
+                    maxLength={20_000}
                     rows={6}
                     value={draft.blockers}
                     onChange={(event) =>
                       setDraft({ ...draft, blockers: event.target.value })
                     }
-                    placeholder={"每行一项\n大型仓库分析速度不足"}
+                    placeholder={t("snapshot.blockersPlaceholder")}
                   />
-                  <small>没有阻塞时可以留空。</small>
+                  <small>{t("snapshot.blockersHelp")}</small>
                 </label>
                 <label className="span-2">
-                  下一步方向
+                  {t("projects.nextSteps")}
                   <textarea
                     aria-invalid={nextStepsExceeded}
                     className={nextStepsExceeded ? "input-invalid" : undefined}
+                    maxLength={20_000}
                     rows={4}
                     value={draft.nextSteps}
                     onChange={(event) =>
                       setDraft({ ...draft, nextSteps: event.target.value })
                     }
-                    placeholder={"每行一项，最多三项\n优化索引\n增加缓存\n完善测试"}
+                    placeholder={t("snapshot.nextStepsPlaceholder")}
                   />
                   <small className={nextStepsExceeded ? "field-error" : undefined}>
-                    已填写 {parsedNextSteps.length}/3 项
-                    {nextStepsExceeded ? "；超过上限，无法保存。" : "。"}
+                    {t("snapshot.nextStepsCount", { count: parsedNextSteps.length })}
+                    {nextStepsExceeded ? t("snapshot.nextStepsExceeded") : "。"}
                   </small>
                 </label>
               </div>
@@ -378,14 +371,14 @@ export function SnapshotPage() {
                 <button
                   className="secondary-button"
                   onClick={() => {
-                    if (window.confirm("重新载入会放弃当前未保存的修改，是否继续？")) {
+                    if (window.confirm(t("snapshot.reloadConfirm"))) {
                       setNotice(undefined);
                       void loadPage();
                     }
                   }}
                   type="button"
                 >
-                  重新加载最新版本
+                  {t("snapshot.reloadLatest")}
                 </button>
               ) : null}
             </div>
@@ -396,8 +389,8 @@ export function SnapshotPage() {
             <div className="sticky-actions snapshot-actions">
               <span>
                 {current
-                  ? `保存后将确认 v${current.version + 1}；v${current.version} 会保留在历史中。`
-                  : "保存后将创建第一份已确认快照。"}
+                  ? t("snapshot.saveVersionHint", { next: current.version + 1, current: current.version })
+                  : t("snapshot.saveFirstHint")}
               </span>
               <div>
                 <button
@@ -410,7 +403,7 @@ export function SnapshotPage() {
                   }}
                   type="button"
                 >
-                  重置
+                  {t("snapshot.reset")}
                 </button>
                 <button
                   className="primary-button"
@@ -418,10 +411,10 @@ export function SnapshotPage() {
                   type="submit"
                 >
                   {saving
-                    ? "正在确认…"
+                    ? t("snapshot.confirming")
                     : current
-                      ? "确认新版本"
-                      : "创建快照"}
+                      ? t("snapshot.update")
+                      : t("snapshot.create")}
                 </button>
               </div>
             </div>
@@ -429,63 +422,60 @@ export function SnapshotPage() {
         </form>
       ) : (
         <section className="panel snapshot-empty-state">
-          <strong>没有可查看的 Snapshot</strong>
-          <p>该项目在归档前没有确认过当前状态。</p>
+          <strong>{t("snapshot.emptyTitle")}</strong>
+          <p>{t("snapshot.emptyDescription")}</p>
         </section>
       )}
 
       <section className="panel snapshot-history-panel">
         <div className="panel-header">
           <div>
-            <h2>快照历史</h2>
-            <p>所有已确认版本，按最新版本优先展示。</p>
+            <h2>{t("snapshot.history")}</h2>
+            <p>{t("snapshot.historyDescription")}</p>
           </div>
-          <span className="history-count">{history.length} 个版本</span>
+          <span className="history-count">{t("snapshot.versionCount", { count: history.length })}</span>
         </div>
 
         {history.length === 0 ? (
-          <p className="empty-state">创建首个快照后，版本历史会显示在这里。</p>
+          <p className="empty-state">{t("snapshot.historyEmpty")}</p>
         ) : (
-          <div className="snapshot-history">
-            {history.map((snapshot) => (
-              <article className="snapshot-history-item" key={snapshot.id}>
-                <header>
-                  <div>
-                    <span className="version-badge">v{snapshot.version}</span>
-                    {snapshot.id === current?.id ? (
-                      <span className="current-badge">当前</span>
-                    ) : null}
-                  </div>
-                  <time dateTime={snapshot.confirmedAt}>
-                    确认于 {formatUpdatedAt(snapshot.confirmedAt)}
-                  </time>
-                </header>
+          <div className="snapshot-history governed-history">
+            {history.slice(0, historyLimit).map((snapshot) => (
+              <RecordDisclosure
+                className="snapshot-history-item"
+                expanded={expandedSnapshotId === snapshot.id}
+                key={snapshot.id}
+                onToggle={(id) => setExpandedSnapshotId((currentId) => currentId === id ? null : id)}
+                recordId={snapshot.id}
+                summary={<div className="history-record-summary"><div><span className="version-badge">v{snapshot.version}</span>{snapshot.id === current?.id ? <span className="current-badge">{t("snapshot.current")}</span> : null}<time dateTime={snapshot.confirmedAt}>{t("snapshot.confirmedTime", { time: formatUpdatedAt(snapshot.confirmedAt) })}</time></div><strong>{formatFactPreview(snapshot.currentGoal)}</strong><small>{snapshot.statusSummary}</small></div>}
+              >
                 <div className="history-summary-grid">
                   <div>
-                    <h3>当前目标</h3>
-                    <p>{snapshot.currentGoal}</p>
+                    <h3>{t("projects.currentGoal")}</h3>
+                    <CollapsibleText collapsedLines={4} previewMode="fact" value={snapshot.currentGoal} />
                   </div>
                   <div>
-                    <h3>状态总结</h3>
-                    <p>{snapshot.statusSummary}</p>
+                    <h3>{t("projects.currentSituation")}</h3>
+                    <CollapsibleText collapsedLines={4} value={snapshot.statusSummary} />
                   </div>
                 </div>
                 <div className="history-list-grid">
                   <div>
-                    <h3>成果</h3>
-                    <HistoryList items={snapshot.achievements} />
+                    <h3>{t("projects.achievements")}</h3>
+                    <BoundedList items={snapshot.achievements} emptyLabel={t("common.none")} />
                   </div>
                   <div>
-                    <h3>阻塞</h3>
-                    <HistoryList items={snapshot.blockers} />
+                    <h3>{t("projects.blockers")}</h3>
+                    <BoundedList items={snapshot.blockers} emptyLabel={t("common.none")} />
                   </div>
                   <div>
-                    <h3>下一步</h3>
-                    <HistoryList items={snapshot.nextSteps} ordered />
+                    <h3>{t("projects.nextSteps")}</h3>
+                    <BoundedList items={snapshot.nextSteps} emptyLabel={t("common.none")} ordered />
                   </div>
                 </div>
-              </article>
+              </RecordDisclosure>
             ))}
+            {historyLimit < history.length ? <button className="secondary-button content-load-more" onClick={() => setHistoryLimit((value) => Math.min(value + 10, history.length))} type="button">{t("snapshot.showMore", { count: Math.min(10, history.length - historyLimit) })}</button> : null}
           </div>
         )}
       </section>

@@ -3,20 +3,15 @@ import { Link, useParams } from "react-router-dom";
 import { codexExecutionApi } from "../api/codex-execution";
 import { codexTaskProposalApi } from "../api/codex-task-proposal";
 import { getErrorMessage, projectKernelApi } from "../api/project-kernel";
-import type { CodexExecution, CodexExecutionStatus } from "../types/codex-execution";
+import type { CodexExecution } from "../types/codex-execution";
 import type { CodexTaskProposal } from "../types/codex-task-proposal";
 import type { Project } from "../types/project";
-import { formatUpdatedAt } from "../utils/format";
-
-const STATUS_LABELS: Record<CodexExecutionStatus, string> = {
-  pending: "等待开始",
-  running: "运行中（仅记录）",
-  success: "成功",
-  failed: "失败",
-  cancelled: "已取消",
-};
+import { displayLabel, formatUpdatedAt } from "../utils/format";
+import { useTranslation } from "react-i18next";
+import { PageIntro } from "../components/ui/PlainLanguage";
 
 export function CodexExecutionsPage() {
+  const { t } = useTranslation();
   const { projectId } = useParams();
   const [project, setProject] = useState<Project>();
   const [proposals, setProposals] = useState<CodexTaskProposal[]>([]);
@@ -108,23 +103,23 @@ export function CodexExecutionsPage() {
     if (!projectId || !proposalId) return;
     await run(
       () => codexExecutionApi.create(projectId, proposalId),
-      "执行请求已记录为 pending；RecordOnlyCodexRunner 没有启动 Codex。",
+      t("codex.executionCreatedNotice"),
     );
   }
 
   async function startExecution() {
     if (!projectId || !selected) return;
-    if (!window.confirm("这只会记录 running 状态，不会启动 Codex 或执行命令。继续？")) return;
+    if (!window.confirm(t("codex.startConfirm"))) return;
     await run(
       () => codexExecutionApi.start(projectId, selected.id, selected.version),
-      "已记录为 running；当前仍未执行 Codex。",
+      t("codex.runningNotice"),
     );
   }
 
   async function recordResult(status: "success" | "failed") {
     if (!projectId || !selected) return;
     if (!outputSummary.trim() || !validationResult.trim()) {
-      setError("请填写输出摘要和验证结果，再记录终态。");
+      setError(t("codex.resultRequired"));
       return;
     }
     const input = {
@@ -137,25 +132,25 @@ export function CodexExecutionsPage() {
         status === "success"
           ? codexExecutionApi.complete(projectId, selected.id, input)
           : codexExecutionApi.fail(projectId, selected.id, input),
-      status === "success" ? "成功结果已保存。" : "失败结果已保存并保留历史。",
+      status === "success" ? t("codex.successNotice") : t("codex.failedNotice"),
     );
   }
 
   async function cancelExecution() {
     if (!projectId || !selected) return;
-    if (!window.confirm("取消会保留当前执行记录和状态历史。继续？")) return;
+    if (!window.confirm(t("codex.cancelConfirm"))) return;
     await run(
       () =>
         codexExecutionApi.cancel(projectId, selected.id, {
-          outputSummary: outputSummary.trim() || "用户取消了执行请求。",
+          outputSummary: outputSummary.trim() || t("codex.userCancelled"),
           expectedVersion: selected.version,
         }),
-      "执行请求已取消并保留历史。",
+      t("codex.cancelledNotice"),
     );
   }
 
   if (!project || !projectId) {
-    return <p className="loading-copy">正在加载 Codex 执行记录…</p>;
+    return <p className="loading-copy">{t("common.loading")}…</p>;
   }
 
   const selectedProposal = selected ? proposalMap.get(selected.proposalId) : undefined;
@@ -163,26 +158,17 @@ export function CodexExecutionsPage() {
   return (
     <div className="page-stack codex-execution-page">
       <div className="breadcrumb">
-        <Link to="/projects">项目</Link><span>/</span>
+        <Link to="/projects">{t("navigation.projects")}</Link><span>/</span>
         <Link to={`/projects/${project.id}`}>{project.name}</Link><span>/</span>
-        <Link to={`/projects/${project.id}/codex-tasks`}>Codex 任务提案</Link><span>/</span>
-        <span>执行记录</span>
+        <Link to={`/projects/${project.id}/codex-tasks`}>{t("codex.tasksTitle")}</Link><span>/</span>
+        <span>{t("codex.executionsTitle")}</span>
       </div>
 
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">D5 · 执行治理基础</p>
-          <h1>Codex 执行记录</h1>
-          <p>将已批准 Proposal 转换为可审计的执行请求、状态记录和结果记录。</p>
-        </div>
-        <Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>
-          返回任务提案
-        </Link>
-      </header>
+      <PageIntro title={t("codex.executionsTitle")} technicalTerm={t("terms.execution")} description={t("codex.executionsDescription")} secondaryActions={<Link className="secondary-button button-link" to={`/projects/${project.id}/codex-tasks`}>{t("codex.tasksTitle")}</Link>} />
 
       <div className="ai-boundary-banner execution-boundary">
-        <strong>记录模式，不执行代码</strong>
-        <span>当前 Runner 只接收请求元数据；不会调用 codex exec、修改文件、运行验证命令或执行 Git 操作。</span>
+        <strong>{t("codex.compatibility")}</strong>
+        <span>{t("codex.executionsDescription")}</span>
       </div>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -190,31 +176,31 @@ export function CodexExecutionsPage() {
 
       <form className="panel execution-request-panel" onSubmit={createExecution}>
         <div className="panel-header">
-          <div><h2>创建执行请求</h2><p>只有已批准的任务提案可以创建 pending 记录。</p></div>
+          <div><h2>{t("codex.createExecution")}</h2><p>{t("codex.createExecutionDescription")}</p></div>
         </div>
         <div className="execution-request-form">
           <label>
-            已批准 Proposal
+            {t("codex.approvedTask")}
             <select required value={proposalId} onChange={(event) => setProposalId(event.target.value)}>
-              <option value="">请选择任务提案</option>
+              <option value="">{t("codex.chooseTask")}</option>
               {approvedProposals.map((proposal) => (
                 <option key={proposal.id} value={proposal.id}>{proposal.title} · v{proposal.version}</option>
               ))}
             </select>
           </label>
           <button className="primary-button" disabled={busy || !proposalId} type="submit">
-            {busy ? "正在记录…" : "创建执行请求"}
+            {busy ? t("codex.recording") : t("codex.createExecution")}
           </button>
         </div>
         {approvedProposals.length === 0 ? (
-          <p className="execution-help">当前没有已批准 Proposal。请先在任务提案页面完成人工审批。</p>
+          <p className="execution-help">{t("codex.noApproved")}</p>
         ) : null}
       </form>
 
       <div className="candidate-workbench execution-workbench">
         <section className="panel candidate-list-panel">
-          <h2>执行历史（Execution History）</h2>
-          <div className="candidate-list execution-list">
+          <h2>{t("codex.executionsTitle")}</h2>
+          <div className="candidate-list execution-list record-list-pane">
             {executions.map((execution) => (
               <button
                 className={execution.id === selected?.id ? "selected" : ""}
@@ -223,14 +209,14 @@ export function CodexExecutionsPage() {
                 type="button"
               >
                 <span className={`execution-status execution-status--${execution.status}`}>
-                  {STATUS_LABELS[execution.status]}
+                  {displayLabel(execution.status)}
                 </span>
                 <strong>{proposalMap.get(execution.proposalId)?.title ?? execution.proposalId}</strong>
                 <small>{formatUpdatedAt(execution.createdAt)} · v{execution.version}</small>
               </button>
             ))}
           </div>
-          {executions.length === 0 ? <p className="empty-state">尚无执行记录。</p> : null}
+          {executions.length === 0 ? <p className="empty-state">{t("codex.noExecutions")}</p> : null}
         </section>
 
         {selected ? (
@@ -238,52 +224,51 @@ export function CodexExecutionsPage() {
             <div className="panel-header">
               <div>
                 <span className={`execution-status execution-status--${selected.status}`}>
-                  {STATUS_LABELS[selected.status]}
+                  {displayLabel(selected.status)}
                 </span>
-                <h2>{selectedProposal?.title ?? "关联任务提案"}</h2>
-                <p>Proposal · {selected.proposalId}</p>
+                <h2>{selectedProposal?.title ?? t("codex.relatedTask")}</h2>
               </div>
             </div>
 
             <dl className="execution-meta-grid">
-              <div><dt>请求时间</dt><dd>{formatUpdatedAt(selected.createdAt)}</dd></div>
-              <div><dt>开始时间</dt><dd>{selected.startTime ? formatUpdatedAt(selected.startTime) : "尚未开始"}</dd></div>
-              <div><dt>结束时间</dt><dd>{selected.endTime ? formatUpdatedAt(selected.endTime) : "尚未结束"}</dd></div>
-              <div><dt>记录版本</dt><dd>v{selected.version}</dd></div>
+              <div><dt>{t("codex.requestedAt")}</dt><dd>{formatUpdatedAt(selected.createdAt)}</dd></div>
+              <div><dt>{t("codex.startedAt")}</dt><dd>{selected.startTime ? formatUpdatedAt(selected.startTime) : t("codex.notStarted")}</dd></div>
+              <div><dt>{t("codex.endedAt")}</dt><dd>{selected.endTime ? formatUpdatedAt(selected.endTime) : t("codex.notEnded")}</dd></div>
+              <div><dt>{t("common.version")}</dt><dd>v{selected.version}</dd></div>
             </dl>
 
             {selected.status === "running" ? (
               <div className="execution-result-form">
-                <label>输出摘要<textarea rows={5} value={outputSummary} onChange={(event) => setOutputSummary(event.target.value)} /></label>
-                <label>验证结果<textarea rows={5} value={validationResult} onChange={(event) => setValidationResult(event.target.value)} /></label>
+                <label>{t("codex.outputSummary")}<textarea rows={5} value={outputSummary} onChange={(event) => setOutputSummary(event.target.value)} /></label>
+                <label>{t("codex.validationResult")}<textarea rows={5} value={validationResult} onChange={(event) => setValidationResult(event.target.value)} /></label>
               </div>
             ) : (
               <div className="execution-result-view">
-                <article><h3>输出摘要</h3><pre>{selected.outputSummary || "尚无结果"}</pre></article>
-                <article><h3>验证结果</h3><pre>{selected.validationResult || "尚无验证结果"}</pre></article>
+                <article><h3>{t("codex.outputSummary")}</h3><pre className="document-scroll-region">{selected.outputSummary || t("codex.noResult")}</pre></article>
+                <article><h3>{t("codex.validationResult")}</h3><pre className="document-scroll-region">{selected.validationResult || t("codex.noValidation")}</pre></article>
               </div>
             )}
 
             <div className="candidate-review-actions execution-actions">
-              <span>这些按钮只记录状态，不触发 Codex 或验证命令。</span>
+              <span>{t("codex.recordOnly")}</span>
               <div>
                 {selected.status === "pending" ? (
-                  <button className="primary-button" disabled={busy} onClick={() => void startExecution()} type="button">记录为运行中</button>
+                  <button className="primary-button" disabled={busy} onClick={() => void startExecution()} type="button">{t("codex.markRunning")}</button>
                 ) : null}
                 {selected.status === "running" ? (
                   <>
-                    <button className="primary-button" disabled={busy} onClick={() => void recordResult("success")} type="button">记录成功</button>
-                    <button className="danger-button" disabled={busy} onClick={() => void recordResult("failed")} type="button">记录失败</button>
+                    <button className="primary-button" disabled={busy} onClick={() => void recordResult("success")} type="button">{t("codex.markSuccess")}</button>
+                    <button className="danger-button" disabled={busy} onClick={() => void recordResult("failed")} type="button">{t("codex.markFailed")}</button>
                   </>
                 ) : null}
                 {(selected.status === "pending" || selected.status === "running") ? (
-                  <button className="secondary-button" disabled={busy} onClick={() => void cancelExecution()} type="button">取消请求</button>
+                  <button className="secondary-button" disabled={busy} onClick={() => void cancelExecution()} type="button">{t("codex.cancelRequest")}</button>
                 ) : null}
               </div>
             </div>
           </section>
         ) : (
-          <section className="panel provider-detail-empty"><strong>选择执行记录</strong><p>状态、结果和关联 Proposal 会显示在这里。</p></section>
+          <section className="panel provider-detail-empty"><strong>{t("codex.selectExecution")}</strong><p>{t("codex.selectExecutionDescription")}</p></section>
         )}
       </div>
     </div>

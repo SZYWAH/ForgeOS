@@ -9,6 +9,8 @@ import {
   type ProjectSummary,
 } from "../types/project";
 import { lifecycleLabel, statusLabel, toProjectSlug } from "../utils/format";
+import { useTranslation } from "react-i18next";
+import { PageIntro } from "../components/ui/PlainLanguage";
 
 const INITIAL_FORM: CreateProjectInput = {
   slug: "",
@@ -25,6 +27,7 @@ const INITIAL_FORM: CreateProjectInput = {
 };
 
 export function ProjectsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [form, setForm] = useState<CreateProjectInput>(INITIAL_FORM);
@@ -82,29 +85,20 @@ export function ProjectsPage() {
 
   return (
     <div className="page-stack">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">项目注册表</p>
-          <h1>项目</h1>
-          <p>建立并维护当前 Workspace 中的软件项目身份。</p>
-        </div>
-        <button className="primary-button" onClick={() => setFormOpen((open) => !open)}>
-          {formOpen ? "关闭表单" : "新建项目"}
-        </button>
-      </header>
+      <PageIntro title={t("projects.title")} description={t("projects.description")} primaryAction={<button className="primary-button" onClick={() => setFormOpen((open) => !open)}>{formOpen ? t("common.close") : t("projects.createProject")}</button>} />
 
       {formOpen ? (
         <section className="panel create-panel">
           <div className="panel-header">
             <div>
-              <h2>创建项目</h2>
-              <p>先建立稳定身份，产品与技术上下文可在项目概览中补充。</p>
+              <h2>{t("projects.createProject")}</h2>
+              <p>{t("projects.createDescription")}</p>
             </div>
           </div>
           <form className="project-form compact-form" onSubmit={handleCreate}>
             <div className="form-grid">
               <label>
-                名称 <span className="required">*</span>
+                {t("projects.name")} <span className="required">*</span>
                 <input
                   autoFocus
                   required
@@ -114,7 +108,7 @@ export function ProjectsPage() {
                 />
               </label>
               <label>
-                Slug 标识 <span className="required">*</span>
+                {t("projects.slug")} <span className="required">*</span>
                 <input
                   required
                   minLength={2}
@@ -127,10 +121,10 @@ export function ProjectsPage() {
                   }}
                   placeholder="codelens-pro"
                 />
-                <small>小写字母、数字与连字符</small>
+                <small>{t("projects.slugHelp")}</small>
               </label>
               <label className="span-2">
-                描述
+                {t("projects.projectDescription")}
                 <textarea
                   rows={3}
                   value={form.description}
@@ -140,11 +134,11 @@ export function ProjectsPage() {
                       description: event.target.value,
                     }))
                   }
-                  placeholder="项目解决什么问题？"
+                  placeholder={t("projects.descriptionPlaceholder")}
                 />
               </label>
               <label>
-                状态
+                {t("projects.projectStatus")}
                 <select
                   value={form.status}
                   onChange={(event) =>
@@ -164,7 +158,7 @@ export function ProjectsPage() {
                 </select>
               </label>
               <label>
-                生命周期
+                {t("projects.lifecycle")}
                 <select
                   value={form.lifecycleStage}
                   onChange={(event) =>
@@ -183,7 +177,7 @@ export function ProjectsPage() {
                 </select>
               </label>
               <label>
-                优先级
+                {t("projects.priority")}
                 <input
                   max={100}
                   min={0}
@@ -205,10 +199,10 @@ export function ProjectsPage() {
                 onClick={() => setFormOpen(false)}
                 type="button"
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button className="primary-button" disabled={submitting} type="submit">
-                {submitting ? "正在创建…" : "创建项目"}
+                {submitting ? t("common.saving") : t("projects.createProject")}
               </button>
             </div>
           </form>
@@ -218,8 +212,8 @@ export function ProjectsPage() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>全部项目</h2>
-            <p>{loading ? "正在加载…" : `当前工作空间共有 ${projects.length} 个项目`}</p>
+            <h2>{t("projects.all")}</h2>
+            <p>{loading ? `${t("common.loading")}…` : t("projects.workspaceCount", { count: projects.length })}</p>
           </div>
         </div>
         {listError ? (
@@ -230,17 +224,17 @@ export function ProjectsPage() {
               onClick={() => void loadProjects()}
               type="button"
             >
-              重试
+              {t("common.retry")}
             </button>
           </div>
         ) : null}
         {!loading && !listError ? (
           <ProjectTable
             projects={projects}
-            emptyMessage="尚未创建项目。点击“新建项目”开始。"
+            emptyMessage={t("projects.empty")}
           />
         ) : loading ? (
-          <p className="loading-copy">正在加载项目…</p>
+          <p className="loading-copy">{t("common.loading")}…</p>
         ) : null}
       </section>
     </div>

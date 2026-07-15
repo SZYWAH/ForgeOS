@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { repositoryApi } from "../api/repository";
 import type { RepositoryRecord } from "../types/repository";
+import { CompactIdentifier } from "./content/ContentGovernance";
 import { formatUpdatedAt } from "../utils/format";
 
 type RepositoryCardProps = {
@@ -43,9 +44,9 @@ export function RepositoryCard({ projectId, archived }: RepositoryCardProps) {
       </div>
       {error ? <div className="error-banner repository-card-message">{error}</div> : record ? (
         <div className="repository-card-body">
-          <div><span>路径</span><strong title={record.repository.path}>{record.repository.path}</strong></div>
+          <div><CompactIdentifier copyable label="路径" value={record.repository.path} /></div>
           <div><span>分支</span><strong>{record.workingCopy.branch}</strong></div>
-          <div><span>HEAD</span><strong>{record.workingCopy.headCommit.slice(0, 12)}</strong></div>
+          <div><CompactIdentifier label="HEAD" value={record.workingCopy.headCommit} /></div>
           <div><span>状态</span><strong className={record.workingCopy.isDirty ? "git-dirty" : "git-clean"}>{record.workingCopy.isDirty ? "有改动" : "干净"}</strong></div>
           <div><span>检查时间</span><strong>{formatUpdatedAt(record.workingCopy.checkedAt)}</strong></div>
         </div>

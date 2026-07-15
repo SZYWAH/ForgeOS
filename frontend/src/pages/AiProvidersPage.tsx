@@ -8,6 +8,8 @@ import type {
   AiProviderConfigInput,
 } from "../types/ai-provider";
 import { formatUpdatedAt } from "../utils/format";
+import { useTranslation } from "react-i18next";
+import { PageIntro } from "../components/ui/PlainLanguage";
 
 const EMPTY_CONFIG: AiProviderConfigInput = {
   name: "",
@@ -25,6 +27,7 @@ const PRESETS = [
 ] as const;
 
 export function AiProvidersPage() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [draft, setDraft] = useState<AiProviderConfigInput>(EMPTY_CONFIG);
@@ -110,7 +113,7 @@ export function AiProvidersPage() {
       setPreset("Custom");
       setShowCreate(false);
       await load(created.id);
-      setNotice("AI 服务已创建，默认保持停用，只有用户显式启用后才能调用。");
+      setNotice(t("ai.serviceCreated"));
     } catch (saveError) {
       if (created) {
         setCreateDraft(EMPTY_CONFIG);
@@ -136,7 +139,7 @@ export function AiProvidersPage() {
         expectedVersion: selected.version,
       });
       await load(updated.id);
-      setNotice("AI 服务配置已保存。");
+      setNotice(t("ai.serviceSaved"));
     } catch (saveError) {
       setError(getErrorMessage(saveError));
       if (getErrorCode(saveError) === "ai_provider_version_conflict") {
@@ -159,7 +162,7 @@ export function AiProvidersPage() {
         selected.version,
       );
       await load(updated.id);
-      setNotice(updated.enabled ? "AI 服务已启用。" : "AI 服务已停用，不会接受调用。");
+      setNotice(updated.enabled ? t("ai.serviceEnabled") : t("ai.serviceDisabled"));
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -177,7 +180,7 @@ export function AiProvidersPage() {
       const updated = await aiProviderApi.setApiKey(selected.id, apiKeyDraft.trim());
       setApiKeyDraft("");
       await load(updated.id);
-      setNotice("API Key 已写入 Windows Credential Manager，不会保存到 SQLite。");
+      setNotice(t("ai.keySaved"));
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -186,14 +189,14 @@ export function AiProvidersPage() {
   }
 
   async function handleClearKey() {
-    if (!selected || !window.confirm("确认从 Windows Credential Manager 删除该 API Key？")) return;
+    if (!selected || !window.confirm(t("ai.keyDeleteConfirm"))) return;
     setSaving(true);
     setError(undefined);
     setNotice(undefined);
     try {
       const updated = await aiProviderApi.clearApiKey(selected.id);
       await load(updated.id);
-      setNotice("API Key 已清除。");
+      setNotice(t("ai.keyCleared"));
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -223,33 +226,24 @@ export function AiProvidersPage() {
     }
   }
 
-  if (loading) return <p className="loading-copy">正在加载 AI 服务…</p>;
+  if (loading) return <p className="loading-copy">{t("common.loading")}…</p>;
 
   return (
     <div className="page-stack ai-provider-page">
-      <header className="page-header ai-provider-page-header">
-        <div>
-          <p className="ai-provider-kicker">AI 服务基础</p>
-          <h1>AI 服务配置</h1>
-          <p>管理 OpenAI-compatible 端点。所有调用都必须由用户在此页面显式触发。</p>
-        </div>
-        <button className="primary-button" onClick={() => setShowCreate((value) => !value)} type="button">
-          {showCreate ? "取消" : "添加 AI 服务"}
-        </button>
-      </header>
+      <PageIntro title={t("ai.servicesTitle")} technicalTerm={t("terms.provider")} description={t("ai.servicesDescription")} primaryAction={<button className="primary-button" onClick={() => setShowCreate((value) => !value)} type="button">{showCreate ? t("common.cancel") : t("common.create")}</button>} />
 
       <div className="ai-boundary-banner">
-        <strong>安全边界</strong>
-        <span>AI 服务返回内容不会自动写入项目、快照、会话、证据或其他数据库事实。</span>
+        <strong>{t("ai.safetyTitle")}</strong>
+        <span>{t("ai.safetyDescription")}</span>
       </div>
       {error ? <div className="error-banner provider-message">{error}</div> : null}
       {notice ? <div className="success-banner provider-message">{notice}</div> : null}
 
       {showCreate ? (
         <form className="panel provider-create-form" onSubmit={handleCreate}>
-          <div className="panel-header"><div><h2>新建 AI 服务</h2><p>新服务默认处于停用状态。</p></div></div>
+          <div className="panel-header"><div><h2>{t("common.create")} {t("ai.provider")}</h2><p>{t("ai.servicesDescription")}</p></div></div>
           <div className="provider-preset-row">
-            <label>预设
+            <label>{t("ai.preset")}
               <select
                 value={preset}
                 onChange={(event) => {
@@ -264,21 +258,21 @@ export function AiProvidersPage() {
           </div>
           <ProviderFields value={createDraft} onChange={setCreateDraft} />
           <div className="provider-key-field">
-            <label>API Key <span>本地服务可不填</span>
+            <label>{t("ai.apiKey")} <span>{t("common.optional")}</span>
               <input autoComplete="new-password" type="password" value={createApiKey} onChange={(event) => setCreateApiKey(event.target.value)} />
             </label>
           </div>
           <div className="form-actions provider-form-actions">
-            <button className="primary-button" disabled={saving} type="submit">{saving ? "正在创建…" : "创建 AI 服务"}</button>
+            <button className="primary-button" disabled={saving} type="submit">{saving ? t("common.saving") : t("common.create")}</button>
           </div>
         </form>
       ) : null}
 
       <div className="provider-workbench">
         <section className="panel provider-list-panel">
-          <div className="panel-header"><div><h2>已配置服务</h2><p>{providers.length} 个服务</p></div></div>
-          {providers.length === 0 ? <p className="empty-state">尚未配置 AI 服务。</p> : (
-            <div className="provider-list">
+          <div className="panel-header"><div><h2>{t("ai.configuredServices")}</h2><p>{t("ai.serviceCount", { count: providers.length })}</p></div></div>
+          {providers.length === 0 ? <p className="empty-state">{t("ai.noServices")}</p> : (
+            <div className="provider-list record-list-pane">
               {providers.map((provider) => (
                 <button
                   className={provider.id === selectedId ? "selected" : ""}
@@ -286,10 +280,10 @@ export function AiProvidersPage() {
                   onClick={() => setSearchParams({ selected: provider.id })}
                   type="button"
                 >
-                  <span className={`provider-state provider-state--${provider.enabled ? "enabled" : "disabled"}`}>{provider.enabled ? "已启用" : "已停用"}</span>
+                  <span className={`provider-state provider-state--${provider.enabled ? "enabled" : "disabled"}`}>{provider.enabled ? t("common.enabled") : t("common.disabled")}</span>
                   <strong>{provider.name}</strong>
                   <small>{provider.model}</small>
-                  <span className={`key-state ${provider.apiKeyConfigured ? "configured" : ""}`}>{provider.apiKeyConfigured ? "密钥已配置" : "未配置密钥"}</span>
+                  <span className={`key-state ${provider.apiKeyConfigured ? "configured" : ""}`}>{provider.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}</span>
                 </button>
               ))}
             </div>
@@ -302,59 +296,59 @@ export function AiProvidersPage() {
               <form className="panel provider-editor" onSubmit={handleUpdate}>
                 <div className="panel-header provider-editor-header">
                   <div>
-                    <span className={`provider-state provider-state--${selected.enabled ? "enabled" : "disabled"}`}>{selected.enabled ? "已启用" : "已停用"}</span>
+                    <span className={`provider-state provider-state--${selected.enabled ? "enabled" : "disabled"}`}>{selected.enabled ? t("common.enabled") : t("common.disabled")}</span>
                     <h2>{selected.name}</h2>
-                    <p>v{selected.version} · 更新于 {formatUpdatedAt(selected.updatedAt)}</p>
+                    <p>v{selected.version} · {t("common.updatedAt")} {formatUpdatedAt(selected.updatedAt)}</p>
                   </div>
                   <button className={selected.enabled ? "danger-button" : "secondary-button"} disabled={saving} onClick={() => void handleToggle()} type="button">
-                    {selected.enabled ? "停用" : "启用"}
+                    {selected.enabled ? t("ai.disable") : t("ai.enable")}
                   </button>
                 </div>
                 <ProviderFields value={draft} onChange={setDraft} />
                 <div className="form-actions provider-form-actions">
-                  <button className="primary-button" disabled={saving} type="submit">保存配置</button>
+                  <button className="primary-button" disabled={saving} type="submit">{t("ai.saveConfiguration")}</button>
                 </div>
               </form>
 
               <section className="panel provider-secret-panel">
                 <div className="panel-header">
-                  <div><h2>API Key</h2><p>存储在 Windows Credential Manager；前端无法读取已有明文。</p></div>
-                  <span className={`key-state ${selected.apiKeyConfigured ? "configured" : ""}`}>{selected.apiKeyConfigured ? "已配置" : "未配置"}</span>
+                  <div><h2>{t("ai.apiKey")}</h2><p>Windows Credential Manager</p></div>
+                  <span className={`key-state ${selected.apiKeyConfigured ? "configured" : ""}`}>{selected.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}</span>
                 </div>
                 <form className="provider-secret-form" onSubmit={handleSaveKey}>
-                  <input autoComplete="new-password" placeholder="输入新的 API Key" type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} />
-                  <button className="secondary-button" disabled={saving || !apiKeyDraft.trim()} type="submit">保存密钥</button>
-                  <button className="danger-button" disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} type="button">清除密钥</button>
+                  <input autoComplete="new-password" placeholder={t("ai.keyPlaceholder")} type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} />
+                  <button className="secondary-button" disabled={saving || !apiKeyDraft.trim()} type="submit">{t("ai.saveKey")}</button>
+                  <button className="danger-button" disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} type="button">{t("ai.clearKey")}</button>
                 </form>
               </section>
 
               <form className="panel provider-invoke-panel" onSubmit={handleInvoke}>
                 <div className="panel-header">
-                  <div><h2>手动调用</h2><p>仅用于显式连接验证。提示词与响应不会保存。</p></div>
+                  <div><h2>{t("ai.manualCall")}</h2><p>{t("ai.manualCallDescription")}</p></div>
                 </div>
                 <div className="provider-invoke-fields">
-                  <label>系统消息 <span>可选</span>
+                  <label>{t("ai.systemMessage")} <span>{t("common.optional")}</span>
                     <textarea rows={3} value={systemMessage} onChange={(event) => setSystemMessage(event.target.value)} />
                   </label>
-                  <label>用户消息 <span className="required">*</span>
-                    <textarea required rows={5} value={userMessage} onChange={(event) => setUserMessage(event.target.value)} placeholder="发送一条最小连接测试消息" />
+                  <label>{t("ai.userMessage")} <span className="required">*</span>
+                    <textarea required rows={5} value={userMessage} onChange={(event) => setUserMessage(event.target.value)} placeholder={t("ai.testMessagePlaceholder")} />
                   </label>
                 </div>
                 <div className="form-actions provider-form-actions">
-                  <span>{selected.enabled ? "请求将发送到已配置的端点。" : "请先启用 AI 服务再调用。"}</span>
-                  <button className="primary-button" disabled={invoking || !selected.enabled} type="submit">{invoking ? "正在调用…" : "调用 AI 服务"}</button>
+                  <span>{selected.enabled ? t("ai.requestReady") : t("ai.enableBeforeCall")}</span>
+                  <button className="primary-button" disabled={invoking || !selected.enabled} type="submit">{invoking ? t("ai.invoking") : t("ai.invoke")}</button>
                 </div>
                 {result ? (
                   <div className="provider-result">
-                    <header><strong>临时响应</strong><span>{result.model} · {result.finishReason ?? "未知"}</span></header>
-                    <pre>{result.content}</pre>
-                    {result.usage ? <small>Token 数：{result.usage.totalTokens ?? "未知"}</small> : null}
+                    <header><strong>{t("ai.temporaryResponse")}</strong><span>{result.model} · {result.finishReason ?? t("common.unknown")}</span></header>
+                    <pre className="document-scroll-region">{result.content}</pre>
+                    {result.usage ? <small>{t("context.tokenCount", { count: result.usage.totalTokens ?? t("common.unknown") })}</small> : null}
                   </div>
                 ) : null}
               </form>
             </>
           ) : (
-            <section className="panel provider-detail-empty"><strong>选择或创建 AI 服务</strong><p>配置端点、模型、密钥和启停状态。</p></section>
+            <section className="panel provider-detail-empty"><strong>{t("ai.selectService")}</strong><p>{t("ai.selectServiceDescription")}</p></section>
           )}
         </div>
       </div>
@@ -368,17 +362,18 @@ type ProviderFieldsProps = {
 };
 
 function ProviderFields({ value, onChange }: ProviderFieldsProps) {
+  const { t } = useTranslation();
   return (
     <div className="form-grid provider-fields">
-      <label>名称 <span className="required">*</span>
+      <label>{t("ai.name")} <span className="required">*</span>
         <input required maxLength={100} value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="OpenAI / DeepSeek / Local Ollama" />
       </label>
-      <label>模型 <span className="required">*</span>
-        <input required maxLength={200} value={value.model} onChange={(event) => onChange({ ...value, model: event.target.value })} placeholder="模型 ID 或部署名称" />
+      <label>{t("ai.model")} <span className="required">*</span>
+        <input required maxLength={200} value={value.model} onChange={(event) => onChange({ ...value, model: event.target.value })} placeholder={t("ai.modelPlaceholder")} />
       </label>
-      <label className="span-2">Base URL <span className="required">*</span>
+      <label className="span-2">{t("ai.baseUrl")} <span className="required">*</span>
         <input required value={value.baseUrl} onChange={(event) => onChange({ ...value, baseUrl: event.target.value })} placeholder="https://api.example.com/v1" />
-        <small>可填写 API 根路径或完整 `/chat/completions` 地址。</small>
+        <small>{t("ai.baseUrlHelp")}</small>
       </label>
     </div>
   );
