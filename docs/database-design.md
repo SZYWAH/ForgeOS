@@ -597,6 +597,32 @@ Migration 失败时应用必须报告明确错误，不得继续以正常状态�
 - AI 调用只通过显式 Application Use Case 进入 HTTP Adapter；返回结果不自动持久化。
 - D1.4 测试使用的 Project、Snapshot、Session、Evidence 与 EvidenceLink 仅由测试或人工验收流程创建，不在生产启动时自动插入。
 
+## `app_preferences`
+
+`app_preferences` 保存本机 ForgeOS 应用级显示偏好，不属于 Workspace 或 Project。
+
+| 字段 | 类型 | 规则 |
+| --- | --- | --- |
+| `id` | INTEGER | 主键，固定为 `1` |
+| `language_mode` | TEXT | `system`、`zh-CN`、`en-US` |
+| `show_technical_terms` | INTEGER | `0/1`，默认 `0` |
+| `version` | INTEGER | 正整数，用于乐观并发 |
+| `created_at` | TEXT | UTC RFC3339 时间 |
+| `updated_at` | TEXT | UTC RFC3339 时间 |
+
+规则：
+
+- Migration 自动插入唯一默认记录：跟随系统语言、隐藏英文术语说明。
+- 表级 CHECK 约束拒绝第二条记录、非法语言和非法布尔值。
+- 更新必须携带 `expected_version`；冲突时不覆盖其他窗口刚保存的偏好。
+- 语言设置只影响显示层，不修改 Project、Snapshot、Session、Evidence 或任何派生内容。
+
+### `0016_application_preferences.sql`
+
+- 新建 `app_preferences` 单例表并写入默认记录。
+- 不修改 `0001` 至 `0015`。
+- 不关联 Workspace，以保证语言属于本机应用而非研发事实。
+
 ## 后续演进
 
 以下概念已在产品设计中冻结，但不在当前阶段建表：
@@ -674,3 +700,72 @@ Migration 为 `codex_task_proposals (id, project_id)` 增加唯一索引，使 E
 3. 使用版本匹配和状态匹配保护并发迁移。
 4. 不修改 `0001` 至 `0011`，不启动 Codex、不保存代码 Diff、不运行 Validation Command。
 5. 不修改 Project、Snapshot、Session、Evidence、Git 或 GitHub 数据。
+# D6 Activity Intake 与 Project Pulse 数据设计
+
+Migration `0013_codex_activity_intake.sql`、`0014_project_pulse.sql` 与质量升级 `0015_project_pulse_quality.sql` 只做前向扩展，不修改既有 Migration。
+
+```mermaid
+erDiagram
+    WORKSPACES ||--o| CODEX_CONNECTOR_SETTINGS : configures
+    PROJECTS ||--o| PROJECT_ACTIVITY_SETTINGS : configures
+    PROJECTS ||--o{ PROJECT_ACTIVITY_SYNC_RUNS : records
+    PROJECTS ||--o{ REPOSITORIES : owns
+    REPOSITORIES ||--o| CODEX_SYNC_CURSORS : advances
+    REPOSITORIES ||--o{ CODEX_ACTIVITY_OBSERVATIONS : produces
+    PROJECTS ||--o{ PROJECT_PULSES : observes
+    PROJECT_PULSES ||--o{ PROJECT_PULSE_SOURCES : traces
+    CODEX_ACTIVITY_OBSERVATIONS ||--o{ PROJECT_PULSE_SOURCES : supports
+```
+
+## `codex_connector_settings`
+
+Workspace 单例设置。`executable_path` 可为空，按“用户配置 → PATH → Codex Desktop 安装目录”发现。只保存版本和健康检查时间，不保存 Codex 账号信息或对话。
+
+## `project_activity_settings`
+
+每 Project 独立保存 `open_manual / interval_30m`、AI 显式启用状态和 Provider 引用。`ai_enabled = 1` 时 `ai_provider_id` 必填。默认关闭 AI。
+
+## `project_activity_sync_runs`
+
+持久化触发方式、五个同步阶段、运行状态、计数器、AI 是否调用和脱敏错误。部分唯一索引保证一个 Project 不出现重叠 queued/running 同步。应用启动把遗留运行状态恢复为 `failed / interrupted`。
+
+Pulse 新鲜度以最近一条 `succeeded / partial` SyncRun 的 `completed_at` 计算，而不是以 Pulse 创建时间计算；无新来源的成功同步仍会刷新“最近成功同步”语义，但不会创建重复 Pulse。
+
+## `codex_sync_cursors`
+
+以 Repository 为单位保存最近任务更新时间和成功同步时间，并通过 `(repository_id, project_id)` 复合外键保护项目隔离。
+
+## `codex_activity_observations`
+
+每个新轮次形成不可变结构化观察。`(repository_id, thread_id, turn_id)` 唯一；只保存目标提示、活动/结果/验证/交接摘要、阻塞、来源时间和 SHA-256，不保存完整对话原文。
+
+## `project_pulses`
+
+Pulse 状态为 `pending_review / confirmed / dismissed / superseded`，分析方式为 `rules / ai`。JSON 数组字段保存 achievements、blockers、next_steps，Domain 限制 next_steps 最多三项。部分唯一索引保证每 Project 最多一个 pending Pulse。
+
+`snapshot_basis_version`、`session_basis_id/version` 用于确认前并发检查；`confirmed_snapshot_id` 和 `confirmed_session_id` 记录人工确认产生的正式对象。Pulse 历史不删除。
+
+`content_hash` 是生成该 Pulse 的稳定来源指纹。用户编辑待审核草稿时只增加 `version`，不改变来源指纹；因此来源未变化的后续同步会复用已有 Pulse，不重复调用 AI。ContextExport 仍对最终 Markdown 计算自己的内容哈希。
+
+Snapshot、Session 的 Pulse 引用使用 `(id, project_id)` 复合外键；WorkingCopy 通过插入/更新 Trigger 校验其 Repository 必须属于同一 Project，避免任何跨项目 basis 或确认结果。
+
+## `project_pulse_sources`
+
+使用带 `project_id` 的复合外键同时约束 Pulse 和 Observation，阻止跨 Project 来源混入。`source_order` 固定 Context 和审核页面顺序。
+
+## D6.1 Pulse Quality 前向升级
+
+`0015_project_pulse_quality.sql` 不新增 Episode 表，也不重写 Observation。它只为 `project_pulses` 增加以下来源质量元数据：
+
+- `activity_type`：`implementation / debugging / release / review / support_question / unknown`。
+- `analysis_revision`：既有记录回填为 `legacy-v1`；新规则投影使用 `rules-v2`，AI 增强使用 `ai-v2`。
+- `source_window_started_at / source_window_ended_at`：本次 Working Set 的时间窗。
+- `selected_observation_count / available_observation_count`：实际采用与可用 Observation 数量。
+
+Activity Episode 是运行时投影。新 Pulse 的来源链只写入当前 Episode 和最近两个完成 Episode 中实际进入 Working Set 的 Observation；旧 Pulse 的来源链、确认关系和 Snapshot/Session 引用不变。新 `content_hash` 包含分析修订、选中 Observation Hash、可信 Snapshot/Session basis 与当前 WorkingCopy 状态，使 `legacy-v1` 在来源不变时仍可升级一次，而同一 `rules-v2/ai-v2` 来源不会重复生成。
+
+## WorkingCopy 扩展
+
+新增 nullable `upstream_branch`、`ahead_count`、`behind_count`。NULL 表示无 upstream 或本地引用无法计算；计数必须非负。不执行 `git fetch`，因此它们只代表本机最后一次远端引用状态。
+
+一个 Project 可以关联多个 Repository。每次同步为各 Repository 追加 WorkingCopy；Pulse 来源指纹和规则分析聚合全部 WorkingCopy，`working_copy_id` 仅保存本次同步的首个稳定引用，完整 Git 状态仍由 WorkingCopy 历史保存。

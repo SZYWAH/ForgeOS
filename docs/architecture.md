@@ -438,3 +438,98 @@ Renderer 使用稳定字段顺序和稳定来源排序计算 Markdown 与 SHA-25
 - MCP 不调用 AI，不启动 Agent，不执行 Codex，不启动 Shell，也不执行任何 Git 命令。
 - MCP 不创建、更新或删除 Project、Snapshot、Session、Evidence、Candidate、ContextExport 或其他 ForgeOS 记录。
 - STDIO 仍是唯一 Transport；不监听 HTTP/TCP，不提供写 Tool、Task 执行或后台任务。
+# D6 Codex Activity Intake 与 Project Pulse
+
+D6 在既有模块化单体中增加“只读观察 → 待审核投影 → 人工确认事实”链路：
+
+```mermaid
+flowchart LR
+    Codex["Codex App Server\nSTDIO + read-only whitelist"] --> Intake["CodexActivitySource"]
+    Git["Git CLI\nread-only"] --> Sync["ProjectActivitySync"]
+    Intake --> Sync
+    Sync --> Observation["CodexActivityObservation\nimmutable + redacted"]
+    Observation --> Builder["Project Pulse Builder\nrules / optional AI"]
+    Git --> Builder
+    Facts["Confirmed Snapshot / Session / Evidence"] --> Builder
+    Builder --> Pulse["Project Pulse\npending_review"]
+    Pulse --> Review["Human Review"]
+    Review -->|single transaction| Facts
+    Pulse --> MCP["MCP + Context Pack\nexplicit fact_status"]
+```
+
+## 模块职责
+
+- `ports::CodexActivitySource`：只定义健康检查和按 Repository 读取活动，不暴露任意 App Server 方法。
+- `infrastructure::codex_activity`：发现 `codex.exe`、管理 STDIO 子进程、执行方法白名单、过滤根任务、规范化与脱敏轮次。
+- `ProjectPulseKernel`：协调 Codex、Git、游标、SyncRun、规则分析、可选 AI 回退、Pulse 历史与确认事务。
+- `ProjectActivityRepository`：持久化 Connector、Project 设置、SyncRun、Cursor、Observation、Pulse 与来源链。
+- `jobs`：仅在 ForgeOS 进程存活时每分钟检查 `interval_30m` 项目；不创建 Windows Service 或计划任务。
+- Project Pulse 前端：展示同步进度、结构化草稿、来源、正式事实对比和确认选项。
+- `McpQueryKernel`：只读返回最新保存 Pulse，不触发桌面同步。
+
+## App Server 契约与白名单
+
+允许：`initialize`、`thread/list`、`thread/read(includeTurns=true)`、`thread/goal/get`。
+
+拒绝：任务创建/恢复/归档/删除、轮次启动/引导、命令或进程执行、元数据更新及其他未声明方法。第一版不依赖实验性的 `thread/turns/list`。
+
+## 后台同步数据流
+
+1. IPC 创建 `queued` SyncRun 并立即返回 ID。
+2. 后台任务将阶段依次更新为 connecting、reading_codex、reading_git、analyzing、persisting。
+3. Codex Observation 以 `(repository_id, thread_id, turn_id)` 幂等插入；游标只在 Repository 读取成功后前进。
+4. Git 为 Project 的每个 Repository 创建新的不可变 WorkingCopy 观察；ahead/behind 基于本地远端引用且不执行 fetch。
+5. 来源指纹未变化时不生成 Pulse、不调用 AI。
+6. 新来源先生成规则 Pulse；项目显式启用 Provider 后才尝试固定 JSON AI 分析，失败回退规则结果并把 SyncRun 标记为 partial。
+7. Tauri 事件提供即时进度，数据库中的 SyncRun 支持刷新页面后恢复展示。
+
+Codex Connector 不可用时，SyncRun 继续完成 Git 检查和规则 Pulse，并以 `partial` 保存可读原因；AI Provider 不可用时也只降级到规则摘要。只有 Project 未连接任何本地 Repository 时，同步才在进入外部读取前失败并给出连接引导。
+
+打开项目触发默认同步，同一 Project 五分钟内防抖；手动同步绕过该防抖，但不会与 queued/running 同步重叠。`interval_30m` 只在桌面进程存活时运行，Windows 睡眠出现较大时间间隔后额外等待一分钟，不安装 Service 或计划任务。
+
+## 安全投影
+
+数据库、AI 和 MCP 都不接收原始 reasoning、完整命令输出、环境变量、凭据、完整 Diff 或仓库外绝对路径。Repository 路径只用于桌面端 Project 隔离；进入观察文本前替换为 `<repo>`，其他绝对路径与 Key、Token、Authorization、Password 等值会被省略或替换。MCP 继续使用 SQLite read-only 连接，新增 `get_project_pulse` 也只能读取最近保存投影。
+
+新生成的 Context Pack 固定在 Confirmed Current Snapshot 之后加入 `Observed Activity - Unconfirmed`。已确认 Pulse 不重复冒充观察事实；旧 ContextExport 不回写。MCP 的 Pulse 新鲜度来自最近成功 SyncRun：30 分钟模式超过 60 分钟为 stale，打开/手动模式超过 24 小时为 stale。
+
+## D6.1 Project Pulse Quality Pipeline
+
+```mermaid
+flowchart LR
+    Observation["不可变 Observation"] --> Episode["运行时 Activity Episode"]
+    Episode --> WorkingSet["Pulse Working Set\n当前活动 + 最近两个完成活动"]
+    WorkingSet --> Rules["rules-v2"]
+    WorkingSet --> AI["可选 ai-v2\n最多 20 条 Observation"]
+    Rules --> Pulse["待审核 Pulse"]
+    AI --> Pulse
+```
+
+- Episode 不持久化；8 小时、20 轮次和 72 小时边界只在 Application 层确定性计算。
+- 旧 `legacy-v1` Pulse、Snapshot 与 Session 永久保留。由旧 Pulse 创建的 Snapshot/Session 不重新注入 rules-v2，防止历史摘要反馈污染。
+- Blockers 只使用当前 Episode 的失败/未解决错误与可信正式 Blocker；Evidence、Candidate 和普通 Git Dirty 不再混入研发阻塞。
+- Git 状态作为独立观察展示，只能形成 Next Step 提醒，不能改变活动语义。
+- AI 只能接收规则草稿、Working Set、Git 摘要和可信正式事实，不能读取全部历史；非法结果修复一次后回退 rules-v2。
+- MCP 与 Context Pack 只读暴露 Activity Type、分析修订和来源数量；MCP 仍不能触发同步或写入。
+
+## D6.4 应用语言与通俗表达层
+
+ForgeOS 在领域与页面之间增加独立的显示层，不改变任何正式研发事实：
+
+```text
+SQLite app_preferences
+        ↓
+AppPreferencesKernel / IPC
+        ↓
+AppPreferencesProvider
+        ↓
+i18next 静态资源 + 状态字典 + 错误本地化
+        ↓
+通俗中文或英文界面
+```
+
+- `AppPreferencesKernel` 只负责本机语言和术语提示偏好，通过乐观版本避免多窗口互相覆盖。
+- Provider 在 Workspace 加载前解析实际语言，避免先显示默认英文再切换造成闪烁；读取失败时临时跟随系统语言，不阻止应用启动。
+- 页面标题、说明、主要操作、空状态、日期、枚举和错误提示进入显示层；Project、Snapshot、Session 等领域对象仍使用原有模型。
+- 用户填写内容、Git/GitHub 原文、AI 回复、Context Pack、MCP 返回和哈希不经过翻译，也不会因语言切换重新计算。
+- 英文术语提示是中文界面的辅助显示，不进入导航、主要按钮或正式数据。

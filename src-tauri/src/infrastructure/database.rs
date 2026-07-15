@@ -62,15 +62,33 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             'repositories', 'working_copies', 'repository_evidence_links', \
             'codex_task_proposals', 'codex_task_proposal_status_history', \
             'github_connectors', 'github_import_drafts', 'github_evidence_links', \
-            'codex_execution_records', 'codex_execution_status_history'\
+            'codex_execution_records', 'codex_execution_status_history', \
+            'codex_connector_settings', 'project_activity_settings', \
+            'project_activity_sync_runs', 'codex_sync_cursors', \
+            'codex_activity_observations', 'project_pulses', 'project_pulse_sources', \
+            'app_preferences'\
          )",
     )
     .fetch_one(pool)
     .await?;
 
-    if table_count != 19 {
+    if table_count != 27 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS foundation schema is incomplete".to_owned(),
+        ));
+    }
+
+    let app_preferences_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('app_preferences') \
+         WHERE name IN ('id', 'language_mode', 'show_technical_terms', 'version', \
+         'created_at', 'updated_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if app_preferences_columns != 6 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS application preferences schema is incomplete".to_owned(),
         ));
     }
 
@@ -253,11 +271,12 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "SELECT COUNT(*) FROM pragma_table_info('working_copies') \
          WHERE name IN ('id', 'repository_id', 'branch', 'head_commit', 'is_dirty', \
          'changed_files', 'staged_files', 'unstaged_files', 'untracked_files', \
-         'insertions', 'deletions', 'checked_at')",
+         'insertions', 'deletions', 'upstream_branch', 'ahead_count', 'behind_count', \
+         'checked_at')",
     )
     .fetch_one(pool)
     .await?;
-    if working_copy_columns != 12 {
+    if working_copy_columns != 15 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS Working Copy schema is incomplete".to_owned(),
         ));
@@ -313,6 +332,41 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ));
     }
 
+    let activity_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('codex_activity_observations') WHERE name IN \
+         ('id', 'project_id', 'repository_id', 'thread_id', 'turn_id', 'source_kind', \
+          'turn_status', 'goal_hint', 'activity_summary', 'outcome_summary', \
+          'validation_summary', 'handoff_summary', 'blockers', 'source_updated_at', \
+          'source_hash', 'observed_at')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if activity_columns != 16 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Codex Activity schema is incomplete".into(),
+        ));
+    }
+
+    let pulse_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('project_pulses') WHERE name IN \
+         ('id', 'project_id', 'status', 'analysis_mode', 'ai_provider_id', 'ai_model', \
+          'activity_type', 'analysis_revision', 'source_window_started_at', \
+          'source_window_ended_at', 'selected_observation_count', \
+          'available_observation_count', \
+          'current_goal', 'status_summary', 'achievements', 'blockers', 'next_steps', \
+          'validation_summary', 'handoff', 'git_summary', 'snapshot_basis_version', \
+          'session_basis_id', 'session_basis_version', 'working_copy_id', 'content_hash', \
+          'generated_at', 'updated_at', 'version', 'confirmed_snapshot_id', \
+          'confirmed_session_id')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if pulse_columns != 30 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS Project Pulse schema is incomplete".into(),
+        ));
+    }
+
     Ok(())
 }
 
@@ -328,6 +382,76 @@ pub enum DatabaseInitError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn pulse_quality_migration_preserves_legacy_pulse_and_source_links() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite should connect");
+        for migration in [
+            include_str!("../../../database/migrations/0001_create_workspaces_and_projects.sql"),
+            include_str!("../../../database/migrations/0002_project_identity_kernel.sql"),
+            include_str!("../../../database/migrations/0003_current_snapshot.sql"),
+            include_str!("../../../database/migrations/0004_development_session.sql"),
+            include_str!("../../../database/migrations/0005_evidence_kernel.sql"),
+            include_str!("../../../database/migrations/0006_ai_provider_foundation.sql"),
+            include_str!("../../../database/migrations/0007_context_pack.sql"),
+            include_str!("../../../database/migrations/0008_ai_candidate.sql"),
+            include_str!("../../../database/migrations/0009_git_evidence.sql"),
+            include_str!("../../../database/migrations/0010_codex_task_proposal.sql"),
+            include_str!("../../../database/migrations/0011_github_readonly_import.sql"),
+            include_str!("../../../database/migrations/0012_codex_execution_foundation.sql"),
+            include_str!("../../../database/migrations/0013_codex_activity_intake.sql"),
+            include_str!("../../../database/migrations/0014_project_pulse.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        }
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO project_pulses (id, project_id, status, analysis_mode, current_goal, status_summary, achievements, blockers, next_steps, validation_summary, handoff, git_summary, content_hash, generated_at, updated_at, version, confirmed_snapshot_id) VALUES ('pulse-old', 'project-old', 'confirmed', 'rules', 'legacy goal', 'legacy status', '[]', '[]', '[]', '', '', '', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 1, 'snapshot-old')")
+            .bind("a".repeat(64))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO project_pulse_sources (pulse_id, project_id, observation_id, source_order) VALUES ('pulse-old', 'project-old', 'observation-old', 0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../database/migrations/0015_project_pulse_quality.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("D6.1 migration should preserve legacy Pulse rows");
+
+        let row: (String, String, String, i64) = sqlx::query_as(
+            "SELECT analysis_revision, activity_type, confirmed_snapshot_id, selected_observation_count FROM project_pulses WHERE id = 'pulse-old'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            row,
+            (
+                "legacy-v1".into(),
+                "unknown".into(),
+                "snapshot-old".into(),
+                0
+            )
+        );
+        let sources: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM project_pulse_sources WHERE pulse_id = 'pulse-old'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sources, 1);
+    }
 
     #[tokio::test]
     async fn migrations_create_the_git_evidence_schema() {

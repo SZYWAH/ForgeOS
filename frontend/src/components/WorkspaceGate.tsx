@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { getErrorMessage, projectKernelApi } from "../api/project-kernel";
 import type { Workspace } from "../types/project";
+import { useTranslation } from "react-i18next";
 
 type WorkspaceGateProps = {
   children: (workspace: Workspace) => ReactNode;
@@ -13,6 +14,7 @@ type WorkspaceState =
   | { kind: "error"; message: string };
 
 export function WorkspaceGate({ children }: WorkspaceGateProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<WorkspaceState>({ kind: "loading" });
 
   useEffect(() => {
@@ -27,15 +29,15 @@ export function WorkspaceGate({ children }: WorkspaceGateProps) {
   }, []);
 
   if (state.kind === "loading") {
-    return <FullPageMessage title="正在打开 ForgeOS" detail="正在读取本地工作空间…" />;
+    return <FullPageMessage title={t("workspace.opening")} detail={t("workspace.reading")} />;
   }
 
   if (state.kind === "error") {
     return (
       <FullPageMessage
-        title="无法连接 ForgeOS 后端"
+        title={t("workspace.unavailable")}
         detail={state.message}
-        action={<button onClick={() => window.location.reload()}>重新加载</button>}
+        action={<button onClick={() => window.location.reload()}>{t("workspace.reload")}</button>}
       />
     );
   }
@@ -52,7 +54,8 @@ export function WorkspaceGate({ children }: WorkspaceGateProps) {
 }
 
 function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => void }) {
-  const [name, setName] = useState("我的工程工作空间");
+  const { t } = useTranslation();
+  const [name, setName] = useState(() => t("workspace.defaultName"));
   const [timezone, setTimezone] = useState(
     Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
   );
@@ -80,14 +83,12 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
   return (
     <div className="setup-shell">
       <form className="setup-card" onSubmit={handleSubmit}>
-        <p className="eyebrow">首次运行</p>
-        <h1>创建你的工程工作空间</h1>
-        <p className="setup-copy">
-          ForgeOS 当前只维护一个本地工作空间，用于隔离并组织你的软件项目身份。
-        </p>
+        <p className="eyebrow">{t("workspace.firstRun")}</p>
+        <h1>{t("workspace.setupTitle")}</h1>
+        <p className="setup-copy">{t("workspace.setupDescription")}</p>
 
         <label>
-          工作空间名称
+          {t("workspace.name")}
           <input
             autoFocus
             required
@@ -96,7 +97,7 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
           />
         </label>
         <label>
-          时区
+          {t("workspace.timezone")}
           <input
             required
             value={timezone}
@@ -106,7 +107,7 @@ function WorkspaceSetup({ onCreated }: { onCreated: (workspace: Workspace) => vo
 
         {error ? <p className="form-error">{error}</p> : null}
         <button className="primary-button" disabled={submitting} type="submit">
-          {submitting ? "正在创建…" : "创建工作空间"}
+          {submitting ? t("common.saving") : t("workspace.create")}
         </button>
       </form>
     </div>

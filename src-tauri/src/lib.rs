@@ -14,7 +14,9 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let state = bootstrap::initialize(app.handle())?;
+            jobs::spawn_scheduler(app.handle().clone(), state.project_pulse_kernel.clone());
             app.manage(state.database);
+            app.manage(state.app_preferences_kernel);
             app.manage(state.project_kernel);
             app.manage(state.ai_provider_kernel);
             app.manage(state.context_pack_kernel);
@@ -23,9 +25,12 @@ pub fn run() {
             app.manage(state.codex_task_proposal_kernel);
             app.manage(state.codex_execution_kernel);
             app.manage(state.github_import_kernel);
+            app.manage(state.project_pulse_kernel);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ipc::app_preferences::get_app_preferences,
+            ipc::app_preferences::update_app_preferences,
             ipc::health::get_system_status,
             ipc::workspaces::get_current_workspace,
             ipc::workspaces::create_workspace,
@@ -99,6 +104,19 @@ pub fn run() {
             ipc::github::reject_github_import,
             ipc::github::import_github_project,
             ipc::github::get_project_github_import,
+            ipc::project_pulse::get_codex_connector_status,
+            ipc::project_pulse::update_codex_connector_settings,
+            ipc::project_pulse::get_project_activity_settings,
+            ipc::project_pulse::update_project_activity_settings,
+            ipc::project_pulse::sync_project_activity,
+            ipc::project_pulse::get_activity_sync_run,
+            ipc::project_pulse::list_activity_sync_runs,
+            ipc::project_pulse::get_latest_project_pulse,
+            ipc::project_pulse::list_project_pulses,
+            ipc::project_pulse::get_project_pulse_sources,
+            ipc::project_pulse::update_project_pulse_draft,
+            ipc::project_pulse::confirm_project_pulse,
+            ipc::project_pulse::dismiss_project_pulse,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run ForgeOS");

@@ -8,11 +8,14 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AiCandidateKernel, AiProviderKernel, CodexExecutionKernel, CodexTaskProposalKernel,
-        ContextPackKernel, GitHubImportKernel, ProjectKernel, RepositoryKernel,
+        AiCandidateKernel, AiProviderKernel, AppPreferencesKernel, CodexExecutionKernel,
+        CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel, ProjectKernel,
+        ProjectPulseKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
+        app_preferences::SqliteAppPreferencesRepository,
+        codex_activity::CodexAppServerAdapter,
         codex_runner::RecordOnlyCodexRunner,
         context_renderer::MarkdownContextRenderer,
         database::{self, DatabaseState},
@@ -27,6 +30,7 @@ const DATA_DIR_ENV: &str = "FORGEOS_DATA_DIR";
 
 pub struct BootstrapState {
     pub database: DatabaseState,
+    pub app_preferences_kernel: AppPreferencesKernel,
     pub project_kernel: ProjectKernel,
     pub ai_provider_kernel: AiProviderKernel,
     pub context_pack_kernel: ContextPackKernel,
@@ -35,6 +39,7 @@ pub struct BootstrapState {
     pub codex_task_proposal_kernel: CodexTaskProposalKernel,
     pub codex_execution_kernel: CodexExecutionKernel,
     pub github_import_kernel: GitHubImportKernel,
+    pub project_pulse_kernel: ProjectPulseKernel,
 }
 
 pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
@@ -45,6 +50,9 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     let database = tauri::async_runtime::block_on(database::connect(&database_path))?;
 
     let repository = Arc::new(SqliteProjectRepository::new(database.pool.clone()));
+    let app_preferences_kernel = AppPreferencesKernel::new(Arc::new(
+        SqliteAppPreferencesRepository::new(database.pool.clone()),
+    ));
     let project_kernel = ProjectKernel::new(repository.clone());
     let ai_provider_kernel = AiProviderKernel::new(
         repository.clone(),
@@ -69,10 +77,19 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         ),
         Arc::new(WindowsCredentialGitHubTokenStore::default()),
     );
+    let project_pulse_kernel = ProjectPulseKernel::new(
+        repository.clone(),
+        Arc::new(CodexAppServerAdapter),
+        Arc::new(GitCliAdapter),
+        Arc::new(ai_provider_kernel.clone()),
+    );
+    tauri::async_runtime::block_on(project_pulse_kernel.recover_interrupted_runs())
+        .map_err(|error| BootstrapError::ProjectPulse(error.to_string()))?;
 
     println!("ForgeOS database ready: {}", database_path.display());
     Ok(BootstrapState {
         database,
+        app_preferences_kernel,
         project_kernel,
         ai_provider_kernel,
         context_pack_kernel,
@@ -81,6 +98,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         codex_task_proposal_kernel,
         codex_execution_kernel,
         github_import_kernel,
+        project_pulse_kernel,
     })
 }
 

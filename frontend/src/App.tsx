@@ -15,6 +15,9 @@ import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { CodexTasksPage } from "./pages/CodexTasksPage";
 import { CodexExecutionsPage } from "./pages/CodexExecutionsPage";
 import { GitHubImportPage } from "./pages/GitHubImportPage";
+import { ProjectPulsePage } from "./pages/ProjectPulsePage";
+import { ProjectSettingsPage } from "./pages/ProjectSettingsPage";
+import { AppSettingsPage } from "./pages/AppSettingsPage";
 
 function App() {
   return (
@@ -26,6 +29,8 @@ function App() {
               <Route index element={<DashboardPage />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="projects/:projectId" element={<ProjectOverviewPage />} />
+              <Route path="projects/:projectId/pulse" element={<ProjectPulsePage />} />
+              <Route path="projects/:projectId/settings" element={<ProjectSettingsPage />} />
               <Route path="projects/:projectId/snapshot" element={<SnapshotPage />} />
               <Route path="projects/:projectId/sessions" element={<SessionsPage />} />
               <Route path="projects/:projectId/evidence" element={<EvidencePage />} />
@@ -35,6 +40,7 @@ function App() {
               <Route path="projects/:projectId/codex-tasks" element={<CodexTasksPage />} />
               <Route path="projects/:projectId/codex-executions" element={<CodexExecutionsPage />} />
               <Route path="settings/ai-providers" element={<AiProvidersPage />} />
+              <Route path="settings" element={<AppSettingsPage />} />
               <Route path="github-import" element={<GitHubImportPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

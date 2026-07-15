@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "../i18n";
+import { localizedErrorText } from "../utils/appError";
 import type {
   CreateProjectInput,
   CreateWorkspaceInput,
@@ -31,6 +33,9 @@ export const projectKernelApi = {
 };
 
 export function getErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    return localizedErrorText(error, i18n.t);
+  }
   if (typeof error === "string") {
     return error;
   }
@@ -40,12 +45,10 @@ export function getErrorMessage(error: unknown): string {
   }
 
   if (error && typeof error === "object" && "message" in error) {
-    const code = "code" in error ? String(error.code) : "";
-    const message = String(error.message);
-    return code ? `${message} (${code})` : message;
+    return String(error.message);
   }
 
-  return "发生未知错误，请重试。";
+  return i18n.t("errors.unknownTitle");
 }
 
 export function getErrorCode(error: unknown): string | undefined {

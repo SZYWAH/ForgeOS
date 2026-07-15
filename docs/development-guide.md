@@ -189,3 +189,31 @@ D0 工程初始化只有在以下条件满足时才算完成：
 - 工程模块和文档存在
 - Git 工作区状态已报告
 - 没有自动提交
+
+## Localization Contract
+
+用户可见文案必须遵守以下规则：
+
+- 使用 `i18next` 稳定语义键，禁止以中文或英文原句作为翻译键。
+- 新增或修改用户可见文本时，必须同时更新 `zh-CN` 与 `en-US`；自动测试必须验证两套资源键完全一致。
+- 页面使用通俗标题、一句话用途说明、一个首要操作、数据内容和默认折叠的技术信息。关键解释不能只放在 Tooltip。
+- 导航和主要按钮不直接暴露 Snapshot、Session、Evidence、Context Pack 等内部架构名；需要对照时使用 `TechnicalTerm`，且只在中文和用户显式开启术语提示时显示。
+- 数据库枚举通过中央显示字典转换，禁止在页面内重复维护状态映射。
+- 日期和相对时间必须使用当前应用语言，不能硬编码 `zh-CN`。
+- IPC 错误优先根据稳定 `code` 本地化，并提供用户可执行的下一步；英文原始消息与错误码进入 `TechnicalDetails`。
+- 不翻译或重写用户输入、Git/GitHub 原文、AI 回复、Codex 内容、历史 Context Pack 或 MCP 数据。
+- 新页面必须覆盖中英文、空状态、错误状态和长文本状态测试。
+
+## Content Presentation Contract
+
+ForgeOS 的页面只负责展示摘要和支持决策，数据库中的原始事实不得因界面长度预算而截断或改写。
+
+- 当前目标默认显示 2 行，状态总结默认显示 3 行。
+- 成果、阻塞、下一步等列表默认显示 3 项，每项最多显示 2 行。
+- 只有内容真实溢出时才显示“展开全文”；展开后的普通正文最高 480px，Markdown、AI 响应和执行结果最高 580px，超出后在区域内部滚动。
+- Snapshot、Session、Pulse 等历史记录默认只展示紧凑记录头，同一列表一次只能展开一条，首批渲染 10 条。
+- 路径、URL、Hash 和 ID 使用单行省略显示，并保留完整值提示与复制能力。
+- 所有用户输入、Markdown 和外部文本容器必须具有 `min-width: 0`、`max-width: 100%`、`overflow-wrap: anywhere` 与 `word-break: break-word`。
+- 桌面宽度大于 900px 时，`.content-scroll` 是唯一页面级滚动区域；窄窗口恢复自然文档滚动。
+- 概览允许清理旧 Codex 附件包装形成可读预览，但展开后必须显示未经修改的原始字段值。
+- 新增长内容页面优先复用 `CollapsibleText`、`BoundedList`、`RecordDisclosure` 和 `CompactIdentifier`，不得重新引入分散的固定高度。

@@ -1,5 +1,7 @@
 # ForgeOS
 
+> 当前阶段：D6 Codex Activity Intake + Project Pulse。ForgeOS 通过 Codex App Server 与只读 Git 观察生成待审核研发态势，用户确认后才写入正式 Snapshot / Session。
+
 ForgeOS（Forge Operating System）是面向独立开发者的个人 AI 辅助软件研发操作系统。
 
 它用于在多个软件项目之间保存可信的研发上下文、当前状态、技术决策、问题排查过程与成果证据，并生成可供 Codex 使用的 Context Pack。
@@ -20,7 +22,7 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 
 ## 当前阶段
 
-当前处于 **D3：ForgeOS MCP Read-only Server**。
+当前处于 **D6：Codex Activity Intake + Project Pulse**。
 
 本阶段只负责：
 
@@ -60,6 +62,13 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 - 每次刷新追加不可变 WorkingCopy 观察记录，不修改本地 Git 仓库
 - 由用户明确把 Commit 或 WorkingCopy 状态转换为 Git Evidence
 - 使用 Repository/Evidence 复合 Project 外键阻止跨项目 Git Evidence
+- 通过官方 Codex App Server STDIO 接口按 Repository 只读导入结构化任务活动
+- 通过只读 Git 检查分支、HEAD、Dirty、Upstream 与 Ahead/Behind，不执行 fetch 或写操作
+- 自动生成待审核 Project Pulse，并清楚区分系统观察与人工确认事实
+- 在项目首页展示同步阶段、扫描计数、部分失败原因与最新 Git 工作区状态
+- 由用户审核后在单个事务中创建新版 Snapshot，并开始或更新 Development Session
+- 可选按 Project 启用 AI 结构化分析；失败时自动回退确定性规则摘要
+- MCP 和新 Context Pack 可读取最近保存的 Pulse，但不会触发同步或修改 ForgeOS
 
 本阶段不实现 Decision、Problem、AI 自动调用、自动总结、AI 事实生成、Agent 执行、MCP 写入、
 Git 写操作、GitHub、Codex 自动协同、Search、Timeline、对话历史或任务系统。

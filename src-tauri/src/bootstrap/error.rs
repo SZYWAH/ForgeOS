@@ -16,4 +16,7 @@ pub enum BootstrapError {
 
     #[error("failed to initialize the GitHub read-only client: {0}")]
     GitHubClient(String),
+
+    #[error("failed to recover Project Pulse background state: {0}")]
+    ProjectPulse(String),
 }

@@ -11,6 +11,7 @@ pub mod github_import;
 mod kernel;
 pub mod mcp_query;
 pub mod project;
+pub mod project_pulse;
 pub mod repository;
 pub mod session;
 pub mod snapshot;
@@ -27,6 +28,10 @@ pub use kernel::ProjectKernel;
 pub use mcp_query::{
     ContextPackView, CurrentSnapshotView, CurrentStateView, EvidenceRelationView,
     EvidenceSummaryView, EvidenceView, GitActivityView, McpQueryError, McpQueryKernel,
-    ProjectIdentityView, ProjectOverviewView, RecentSessionView, RecommendedNextStepView,
+    ProjectIdentityView, ProjectOverviewView, ProjectPulseView, RecentSessionView,
+    RecommendedNextStepView,
 };
+pub use project_pulse::{ProjectPulseError, ProjectPulseKernel};
 pub use repository::{RepositoryKernel, RepositoryKernelError};
+pub mod app_preferences;
+pub use app_preferences::{AppPreferencesError, AppPreferencesKernel};

@@ -26,6 +26,9 @@ export type WorkingCopy = {
   headCommit: string;
   isDirty: boolean;
   diffSummary: DiffSummary;
+  upstreamBranch: string | null;
+  aheadCount: number | null;
+  behindCount: number | null;
   checkedAt: string;
 };
 
@@ -45,6 +48,9 @@ export type GitInspection = {
   headCommit: string;
   isDirty: boolean;
   diffSummary: DiffSummary;
+  upstreamBranch: string | null;
+  aheadCount: number | null;
+  behindCount: number | null;
   checkedAt: string;
   recentCommits: GitCommit[];
 };

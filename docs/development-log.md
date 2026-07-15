@@ -715,3 +715,139 @@ D5：MCP Intelligence Layer 完成，等待用户验收
 ### 下一步计划
 
 等待用户确认 D5 MCP Intelligence Layer 验收结果。确认前不提交 Git，不进入 Codex Execution、Agent、MCP 写入、Shell/Git 自动化或其他后续开发。
+# 2026-07-13 — ForgeOS D6 Codex Activity Intake + Project Pulse
+
+## 当前阶段
+
+D6：自动观察与人工确认闭环实现。
+
+## 目标
+
+把“人工维护研发记录”调整为“ForgeOS 观察 Codex 与 Git，用户审核后确认正式事实”。
+
+## 完成内容
+
+- 新增 0013/0014 前向 Migration、Codex Connector、Project Activity 设置、SyncRun、Cursor、Observation、Pulse 与来源链。
+- 新增官方 Codex App Server STDIO 只读 Adapter，固定四个方法白名单，并按 Repository 精确隔离任务。
+- Git WorkingCopy 增加 upstream/ahead/behind 观察，不执行 fetch 或任何 Git 写操作。
+- 新增确定性规则 Pulse、可选 AI 固定 JSON 增强、一次修复和失败回退。
+- 新增 Project Pulse 审核、编辑、忽略和 Snapshot/Session 单事务确认。
+- 新增打开项目自动同步、手动同步、30 分钟进程内调度、SyncRun 恢复和 Tauri 进度事件。
+- Project Overview 调整为 Pulse 主入口，Project Identity 移入设置页，Dashboard 改为关注队列。
+- Context Pack 新增明确标识的 Observed Activity 章节；MCP 新增只读 `get_project_pulse`。
+- 新增 ADR-015 与 ADR-016。
+
+## 安全结果
+
+- 不保存完整 Codex 对话、reasoning、完整命令输出、环境变量、凭据、完整 Diff 或 App Server 原始 JSONL。
+- AI 与 Pulse 均不能直接修改正式事实。
+- MCP 不触发同步，不返回 Token、绝对路径或原始对话，并继续使用 SQLite read-only 连接。
+
+## 验证结果
+
+- `npm run typecheck` 与 `npm run build` 通过；Vite 生产构建完成 66 个模块转换。
+- `cargo fmt --check` 与 `cargo check` 通过。
+- 主 Rust 测试共发现 75 个测试：73 个通过，0 个失败，2 个按设计忽略；其中真实 GitHub 网络测试默认忽略。
+- Windows 实机 `Codex App Server` 只读 Smoke Test 单独执行通过，验证本机可发现并调用官方 App Server。
+- `forgeos-mcp` 的格式检查、编译检查与测试通过：2 个测试通过，0 个失败。
+- D6 集成测试覆盖 Observation 幂等、Project 隔离、Pulse 状态与来源链、Git Ahead/Behind、确认事务、SQLite `integrity_check = ok` 与 `foreign_key_check = 0`。
+- 前端仅依赖 Tauri IPC；普通浏览器开发服务器无法脱离 Tauri WebView 完整加载真实数据页面，生产构建与类型检查已作为本轮前端自动验证结果。
+
+## 下一步计划
+
+等待 D6 验收。验收前不进入 Codex 执行、Agent、MCP 写入或 Git 自动化。
+
+# 2026-07-13 — ForgeOS D6.1 Project Pulse Quality Patch
+
+## 当前阶段
+
+D6.1：Pulse 语义质量修正与旧数据安全升级。
+
+## 完成内容
+
+- 新增前向 Migration `0015_project_pulse_quality.sql`；旧 Pulse 自动标记为 `legacy-v1`，原来源链、确认关系、Snapshot 和 Session 均不覆盖。
+- 新增运行时 `ActivityEpisodeBuilder` 与 `PulseWorkingSetSelector`，Pulse 只采用当前活动和近 14 天最多两个完成活动。
+- 新增 `activity_type`、`analysis_revision`、来源时间窗、采用/可用 Observation 计数和只读质量警告。
+- rules-v2 使用字段专用清洗、Unicode 安全截断、精简成果/验证/阻塞/下一步规则，并隔离历史 Handoff、Evidence/Candidate 与普通 Git Dirty。
+- AI 输入限制为 Working Set 中最多 20 条 Observation，固定 JSON 增加 Activity Type，非法结果修复一次后回退 rules-v2。
+- 审核页显示分析范围和旧版警告；Snapshot 默认选中，只有 implementation/debugging 默认应用 Session，完成 Session 始终默认关闭。
+- MCP `get_project_pulse` 增加活动类型、分析修订和来源计数；新 Context Pack 的未确认活动章节增加 Activity Type。
+
+## 安全边界
+
+- 不重写 Observation，不新增 Episode 表，不修改或删除旧正式事实。
+- 不执行 Codex，不新增 MCP 写工具，不执行 Git 写操作，不自动创建 Evidence。
+- 存在提示词包装或超长字段时，后端和前端共同阻止确认，要求用户先编辑草稿。
+
+## 验证结果
+
+- `npm run typecheck` 与 `npm run build` 通过；Vite 生产构建完成 66 个模块转换。
+- `cargo fmt --check`、`cargo check` 与主程序全量 `cargo test --jobs 2` 通过：67 项单元测试通过、1 项需外部环境的常规测试忽略，全部集成测试通过。
+- `forgeos-mcp` 的格式、编译、单元测试与 STDIO 只读集成测试通过，工具面保持精确的 12 个只读工具。
+- Windows Codex App Server 只读 Smoke Test 实机通过。
+- SQLite `integrity_check` 返回 `ok`，`foreign_key_check` 无记录。
+- Daymark 实机重新同步生成 `rules-v2` 待审核 Pulse：活动类型为 `support_question`，从 250 条可用 Observation 中只选择 3 条；旧 `legacy-v1` Pulse 的 249 条来源、Snapshot v1 与 Open Session 均保持不变。
+- 审核页实机确认：支持咨询默认只勾选创建新版 Snapshot，更新 Session 与完成 Session 均默认关闭；本阶段未代替用户确认，因此 Snapshot v2 尚未创建。
+
+## 下一步计划
+
+等待用户审核 Daymark 的新 Pulse；确认时可只创建 Snapshot v2，并由用户明确决定旧 Open Session 的保留、更新或放弃。
+
+# 2026-07-13 — ForgeOS D6.2 页面内容治理与工作台稳定性调整
+
+## 当前阶段
+
+D6.2：统一长内容预算、详情展开与桌面工作台滚动边界。
+
+## 完成内容
+
+- 新增 `CollapsibleText`、`BoundedList`、`RecordDisclosure` 与 `CompactIdentifier`，统一正文折叠、列表预算、历史单条展开和路径/Hash 紧凑展示。
+- 新增 `formatFactPreview`，旧 Snapshot 概览优先展示 `My request for Codex` 的实际目标；附件路径和 Markdown 包装只从预览隐藏，原始事实永久保留。
+- 桌面宽度大于 900px 时固定应用壳层，由 `.content-scroll` 负责唯一页面级滚动；窄窗口继续使用自然文档滚动。
+- Project Overview、Pulse、Snapshot、Session、Evidence、AI Provider、Context Pack、Candidate、GitHub Import、Repository、Codex Task 与 Execution 统一接入内容高度 Token。
+- Snapshot 与 Session 历史改为单条展开、首批 10 条；Pulse 来源首批 5 条，历史首批 10 条；设置与历史默认折叠。
+- Pulse 审核页在宽屏下将确认操作保持可见，正式事实对比独立滚动，避免长事实把核心按钮推离视口。
+- 引入 Vitest、Testing Library、jest-dom 与 jsdom 开发测试栈，新增 `npm run test`。
+
+## 验证结果
+
+- `npm run typecheck`、`npm run test` 与 `npm run build` 通过；9 项前端测试覆盖旧包装预览、真实溢出、10,000 字正文、长路径/Hash、列表计数、单条历史展开、原文保留和页面值切换重置。
+- `cargo fmt --check`、`cargo check` 与主程序 `cargo test --jobs 2` 通过：67 项单元测试及全部集成测试通过，2 项依赖外部环境的测试按设计忽略。
+- `forgeos-mcp` 的格式、编译和测试通过：12 个只读工具保持不变，STDIO 安全与隔离测试通过。
+- SQLite `integrity_check = ok`，`foreign_key_check = 0`；D6.2 未新增 Migration、Rust Domain 或 IPC。
+- Windows 实机检查覆盖 960px 级桌面窗口与最大化宽屏：无文字跨列、无页面级横向滚动、侧栏和顶栏稳定；Daymark 旧 Snapshot 显示实际用户问题而不是附件路径；Pulse 主操作、审核确认、来源摘要与次级折叠区域均可发现。
+
+## 下一步计划
+
+等待用户验收 D6.2。当前不提交 Git，不进入后端分页、虚拟列表、数据库全文搜索或新的业务领域开发。
+
+# 2026-07-15 — ForgeOS D6.4 全局语言设置与通俗化界面
+
+## 当前阶段
+
+D6.4：应用级中英文切换、领域术语显示边界与全页面通俗表达调整。
+
+## 完成内容
+
+- 新增前向 Migration `0016_application_preferences.sql` 与 `app_preferences` 单例设置表，默认跟随系统语言并关闭英文术语说明。
+- 新增 AppPreferences Domain、Repository、Application Kernel、IPC 与乐观版本冲突处理；设置读取失败不阻止应用启动，保存冲突会重新读取而不覆盖其他窗口。
+- 引入 `i18next` 与 `react-i18next`，在 Workspace 加载前完成语言解析；支持 `system / zh-CN / en-US` 并在应用设置页即时切换、重启保持。
+- 新增 `PageIntro`、`EmptyState`、`TechnicalTerm` 与 `TechnicalDetails`，统一页面用途、主要操作、空状态和技术信息层级。
+- 项目六个主要页面调整为“概览、当前状态、开发记录、项目资料、代码仓库、AI 协作”，默认不依赖 Snapshot、Session、Evidence、Repository、Context Pack 等内部术语才能理解。
+- 同步调整工作区、项目列表、项目设置、审核项目状态、AI 服务、AI 建议、GitHub 导入、给 Codex 的任务、执行记录、启动页、404 和全局导航。
+- 建立中央状态/日期显示层与基于 IPC 错误码的本地化；用户输入、Git/GitHub 原文、AI 回复、既有 Context Pack 与 MCP 数据保持原文，不因界面语言切换而改写或重算。
+- 新增 ADR-017，并更新 Architecture、Database Design 与 Development Guide 的本地化契约。
+
+## 验证结果
+
+- `npm run typecheck`、`npm run test`、`npm run build` 通过；4 个测试文件共 36 项测试通过，覆盖系统语言解析、双语资源键一致、即时切换、持久化版本、并发冲突重载、术语提示边界和现有工作台回归。
+- `cargo fmt --check` 与 `cargo check` 通过。
+- 主程序 `cargo test --target-dir target-d64 --jobs 2 -q` 通过：70 项单元测试通过，1 项外部依赖测试按设计忽略，全部数据库与应用集成测试通过。
+- `cargo test --manifest-path forgeos-mcp/Cargo.toml -q` 通过；MCP 只读协议与 STDIO 集成测试保持不变。
+- 本机现有 ForgeOS SQLite 已执行 Migration 0016；`app_preferences` 默认记录为 `system / false / v1`，`integrity_check = ok`，`foreign_key_check = 0`。
+- `git diff --check` 无空白错误。生产构建仅保留既有的前端主包大于 500 kB 提示，本阶段未改变路由拆包策略。
+- 已完成自动化布局与双语回归；960×720、1280×820、1920×1080 及 100%/125%/150% 的完整人工视觉矩阵留给 D6.4 实机验收，不在日志中虚报已完成。
+
+## 下一步计划
+
+等待用户验收 D6.4。当前不自动提交 Git，也不进入 Codex 执行、Agent、MCP 写入、自动翻译或新的业务领域开发。

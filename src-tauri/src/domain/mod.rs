@@ -13,6 +13,7 @@ mod error;
 mod evidence;
 mod github;
 mod project;
+mod project_pulse;
 mod repository;
 mod session;
 mod snapshot;
@@ -35,7 +36,14 @@ pub use github::{
     GitHubImportDraft, GitHubImportStatus, GitHubReleaseFact, GitHubRepositoryFacts,
 };
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
+pub use project_pulse::{
+    ActivitySyncRun, CodexActivityObservation, CodexConnectorSettings, ProjectActivitySettings,
+    ProjectPulse, ProjectPulseDetails, ProjectPulseQuality, PulseActivityType, PulseAnalysisMode,
+    PulseAnalysisRevision, PulseStatus, SyncMode, SyncStage, SyncStatus, SyncTrigger,
+};
 pub use repository::{validate_commit_sha, DiffSummary, Repository, WorkingCopy};
 pub use session::{DevelopmentSession, SessionStatus};
 pub use snapshot::{ProjectSnapshot, SnapshotDetails};
 pub use workspace::Workspace;
+mod app_preferences;
+pub use app_preferences::{AppPreferences, LanguageMode};
