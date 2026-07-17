@@ -133,6 +133,11 @@ impl ContextPackKernel {
                 .build_project_ai_context(project_id)
                 .await
                 .map_err(|error| ContextPackError::Render(error.to_string()))?;
+            if context.is_blocked() {
+                return Err(ContextPackError::Render(
+                    "project context contains content that must be reviewed before export".into(),
+                ));
+            }
             format!(
                 "{}\n\n## Intended Use\n\nTemplate: {}\n",
                 context.content_markdown.trim_end(),

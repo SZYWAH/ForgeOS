@@ -66,12 +66,27 @@ impl ForgeOsMcpServer {
         Parameters(locator): Parameters<ProjectLocator>,
     ) -> Result<Json<ProjectContextResult>, String> {
         let project_id = self.resolve(locator).await?;
-        self.kernel
+        let context = self
+            .kernel
+            .build_project_ai_context(&project_id)
+            .await
+            .map_err(safe_error)?;
+        if context.is_blocked() {
+            return Err(
+                "ForgeOS blocked this context because it contains content that must be reviewed in the desktop app"
+                    .into(),
+            );
+        }
+        let overview = self
+            .kernel
             .get_project_memory_overview(&project_id)
             .await
-            .map(ProjectContextResult::from)
-            .map(Json)
-            .map_err(safe_error)
+            .map_err(safe_error)?;
+        Ok(Json(ProjectContextResult::from_safe_context(
+            context,
+            overview.project.lifecycle_stage.as_str().into(),
+            overview.project.status.as_str().into(),
+        )))
     }
 
     #[tool(
@@ -140,12 +155,18 @@ impl ForgeOsMcpServer {
         Parameters(locator): Parameters<ProjectLocator>,
     ) -> Result<Json<AiContextResult>, String> {
         let project_id = self.resolve(locator).await?;
-        self.kernel
+        let context = self
+            .kernel
             .build_project_ai_context(&project_id)
             .await
-            .map(AiContextResult::from)
-            .map(Json)
-            .map_err(safe_error)
+            .map_err(safe_error)?;
+        if context.is_blocked() {
+            return Err(
+                "ForgeOS blocked this context because it contains content that must be reviewed in the desktop app"
+                    .into(),
+            );
+        }
+        Ok(Json(AiContextResult::from(context)))
     }
 
     async fn resolve(&self, locator: ProjectLocator) -> Result<String, String> {

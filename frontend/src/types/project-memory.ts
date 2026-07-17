@@ -100,6 +100,51 @@ export type SnapshotRepairDraft = {
 
 export type ProjectAiContext = {
   projectId: string;
+  readiness: "ready" | "warning" | "blocked";
+  qualityIssues: MemoryQualityIssue[];
+  identity: {
+    name: string;
+    description: string;
+    vision: string;
+    targetUser: string;
+    scopeSummary: string;
+    nonGoals: string;
+    techStack: string;
+  };
+  confirmedState: {
+    version: number;
+    confirmedAt: string;
+    supersededByNewerActivity: boolean;
+    currentGoal: string;
+    statusSummary: string;
+    achievements: string[];
+    blockers: string[];
+    nextSteps: string[];
+  } | null;
+  observedState: {
+    status: string;
+    factStatus: "observed_unconfirmed" | "confirmed";
+    generatedAt: string;
+    currentGoal: string;
+    statusSummary: string;
+    achievements: string[];
+    blockers: string[];
+    nextSteps: string[];
+  } | null;
+  recentHistory: DevelopmentHistoryItem[];
+  confirmedAchievements: Array<{
+    id: string;
+    title: string;
+    result: string;
+    featured: boolean;
+  }>;
+  gitState: Array<{
+    branch: string;
+    dirtyFiles: number;
+    aheadCount: number | null;
+    behindCount: number | null;
+  }>;
+  nextSteps: string[];
   contentMarkdown: string;
   contentHash: string;
 };

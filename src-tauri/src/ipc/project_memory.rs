@@ -4,8 +4,9 @@ use tauri::State;
 
 use crate::application::{
     DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, MemoryQualityIssue,
-    ProjectAiContext, ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
-    SnapshotRepairDraft,
+    ProjectAiAchievement, ProjectAiConfirmedState, ProjectAiContext, ProjectAiContextIdentity,
+    ProjectAiGitState, ProjectAiObservedState, ProjectMemoryOverview, ProjectMemoryQueryKernel,
+    ProjectMemorySummary, SnapshotRepairDraft,
 };
 
 use super::{
@@ -224,14 +225,158 @@ impl From<SnapshotRepairDraft> for SnapshotRepairDraftDto {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectAiContextDto {
     project_id: String,
+    readiness: String,
+    quality_issues: Vec<MemoryQualityIssueDto>,
+    identity: ProjectAiContextIdentityDto,
+    confirmed_state: Option<ProjectAiConfirmedStateDto>,
+    observed_state: Option<ProjectAiObservedStateDto>,
+    recent_history: Vec<DevelopmentHistoryItemDto>,
+    confirmed_achievements: Vec<ProjectAiAchievementDto>,
+    git_state: Vec<ProjectAiGitStateDto>,
+    next_steps: Vec<String>,
     content_markdown: String,
     content_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectAiContextIdentityDto {
+    name: String,
+    description: String,
+    vision: String,
+    target_user: String,
+    scope_summary: String,
+    non_goals: String,
+    tech_stack: String,
+}
+
+impl From<ProjectAiContextIdentity> for ProjectAiContextIdentityDto {
+    fn from(value: ProjectAiContextIdentity) -> Self {
+        Self {
+            name: value.name,
+            description: value.description,
+            vision: value.vision,
+            target_user: value.target_user,
+            scope_summary: value.scope_summary,
+            non_goals: value.non_goals,
+            tech_stack: value.tech_stack,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectAiConfirmedStateDto {
+    version: i64,
+    confirmed_at: DateTime<Utc>,
+    superseded_by_newer_activity: bool,
+    current_goal: String,
+    status_summary: String,
+    achievements: Vec<String>,
+    blockers: Vec<String>,
+    next_steps: Vec<String>,
+}
+
+impl From<ProjectAiConfirmedState> for ProjectAiConfirmedStateDto {
+    fn from(value: ProjectAiConfirmedState) -> Self {
+        Self {
+            version: value.version,
+            confirmed_at: value.confirmed_at,
+            superseded_by_newer_activity: value.superseded_by_newer_activity,
+            current_goal: value.current_goal,
+            status_summary: value.status_summary,
+            achievements: value.achievements,
+            blockers: value.blockers,
+            next_steps: value.next_steps,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectAiObservedStateDto {
+    status: String,
+    fact_status: String,
+    generated_at: DateTime<Utc>,
+    current_goal: String,
+    status_summary: String,
+    achievements: Vec<String>,
+    blockers: Vec<String>,
+    next_steps: Vec<String>,
+}
+
+impl From<ProjectAiObservedState> for ProjectAiObservedStateDto {
+    fn from(value: ProjectAiObservedState) -> Self {
+        Self {
+            status: value.status,
+            fact_status: value.fact_status,
+            generated_at: value.generated_at,
+            current_goal: value.current_goal,
+            status_summary: value.status_summary,
+            achievements: value.achievements,
+            blockers: value.blockers,
+            next_steps: value.next_steps,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectAiAchievementDto {
+    id: String,
+    title: String,
+    result: String,
+    featured: bool,
+}
+
+impl From<ProjectAiAchievement> for ProjectAiAchievementDto {
+    fn from(value: ProjectAiAchievement) -> Self {
+        Self {
+            id: value.id,
+            title: value.title,
+            result: value.result,
+            featured: value.featured,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectAiGitStateDto {
+    branch: String,
+    dirty_files: i64,
+    ahead_count: Option<i64>,
+    behind_count: Option<i64>,
+}
+
+impl From<ProjectAiGitState> for ProjectAiGitStateDto {
+    fn from(value: ProjectAiGitState) -> Self {
+        Self {
+            branch: value.branch,
+            dirty_files: value.dirty_files,
+            ahead_count: value.ahead_count,
+            behind_count: value.behind_count,
+        }
+    }
 }
 
 impl From<ProjectAiContext> for ProjectAiContextDto {
     fn from(value: ProjectAiContext) -> Self {
         Self {
             project_id: value.project_id,
+            readiness: value.readiness,
+            quality_issues: value.quality_issues.into_iter().map(Into::into).collect(),
+            identity: value.identity.into(),
+            confirmed_state: value.confirmed_state.map(Into::into),
+            observed_state: value.observed_state.map(Into::into),
+            recent_history: value.recent_history.into_iter().map(Into::into).collect(),
+            confirmed_achievements: value
+                .confirmed_achievements
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            git_state: value.git_state.into_iter().map(Into::into).collect(),
+            next_steps: value.next_steps,
             content_markdown: value.content_markdown,
             content_hash: value.content_hash,
         }

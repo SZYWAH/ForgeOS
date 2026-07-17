@@ -40,9 +40,10 @@ pub use memory_content::{
     MemoryContentPolicy, MemoryQualityCode, MemoryQualityIssue, MemoryQualitySeverity,
 };
 pub use project_memory::{
-    DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiContext,
-    ProjectMemoryError, ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
-    SnapshotRepairDraft,
+    DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiAchievement,
+    ProjectAiConfirmedState, ProjectAiContext, ProjectAiContextIdentity, ProjectAiGitState,
+    ProjectAiObservedState, ProjectMemoryError, ProjectMemoryOverview, ProjectMemoryQueryKernel,
+    ProjectMemorySummary, SnapshotRepairDraft,
 };
 pub use project_pulse::{ProjectPulseError, ProjectPulseKernel};
 pub use repository::{RepositoryKernel, RepositoryKernelError};

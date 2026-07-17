@@ -105,8 +105,74 @@ pub struct DevelopmentHistoryPage {
 #[derive(Clone, Debug)]
 pub struct ProjectAiContext {
     pub project_id: String,
+    pub readiness: String,
+    pub quality_issues: Vec<MemoryQualityIssue>,
+    pub identity: ProjectAiContextIdentity,
+    pub confirmed_state: Option<ProjectAiConfirmedState>,
+    pub observed_state: Option<ProjectAiObservedState>,
+    pub recent_history: Vec<DevelopmentHistoryItem>,
+    pub confirmed_achievements: Vec<ProjectAiAchievement>,
+    pub git_state: Vec<ProjectAiGitState>,
+    pub next_steps: Vec<String>,
     pub content_markdown: String,
     pub content_hash: String,
+}
+
+impl ProjectAiContext {
+    pub fn is_blocked(&self) -> bool {
+        self.readiness == "blocked"
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectAiContextIdentity {
+    pub name: String,
+    pub description: String,
+    pub vision: String,
+    pub target_user: String,
+    pub scope_summary: String,
+    pub non_goals: String,
+    pub tech_stack: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectAiConfirmedState {
+    pub version: i64,
+    pub confirmed_at: DateTime<Utc>,
+    pub superseded_by_newer_activity: bool,
+    pub current_goal: String,
+    pub status_summary: String,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectAiObservedState {
+    pub status: String,
+    pub fact_status: String,
+    pub generated_at: DateTime<Utc>,
+    pub current_goal: String,
+    pub status_summary: String,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectAiAchievement {
+    pub id: String,
+    pub title: String,
+    pub result: String,
+    pub featured: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectAiGitState {
+    pub branch: String,
+    pub dirty_files: i64,
+    pub ahead_count: Option<i64>,
+    pub behind_count: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -631,6 +697,214 @@ impl ProjectMemoryQueryKernel {
         history
             .items
             .retain(|item| item.started_at >= history_cutoff);
+        let mut quality_issues = Vec::new();
+        for item in &mut history.items {
+            item.title = sanitize_context_fact(
+                &item.title,
+                240,
+                "recent_history.title",
+                &mut quality_issues,
+            );
+            item.goal =
+                sanitize_context_fact(&item.goal, 400, "recent_history.goal", &mut quality_issues);
+            item.rationale = sanitize_context_fact(
+                &item.rationale,
+                600,
+                "recent_history.rationale",
+                &mut quality_issues,
+            );
+            item.activity = sanitize_context_fact(
+                &item.activity,
+                800,
+                "recent_history.activity",
+                &mut quality_issues,
+            );
+            item.outcome = sanitize_context_fact(
+                &item.outcome,
+                800,
+                "recent_history.outcome",
+                &mut quality_issues,
+            );
+            if semantically_duplicate(&item.activity, &item.outcome) {
+                item.outcome.clear();
+                quality_issues.push(MemoryQualityIssue::warning(
+                    super::memory_content::MemoryQualityCode::DuplicateHistoryFields,
+                    "recent_history",
+                ));
+            }
+            item.validation = sanitize_context_fact(
+                &item.validation,
+                600,
+                "recent_history.validation",
+                &mut quality_issues,
+            );
+            item.handoff = sanitize_context_fact(
+                &item.handoff,
+                600,
+                "recent_history.handoff",
+                &mut quality_issues,
+            );
+            for commit in &mut item.git_commits {
+                commit.message = sanitize_context_fact(
+                    &commit.message,
+                    240,
+                    "recent_history.commit",
+                    &mut quality_issues,
+                );
+                commit.author_name = sanitize_context_fact(
+                    &commit.author_name,
+                    120,
+                    "recent_history.commit_author",
+                    &mut quality_issues,
+                );
+            }
+        }
+
+        let identity = ProjectAiContextIdentity {
+            name: sanitize_context_fact(&project.name, 200, "identity.name", &mut quality_issues),
+            description: sanitize_context_fact(
+                &project.description,
+                1_000,
+                "identity.description",
+                &mut quality_issues,
+            ),
+            vision: sanitize_context_fact(
+                &project.vision,
+                1_000,
+                "identity.vision",
+                &mut quality_issues,
+            ),
+            target_user: sanitize_context_fact(
+                &project.target_user,
+                1_000,
+                "identity.target_user",
+                &mut quality_issues,
+            ),
+            scope_summary: sanitize_context_scope(
+                &project.scope,
+                "identity.scope",
+                &mut quality_issues,
+            ),
+            non_goals: sanitize_context_fact(
+                &project.non_goals,
+                1_200,
+                "identity.non_goals",
+                &mut quality_issues,
+            ),
+            tech_stack: sanitize_context_fact(
+                &project.tech_stack,
+                1_000,
+                "identity.tech_stack",
+                &mut quality_issues,
+            ),
+        };
+        if identity.description.is_empty()
+            || identity.vision.is_empty()
+            || identity.target_user.is_empty()
+            || identity.scope_summary.is_empty()
+        {
+            quality_issues.push(MemoryQualityIssue::warning(
+                super::memory_content::MemoryQualityCode::MissingIdentity,
+                "identity",
+            ));
+        }
+
+        let confirmed_state = snapshot.as_ref().map(|snapshot| {
+            let superseded_by_newer_activity = pulse
+                .as_ref()
+                .is_some_and(|value| value.generated_at > snapshot.confirmed_at())
+                || history
+                    .items
+                    .iter()
+                    .any(|value| value.started_at > snapshot.confirmed_at());
+            if superseded_by_newer_activity {
+                quality_issues.push(MemoryQualityIssue::warning(
+                    super::memory_content::MemoryQualityCode::ConfirmedStateSuperseded,
+                    "confirmed_state",
+                ));
+            }
+            ProjectAiConfirmedState {
+                version: snapshot.version(),
+                confirmed_at: snapshot.confirmed_at(),
+                superseded_by_newer_activity,
+                current_goal: sanitize_context_fact(
+                    snapshot.current_goal(),
+                    400,
+                    "confirmed_state.current_goal",
+                    &mut quality_issues,
+                ),
+                status_summary: sanitize_context_fact(
+                    snapshot.status_summary(),
+                    800,
+                    "confirmed_state.status_summary",
+                    &mut quality_issues,
+                ),
+                achievements: sanitize_context_list(
+                    snapshot.achievements(),
+                    10,
+                    400,
+                    "confirmed_state.achievements",
+                    &mut quality_issues,
+                ),
+                blockers: sanitize_context_list(
+                    snapshot.blockers(),
+                    10,
+                    400,
+                    "confirmed_state.blockers",
+                    &mut quality_issues,
+                ),
+                next_steps: sanitize_context_list(
+                    snapshot.next_steps(),
+                    3,
+                    400,
+                    "confirmed_state.next_steps",
+                    &mut quality_issues,
+                ),
+            }
+        });
+
+        let observed_state = pulse.as_ref().map(|pulse| ProjectAiObservedState {
+            status: pulse.status.as_str().into(),
+            fact_status: if pulse.status.as_str() == "confirmed" {
+                "confirmed".into()
+            } else {
+                "observed_unconfirmed".into()
+            },
+            generated_at: pulse.generated_at,
+            current_goal: sanitize_context_fact(
+                &pulse.details.current_goal,
+                400,
+                "observed_state.current_goal",
+                &mut quality_issues,
+            ),
+            status_summary: sanitize_context_fact(
+                &pulse.details.status_summary,
+                800,
+                "observed_state.status_summary",
+                &mut quality_issues,
+            ),
+            achievements: sanitize_context_list(
+                &pulse.details.achievements,
+                10,
+                400,
+                "observed_state.achievements",
+                &mut quality_issues,
+            ),
+            blockers: sanitize_context_list(
+                &pulse.details.blockers,
+                10,
+                400,
+                "observed_state.blockers",
+                &mut quality_issues,
+            ),
+            next_steps: sanitize_context_list(
+                &pulse.details.next_steps,
+                3,
+                400,
+                "observed_state.next_steps",
+                &mut quality_issues,
+            ),
+        });
         let mut achievements = self
             .repository
             .list_achievements(project_id)
@@ -648,12 +922,31 @@ impl ProjectMemoryQueryKernel {
                 .then_with(|| left.id.cmp(&right.id))
         });
         achievements.truncate(10);
+        let confirmed_achievements = achievements
+            .into_iter()
+            .map(|achievement| ProjectAiAchievement {
+                id: achievement.id,
+                title: sanitize_context_fact(
+                    &achievement.details.title,
+                    240,
+                    "confirmed_achievements.title",
+                    &mut quality_issues,
+                ),
+                result: sanitize_context_fact(
+                    &achievement.details.result,
+                    600,
+                    "confirmed_achievements.result",
+                    &mut quality_issues,
+                ),
+                featured: achievement.details.featured,
+            })
+            .collect::<Vec<_>>();
         let repositories = self
             .repository
             .list_repositories(project_id)
             .await
             .map_err(map_repository_error)?;
-        let mut git_lines = Vec::new();
+        let mut git_state = Vec::new();
         for repository in repositories {
             if let Some(working) = self
                 .repository
@@ -661,54 +954,87 @@ impl ProjectMemoryQueryKernel {
                 .await
                 .map_err(map_repository_error)?
             {
-                git_lines.push(format!(
-                    "- Branch `{}`; dirty: {}; changed files: {}; ahead: {}; behind: {}",
-                    working.branch(),
-                    working.is_dirty(),
-                    working.diff_summary().changed_files,
-                    optional_count(working.ahead_count()),
-                    optional_count(working.behind_count()),
-                ));
+                git_state.push(ProjectAiGitState {
+                    branch: sanitize_context_fact(
+                        working.branch(),
+                        200,
+                        "git_state.branch",
+                        &mut quality_issues,
+                    ),
+                    dirty_files: working.diff_summary().changed_files,
+                    ahead_count: working.ahead_count(),
+                    behind_count: working.behind_count(),
+                });
             }
         }
 
+        let next_steps = observed_state
+            .as_ref()
+            .map(|value| value.next_steps.clone())
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                confirmed_state
+                    .as_ref()
+                    .map(|value| value.next_steps.clone())
+            })
+            .unwrap_or_default();
+        quality_issues = dedupe_issues(quality_issues);
+        let readiness = if quality_issues
+            .iter()
+            .any(|value| value.severity == MemoryQualitySeverity::Blocking)
+        {
+            "blocked"
+        } else if quality_issues.is_empty() {
+            "ready"
+        } else {
+            "warning"
+        }
+        .to_owned();
+
         let mut markdown = String::from("# ForgeOS Project Context\n\n");
+        markdown.push_str(&format!("Context readiness: {readiness}\n\n"));
         markdown.push_str("## Project Identity\n\n");
-        push_field(&mut markdown, "Name", &project.name);
-        push_field(&mut markdown, "Description", &project.description);
-        push_field(&mut markdown, "Vision", &project.vision);
-        push_field(&mut markdown, "Target User", &project.target_user);
-        push_field(&mut markdown, "Scope", &project.scope);
-        push_field(&mut markdown, "Tech Stack", &project.tech_stack);
+        push_field(&mut markdown, "Name", &identity.name);
+        push_field(&mut markdown, "Description", &identity.description);
+        push_field(&mut markdown, "Vision", &identity.vision);
+        push_field(&mut markdown, "Target User", &identity.target_user);
+        push_field(&mut markdown, "Scope", &identity.scope_summary);
+        push_field(&mut markdown, "Non-goals", &identity.non_goals);
+        push_field(&mut markdown, "Tech Stack", &identity.tech_stack);
 
         markdown.push_str("\n## Confirmed Current State\n\n");
-        if let Some(snapshot) = snapshot.as_ref() {
-            push_field(&mut markdown, "Current Goal", snapshot.current_goal());
-            push_field(&mut markdown, "Status", snapshot.status_summary());
-            push_list(&mut markdown, "Achievements", snapshot.achievements());
-            push_list(&mut markdown, "Blockers", snapshot.blockers());
-            push_list(&mut markdown, "Next Steps", snapshot.next_steps());
+        if let Some(state) = confirmed_state.as_ref() {
+            markdown.push_str(&format!("Confirmed version: {}\n\n", state.version));
+            if state.superseded_by_newer_activity {
+                markdown.push_str("Freshness: last confirmed baseline; newer activity exists.\n\n");
+            }
+            push_field(&mut markdown, "Current Goal", &state.current_goal);
+            push_field(&mut markdown, "Status", &state.status_summary);
+            push_list(&mut markdown, "Achievements", &state.achievements);
+            push_list(&mut markdown, "Blockers", &state.blockers);
+            push_list(&mut markdown, "Next Steps", &state.next_steps);
         } else {
             markdown.push_str("No confirmed current state.\n");
         }
 
-        markdown.push_str("\n## Observed Activity °™ Unconfirmed\n\n");
-        if let Some(pulse) = pulse.as_ref() {
-            markdown.push_str("Fact status: observed_unconfirmed\n\n");
-            push_field(&mut markdown, "Current Goal", &pulse.details.current_goal);
-            push_field(&mut markdown, "Status", &pulse.details.status_summary);
-            push_list(&mut markdown, "Achievements", &pulse.details.achievements);
-            push_list(&mut markdown, "Blockers", &pulse.details.blockers);
-            push_list(&mut markdown, "Next Steps", &pulse.details.next_steps);
+        markdown.push_str("\n## Observed Activity - Unconfirmed\n\n");
+        if let Some(state) = observed_state.as_ref() {
+            markdown.push_str(&format!("Fact status: {}\n\n", state.fact_status));
+            push_field(&mut markdown, "Current Goal", &state.current_goal);
+            push_field(&mut markdown, "Status", &state.status_summary);
+            push_list(&mut markdown, "Achievements", &state.achievements);
+            push_list(&mut markdown, "Blockers", &state.blockers);
+            push_list(&mut markdown, "Next Steps", &state.next_steps);
         } else {
             markdown.push_str("No saved observed activity.\n");
         }
 
         markdown.push_str("\n## Recent Development History\n\n");
-        for item in history.items {
+        for item in &history.items {
             markdown.push_str(&format!("### {}\n\n", one_line(&item.title)));
             push_field(&mut markdown, "Trust", &item.trust_status);
             push_field(&mut markdown, "Goal", &item.goal);
+            push_field(&mut markdown, "Rationale", &item.rationale);
             push_field(&mut markdown, "Activity", &item.activity);
             push_field(&mut markdown, "Outcome", &item.outcome);
             push_field(&mut markdown, "Validation", &item.validation);
@@ -716,32 +1042,33 @@ impl ProjectMemoryQueryKernel {
         }
 
         markdown.push_str("\n## Confirmed Achievements\n\n");
-        if achievements.is_empty() {
+        if confirmed_achievements.is_empty() {
             markdown.push_str("No confirmed achievements.\n");
         }
-        for achievement in achievements {
+        for achievement in &confirmed_achievements {
             markdown.push_str(&format!(
                 "- **{}**: {}\n",
-                one_line(&achievement.details.title),
-                one_line(&achievement.details.result)
+                one_line(&achievement.title),
+                one_line(&achievement.result)
             ));
         }
 
         markdown.push_str("\n## Current Git State\n\n");
-        if git_lines.is_empty() {
+        if git_state.is_empty() {
             markdown.push_str("No connected local repository state.\n");
         } else {
-            markdown.push_str(&git_lines.join("\n"));
-            markdown.push('\n');
+            for state in &git_state {
+                markdown.push_str(&format!(
+                    "- Branch `{}`; changed files: {}; ahead: {}; behind: {}\n",
+                    state.branch,
+                    state.dirty_files,
+                    optional_count(state.ahead_count),
+                    optional_count(state.behind_count),
+                ));
+            }
         }
 
         markdown.push_str("\n## Next Steps\n\n");
-        let next_steps = pulse
-            .as_ref()
-            .map(|value| value.details.next_steps.as_slice())
-            .filter(|value| !value.is_empty())
-            .or_else(|| snapshot.as_ref().map(|value| value.next_steps()))
-            .unwrap_or(&[]);
         if next_steps.is_empty() {
             markdown.push_str("No next steps recorded.\n");
         } else {
@@ -755,6 +1082,15 @@ impl ProjectMemoryQueryKernel {
             .collect::<String>();
         Ok(ProjectAiContext {
             project_id: project_id.to_owned(),
+            readiness,
+            quality_issues,
+            identity,
+            confirmed_state,
+            observed_state,
+            recent_history: history.items,
+            confirmed_achievements,
+            git_state,
+            next_steps,
             content_markdown: markdown,
             content_hash,
         })
@@ -797,6 +1133,40 @@ fn push_list(markdown: &mut String, label: &str, values: &[String]) {
 
 fn one_line(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn sanitize_context_fact(
+    value: &str,
+    max_chars: usize,
+    section: &str,
+    issues: &mut Vec<MemoryQualityIssue>,
+) -> String {
+    let sanitized = MemoryContentPolicy::sanitize_fact(value, max_chars, section);
+    issues.extend(sanitized.issues);
+    sanitized.value
+}
+
+fn sanitize_context_scope(
+    value: &str,
+    section: &str,
+    issues: &mut Vec<MemoryQualityIssue>,
+) -> String {
+    let sanitized = MemoryContentPolicy::sanitize_scope(value, section);
+    issues.extend(sanitized.issues);
+    sanitized.value
+}
+
+fn sanitize_context_list(
+    values: &[String],
+    max_items: usize,
+    max_chars: usize,
+    section: &str,
+    issues: &mut Vec<MemoryQualityIssue>,
+) -> Vec<String> {
+    let (values, list_issues) =
+        MemoryContentPolicy::sanitize_list(values, max_items, max_chars, section);
+    issues.extend(list_issues);
+    values
 }
 
 fn optional_count(value: Option<i64>) -> String {
@@ -897,7 +1267,7 @@ fn build_history(
             id: format!("git:{repository_id}:{date}"),
             kind: "git_activity".into(),
             trust_status: "observed".into(),
-            title: format!("{} ¥Œ¥˙¬ÎÃ·Ωª", values.len()),
+            title: format!("{} Ê¨°‰ª£Á†ÅÊèê‰∫§", values.len()),
             goal: values
                 .first()
                 .map(|value| value.message.clone())
@@ -907,7 +1277,7 @@ fn build_history(
                 .iter()
                 .map(|value| value.message.as_str())
                 .collect::<Vec<_>>()
-                .join("£ª"),
+                .join("Ôºõ"),
             outcome: String::new(),
             validation: String::new(),
             handoff: String::new(),
@@ -1035,10 +1405,10 @@ fn compact_title(value: &str) -> String {
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut result = value.chars().take(100).collect::<String>();
     if value.chars().count() > 100 {
-        result.push('°≠');
+        result.push('‚Ä¶');
     }
     if result.is_empty() {
-        "—–∑¢ªÓ∂Ø".into()
+        "Á†îÂèëÊ¥ªÂä®".into()
     } else {
         result
     }
