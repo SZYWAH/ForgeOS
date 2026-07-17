@@ -12,7 +12,12 @@ use crate::{
     ports::{ProjectMemoryKernelRepository, RepositoryError},
 };
 
-use super::activity_episode::{ActivityEpisode, ActivityEpisodeBuilder};
+use super::{
+    activity_episode::{ActivityEpisode, ActivityEpisodeBuilder},
+    memory_content::{semantically_duplicate, MemoryContentPolicy},
+};
+
+use super::memory_content::{dedupe_issues, MemoryQualityIssue, MemoryQualitySeverity};
 
 #[derive(Debug, Error)]
 pub enum ProjectMemoryError {
@@ -711,12 +716,12 @@ fn build_history(
             kind: "manual_session".into(),
             trust_status: "confirmed".into(),
             title: compact_title(session.goal()),
-            goal: session.goal().into(),
-            rationale: session.notes().into(),
-            activity: session.notes().into(),
-            outcome: session.outcome().into(),
-            validation: session.validation().into(),
-            handoff: session.handoff().into(),
+            goal: clean_history_text(session.goal(), 300, "history.goal"),
+            rationale: String::new(),
+            activity: clean_history_text(session.notes(), 800, "history.activity"),
+            outcome: clean_history_text(session.outcome(), 600, "history.outcome"),
+            validation: clean_history_text(session.validation(), 400, "history.validation"),
+            handoff: clean_history_text(session.handoff(), 400, "history.handoff"),
             started_at: session.started_at(),
             ended_at: session.completed_at(),
             codex_turn_count: 0,
@@ -739,7 +744,20 @@ fn episode_item(
 ) -> DevelopmentHistoryItem {
     let first = episode.observations.first();
     let latest = episode.latest();
-    let goal = episode.root_goal().unwrap_or_default().trim().to_owned();
+    let goal = clean_history_text(episode.root_goal().unwrap_or_default(), 300, "history.goal");
+    let activity = latest
+        .map(|value| clean_history_text(&value.activity_summary, 800, "history.activity"))
+        .unwrap_or_default();
+    let mut outcome = latest
+        .map(|value| clean_history_text(&value.outcome_summary, 600, "history.outcome"))
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            session.map(|value| clean_history_text(value.outcome(), 600, "history.outcome"))
+        })
+        .unwrap_or_default();
+    if semantically_duplicate(&activity, &outcome) {
+        outcome.clear();
+    }
     DevelopmentHistoryItem {
         id: format!(
             "codex:{}",
@@ -753,26 +771,23 @@ fn episode_item(
         },
         title: compact_title(&goal),
         goal,
-        rationale: session
-            .map(|value| value.notes().into())
-            .unwrap_or_default(),
-        activity: latest
-            .map(|value| value.activity_summary.clone())
-            .unwrap_or_default(),
-        outcome: latest
-            .map(|value| value.outcome_summary.clone())
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| session.map(|value| value.outcome().into()))
-            .unwrap_or_default(),
+        rationale: String::new(),
+        activity,
+        outcome,
         validation: latest
-            .map(|value| value.validation_summary.clone())
+            .map(|value| clean_history_text(&value.validation_summary, 400, "history.validation"))
             .filter(|value| !value.trim().is_empty())
-            .or_else(|| session.map(|value| value.validation().into()))
+            .or_else(|| {
+                session
+                    .map(|value| clean_history_text(value.validation(), 400, "history.validation"))
+            })
             .unwrap_or_default(),
         handoff: latest
-            .map(|value| value.handoff_summary.clone())
+            .map(|value| clean_history_text(&value.handoff_summary, 400, "history.handoff"))
             .filter(|value| !value.trim().is_empty())
-            .or_else(|| session.map(|value| value.handoff().into()))
+            .or_else(|| {
+                session.map(|value| clean_history_text(value.handoff(), 400, "history.handoff"))
+            })
             .unwrap_or_default(),
         started_at: episode.start(),
         ended_at: Some(episode.end()),
@@ -787,6 +802,10 @@ fn episode_item(
             .collect(),
         source_commit_observation_ids,
     }
+}
+
+fn clean_history_text(value: &str, max_chars: usize, section: &str) -> String {
+    MemoryContentPolicy::sanitize_fact(value, max_chars, section).value
 }
 
 fn commit_summary(value: &RepositoryCommitObservation) -> GitCommitSummary {

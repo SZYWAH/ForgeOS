@@ -408,18 +408,19 @@ fn normalize_turn(
         .cloned()
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| thread_goal.to_owned());
-    let outcome = agent_texts.last().cloned().unwrap_or_default();
+    let activity = agent_texts.first().cloned().unwrap_or_default();
+    let outcome = agent_texts
+        .last()
+        .filter(|value| agent_texts.len() > 1 && !same_summary(&activity, value))
+        .cloned()
+        .unwrap_or_default();
     CodexTurnActivity {
         thread_id: thread_id.to_owned(),
         turn_id: turn_id.to_owned(),
         source_kind: source_kind.to_owned(),
         status,
         goal_hint: limited_redacted(&goal, repository, 2_000),
-        activity_summary: limited_redacted(
-            agent_texts.first().unwrap_or(&outcome),
-            repository,
-            4_000,
-        ),
+        activity_summary: limited_redacted(&activity, repository, 4_000),
         outcome_summary: limited_redacted(&outcome, repository, 4_000),
         validation_summary: limited_redacted(&validations.join("\n"), repository, 4_000),
         handoff_summary: limited_redacted(&handoff.join("\n"), repository, 4_000),
@@ -433,6 +434,19 @@ fn normalize_turn(
         )
         .unwrap_or(updated_at),
     }
+}
+
+fn same_summary(left: &str, right: &str) -> bool {
+    let normalize = |value: &str| {
+        value
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    let left = normalize(left);
+    let right = normalize(right);
+    !left.is_empty() && left == right
 }
 
 fn thread_is_in_scope(
@@ -799,9 +813,32 @@ mod tests {
             Path::new("D:/repo"),
         );
         assert_eq!(activity.goal_hint, "Fix the build");
+        assert_eq!(activity.activity_summary, "Tests pass");
+        assert!(activity.outcome_summary.is_empty());
         assert_eq!(activity.validation_summary, "cargo: exit 0");
         assert!(!format!("{activity:?}").contains("private chain"));
         assert!(!format!("{activity:?}").contains("SECRET"));
+    }
+
+    #[test]
+    fn turn_normalization_keeps_only_a_distinct_later_outcome() {
+        let turn = json!({ "id": "turn-1", "status": "completed", "items": [
+            { "type": "userMessage", "text": "Release RC10" },
+            { "type": "agentMessage", "text": "Preparing release files" },
+            { "type": "agentMessage", "phase": "final_answer", "text": "RC10 released and checks passed" }
+        ]});
+        let activity = normalize_turn(
+            "thread-1",
+            "turn-1",
+            "cli",
+            "",
+            Utc::now(),
+            &turn,
+            Path::new("D:/repo"),
+        );
+
+        assert_eq!(activity.activity_summary, "Preparing release files");
+        assert_eq!(activity.outcome_summary, "RC10 released and checks passed");
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub mod evidence;
 pub mod github_import;
 mod kernel;
 pub mod mcp_query;
+pub mod memory_content;
 pub mod project;
 pub mod project_memory;
 pub mod project_pulse;
@@ -34,6 +35,9 @@ pub use mcp_query::{
     EvidenceSummaryView, EvidenceView, GitActivityView, McpQueryError, McpQueryKernel,
     ProjectIdentityView, ProjectOverviewView, ProjectPulseView, RecentSessionView,
     RecommendedNextStepView,
+};
+pub use memory_content::{
+    MemoryContentPolicy, MemoryQualityCode, MemoryQualityIssue, MemoryQualitySeverity,
 };
 pub use project_memory::{
     DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiContext,
