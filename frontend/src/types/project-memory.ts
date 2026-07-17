@@ -71,6 +71,33 @@ export type ProjectMemoryOverview = {
   recentHistory: DevelopmentHistoryItem[];
 };
 
+export type MemoryQualityCode =
+  | "prompt_wrapper_removed"
+  | "prompt_wrapper_unresolved"
+  | "readme_overload"
+  | "suspected_secret"
+  | "confirmed_state_superseded"
+  | "missing_identity"
+  | "duplicate_history_fields";
+
+export type MemoryQualityIssue = {
+  code: MemoryQualityCode;
+  severity: "warning" | "blocking";
+  section: string;
+};
+
+export type SnapshotRepairDraft = {
+  projectId: string;
+  basisSnapshotVersion: number;
+  sourceMode: "pending_pulse" | "recent_history" | "snapshot_cleanup";
+  currentGoal: string;
+  statusSummary: string;
+  achievements: string[];
+  blockers: string[];
+  nextSteps: string[];
+  qualityIssues: MemoryQualityIssue[];
+};
+
 export type ProjectAiContext = {
   projectId: string;
   contentMarkdown: string;

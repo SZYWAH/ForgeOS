@@ -109,6 +109,19 @@ pub struct ProjectAiContext {
     pub content_hash: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct SnapshotRepairDraft {
+    pub project_id: String,
+    pub basis_snapshot_version: i64,
+    pub source_mode: String,
+    pub current_goal: String,
+    pub status_summary: String,
+    pub achievements: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_steps: Vec<String>,
+    pub quality_issues: Vec<MemoryQualityIssue>,
+}
+
 #[derive(Clone)]
 pub struct ProjectMemoryQueryKernel {
     repository: Arc<dyn ProjectMemoryKernelRepository>,
@@ -397,6 +410,207 @@ impl ProjectMemoryQueryKernel {
         Ok(DevelopmentHistoryPage { items, next_cursor })
     }
 
+    pub async fn build_snapshot_repair_draft(
+        &self,
+        project_id: &str,
+    ) -> Result<SnapshotRepairDraft, ProjectMemoryError> {
+        self.require_project(project_id).await?;
+        let snapshot = self
+            .repository
+            .get_current_snapshot(project_id)
+            .await
+            .map_err(map_repository_error)?;
+        let pulse = self
+            .repository
+            .get_latest_project_pulse(project_id)
+            .await
+            .map_err(map_repository_error)?;
+        let history = self.list_development_history(project_id, None, 3).await?;
+        let basis_snapshot_version = snapshot.as_ref().map_or(0, |value| value.version());
+
+        if let Some(pulse) = pulse.filter(|value| value.status == PulseStatus::PendingReview) {
+            let current_goal = MemoryContentPolicy::sanitize_fact(
+                &pulse.details.current_goal,
+                200,
+                "snapshot.current_goal",
+            );
+            let status_summary = MemoryContentPolicy::sanitize_fact(
+                &pulse.details.status_summary,
+                400,
+                "snapshot.status_summary",
+            );
+            let (achievements, achievement_issues) = MemoryContentPolicy::sanitize_list(
+                &pulse.details.achievements,
+                3,
+                240,
+                "snapshot.achievements",
+            );
+            let (blockers, blocker_issues) = MemoryContentPolicy::sanitize_list(
+                &pulse.details.blockers,
+                3,
+                240,
+                "snapshot.blockers",
+            );
+            let (next_steps, next_step_issues) = MemoryContentPolicy::sanitize_list(
+                &pulse.details.next_steps,
+                3,
+                240,
+                "snapshot.next_steps",
+            );
+            let issues = dedupe_issues(
+                current_goal
+                    .issues
+                    .iter()
+                    .chain(status_summary.issues.iter())
+                    .chain(achievement_issues.iter())
+                    .chain(blocker_issues.iter())
+                    .chain(next_step_issues.iter())
+                    .cloned()
+                    .collect(),
+            );
+            if !issues
+                .iter()
+                .any(|issue| issue.severity == MemoryQualitySeverity::Blocking)
+            {
+                return Ok(SnapshotRepairDraft {
+                    project_id: project_id.to_owned(),
+                    basis_snapshot_version,
+                    source_mode: "pending_pulse".into(),
+                    current_goal: current_goal.value,
+                    status_summary: status_summary.value,
+                    achievements,
+                    blockers,
+                    next_steps,
+                    quality_issues: issues,
+                });
+            }
+        }
+
+        if let Some(latest) = history
+            .items
+            .first()
+            .filter(|item| !item.goal.trim().is_empty())
+        {
+            let mut achievement_values = history
+                .items
+                .iter()
+                .filter_map(|item| (!item.outcome.trim().is_empty()).then(|| item.outcome.clone()))
+                .collect::<Vec<_>>();
+            if achievement_values.is_empty() && !latest.activity.trim().is_empty() {
+                achievement_values.push(latest.activity.clone());
+            }
+            let mut next_values = history
+                .items
+                .iter()
+                .filter_map(|item| (!item.handoff.trim().is_empty()).then(|| item.handoff.clone()))
+                .collect::<Vec<_>>();
+            if next_values.is_empty() {
+                if let Some(snapshot) = snapshot.as_ref() {
+                    next_values.extend(snapshot.next_steps().iter().cloned());
+                }
+            }
+            let current_goal =
+                MemoryContentPolicy::sanitize_fact(&latest.goal, 200, "snapshot.current_goal");
+            let status_source = if !latest.activity.trim().is_empty() {
+                &latest.activity
+            } else {
+                &latest.outcome
+            };
+            let status_summary =
+                MemoryContentPolicy::sanitize_fact(status_source, 400, "snapshot.status_summary");
+            let (achievements, achievement_issues) = MemoryContentPolicy::sanitize_list(
+                &achievement_values,
+                3,
+                240,
+                "snapshot.achievements",
+            );
+            let (next_steps, next_step_issues) =
+                MemoryContentPolicy::sanitize_list(&next_values, 3, 240, "snapshot.next_steps");
+            return Ok(SnapshotRepairDraft {
+                project_id: project_id.to_owned(),
+                basis_snapshot_version,
+                source_mode: "recent_history".into(),
+                current_goal: current_goal.value,
+                status_summary: status_summary.value,
+                achievements,
+                blockers: Vec::new(),
+                next_steps,
+                quality_issues: dedupe_issues(
+                    current_goal
+                        .issues
+                        .into_iter()
+                        .chain(status_summary.issues)
+                        .chain(achievement_issues)
+                        .chain(next_step_issues)
+                        .collect(),
+                ),
+            });
+        }
+
+        if let Some(snapshot) = snapshot {
+            let current_goal = MemoryContentPolicy::sanitize_fact(
+                snapshot.current_goal(),
+                200,
+                "snapshot.current_goal",
+            );
+            let status_summary = MemoryContentPolicy::sanitize_fact(
+                snapshot.status_summary(),
+                400,
+                "snapshot.status_summary",
+            );
+            let (achievements, achievement_issues) = MemoryContentPolicy::sanitize_list(
+                snapshot.achievements(),
+                3,
+                240,
+                "snapshot.achievements",
+            );
+            let (blockers, blocker_issues) = MemoryContentPolicy::sanitize_list(
+                snapshot.blockers(),
+                3,
+                240,
+                "snapshot.blockers",
+            );
+            let (next_steps, next_step_issues) = MemoryContentPolicy::sanitize_list(
+                snapshot.next_steps(),
+                3,
+                240,
+                "snapshot.next_steps",
+            );
+            return Ok(SnapshotRepairDraft {
+                project_id: project_id.to_owned(),
+                basis_snapshot_version,
+                source_mode: "snapshot_cleanup".into(),
+                current_goal: current_goal.value,
+                status_summary: status_summary.value,
+                achievements,
+                blockers,
+                next_steps,
+                quality_issues: dedupe_issues(
+                    current_goal
+                        .issues
+                        .into_iter()
+                        .chain(status_summary.issues)
+                        .chain(achievement_issues)
+                        .chain(blocker_issues)
+                        .chain(next_step_issues)
+                        .collect(),
+                ),
+            });
+        }
+
+        Ok(SnapshotRepairDraft {
+            project_id: project_id.to_owned(),
+            basis_snapshot_version,
+            source_mode: "snapshot_cleanup".into(),
+            current_goal: String::new(),
+            status_summary: String::new(),
+            achievements: Vec::new(),
+            blockers: Vec::new(),
+            next_steps: Vec::new(),
+            quality_issues: Vec::new(),
+        })
+    }
+
     pub async fn build_project_ai_context(
         &self,
         project_id: &str,
@@ -478,7 +692,7 @@ impl ProjectMemoryQueryKernel {
             markdown.push_str("No confirmed current state.\n");
         }
 
-        markdown.push_str("\n## Observed Activity ‚Äî Unconfirmed\n\n");
+        markdown.push_str("\n## Observed Activity °™ Unconfirmed\n\n");
         if let Some(pulse) = pulse.as_ref() {
             markdown.push_str("Fact status: observed_unconfirmed\n\n");
             push_field(&mut markdown, "Current Goal", &pulse.details.current_goal);
@@ -683,7 +897,7 @@ fn build_history(
             id: format!("git:{repository_id}:{date}"),
             kind: "git_activity".into(),
             trust_status: "observed".into(),
-            title: format!("{} Ê¨°‰ª£Á†ÅÊèê‰∫§", values.len()),
+            title: format!("{} ¥Œ¥˙¬ÎÃ·Ωª", values.len()),
             goal: values
                 .first()
                 .map(|value| value.message.clone())
@@ -693,7 +907,7 @@ fn build_history(
                 .iter()
                 .map(|value| value.message.as_str())
                 .collect::<Vec<_>>()
-                .join("Ôºõ"),
+                .join("£ª"),
             outcome: String::new(),
             validation: String::new(),
             handoff: String::new(),
@@ -821,10 +1035,10 @@ fn compact_title(value: &str) -> String {
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut result = value.chars().take(100).collect::<String>();
     if value.chars().count() > 100 {
-        result.push('‚Ä¶');
+        result.push('°≠');
     }
     if result.is_empty() {
-        "Á†îÂèëÊ¥ªÂä®".into()
+        "—–∑¢ªÓ∂Ø".into()
     } else {
         result
     }

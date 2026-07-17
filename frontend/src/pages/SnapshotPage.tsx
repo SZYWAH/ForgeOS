@@ -2,7 +2,6 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -23,38 +22,34 @@ import { BoundedList, CollapsibleText, RecordDisclosure } from "../components/co
 import { formatFactPreview } from "../utils/contentPreview";
 import { useTranslation } from "react-i18next";
 import { PageIntro } from "../components/ui/PlainLanguage";
+import { StructuredListEditor } from "../components/content/StructuredListEditor";
+import { projectMemoryApi } from "../api/project-memory";
+import type { SnapshotRepairDraft } from "../types/project-memory";
 
 type SnapshotDraft = {
   currentGoal: string;
   statusSummary: string;
-  achievements: string;
-  blockers: string;
-  nextSteps: string;
+  achievements: string[];
+  blockers: string[];
+  nextSteps: string[];
 };
 
 const EMPTY_DRAFT: SnapshotDraft = {
   currentGoal: "",
   statusSummary: "",
-  achievements: "",
-  blockers: "",
-  nextSteps: "",
+  achievements: [],
+  blockers: [],
+  nextSteps: [],
 };
 
 function toDraft(snapshot: ProjectSnapshot): SnapshotDraft {
   return {
     currentGoal: snapshot.currentGoal,
     statusSummary: snapshot.statusSummary,
-    achievements: snapshot.achievements.join("\n"),
-    blockers: snapshot.blockers.join("\n"),
-    nextSteps: snapshot.nextSteps.join("\n"),
+    achievements: [...snapshot.achievements],
+    blockers: [...snapshot.blockers],
+    nextSteps: [...snapshot.nextSteps],
   };
-}
-
-function parseList(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function resolveSnapshotState(
@@ -84,6 +79,8 @@ export function SnapshotPage() {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [hasVersionConflict, setHasVersionConflict] = useState(false);
+  const [repairDraft, setRepairDraft] = useState<SnapshotRepairDraft>();
+  const [repairing, setRepairing] = useState(false);
   const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
   const [historyLimit, setHistoryLimit] = useState(10);
   const loadGeneration = useRef(0);
@@ -113,6 +110,7 @@ export function SnapshotPage() {
     setError(undefined);
     setNotice(undefined);
     setHasVersionConflict(false);
+    setRepairDraft(undefined);
     try {
       const [projectValue, currentValue, historyValue] = await Promise.all([
         projectKernelApi.getProject(projectId),
@@ -145,8 +143,7 @@ export function SnapshotPage() {
     };
   }, [loadPage]);
 
-  const parsedNextSteps = useMemo(() => parseList(draft.nextSteps), [draft.nextSteps]);
-  const nextStepsExceeded = parsedNextSteps.length > 3;
+  const nextStepsExceeded = draft.nextSteps.filter((item) => item.trim()).length > 3;
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -162,9 +159,9 @@ export function SnapshotPage() {
     const input: SnapshotContentInput = {
       currentGoal: draft.currentGoal.trim(),
       statusSummary: draft.statusSummary.trim(),
-      achievements: parseList(draft.achievements),
-      blockers: parseList(draft.blockers),
-      nextSteps: parsedNextSteps,
+      achievements: draft.achievements.map((item) => item.trim()).filter(Boolean),
+      blockers: draft.blockers.map((item) => item.trim()).filter(Boolean),
+      nextSteps: draft.nextSteps.map((item) => item.trim()).filter(Boolean),
     };
 
     setSaving(true);
@@ -188,6 +185,7 @@ export function SnapshotPage() {
       const optimistic = resolveSnapshotState(saved, [saved, ...history]);
       setCurrent(optimistic.current);
       setDraft(optimistic.current ? toDraft(optimistic.current) : EMPTY_DRAFT);
+      setRepairDraft(undefined);
       setHistory(optimistic.history);
       setNotice(
         wasUpdate
@@ -229,6 +227,34 @@ export function SnapshotPage() {
       if (saveGeneration === loadGeneration.current) {
         setSaving(false);
       }
+    }
+  }
+
+  async function handleBuildRepairDraft() {
+    if (!projectId || !current) return;
+    setRepairing(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const value = await projectMemoryApi.buildSnapshotRepairDraft(projectId);
+      if (value.basisSnapshotVersion !== current.version) {
+        setHasVersionConflict(true);
+        setError(t("snapshot.repairVersionChanged"));
+        return;
+      }
+      setRepairDraft(value);
+      setDraft({
+        currentGoal: value.currentGoal,
+        statusSummary: value.statusSummary,
+        achievements: [...value.achievements],
+        blockers: [...value.blockers],
+        nextSteps: [...value.nextSteps],
+      });
+      setNotice(t("snapshot.repairDraftReady"));
+    } catch (reason) {
+      setError(getErrorMessage(reason));
+    } finally {
+      setRepairing(false);
     }
   }
 
@@ -288,6 +314,31 @@ export function SnapshotPage() {
               ) : null}
             </div>
 
+            {current ? (
+              <div className="snapshot-repair-notice notice warning">
+                <div>
+                  <strong>{t("snapshot.repairTitle")}</strong>
+                  <p>{t("snapshot.repairDescription")}</p>
+                  {repairDraft ? (
+                    <small>
+                      {t("snapshot.repairSource", { source: t(`snapshot.repairSource_${repairDraft.sourceMode}`) })}
+                      {repairDraft.qualityIssues.length > 0
+                        ? ` · ${t("snapshot.repairIssues", { count: repairDraft.qualityIssues.length })}`
+                        : ""}
+                    </small>
+                  ) : null}
+                </div>
+                <button
+                  className="button secondary"
+                  disabled={repairing || saving || isArchived}
+                  onClick={() => void handleBuildRepairDraft()}
+                  type="button"
+                >
+                  {repairing ? t("snapshot.repairing") : t("snapshot.buildRepairDraft")}
+                </button>
+              </div>
+            ) : null}
+
             <fieldset className="editor-fields" disabled={isArchived || saving}>
               <div className="form-grid snapshot-form-grid">
                 <label className="span-2">
@@ -316,50 +367,39 @@ export function SnapshotPage() {
                     placeholder={t("snapshot.situationPlaceholder")}
                   />
                 </label>
-                <label>
-                  {t("projects.achievements")}
-                  <textarea
-                    maxLength={20_000}
-                    rows={6}
-                    value={draft.achievements}
-                    onChange={(event) =>
-                      setDraft({ ...draft, achievements: event.target.value })
-                    }
-                    placeholder={t("snapshot.achievementsPlaceholder")}
+                <StructuredListEditor
+                  addLabel={t("snapshot.addItem")}
+                  emptyLabel={t("snapshot.emptyList")}
+                  items={draft.achievements}
+                  label={t("projects.achievements")}
+                  moveDownLabel={t("snapshot.moveDown")}
+                  moveUpLabel={t("snapshot.moveUp")}
+                  onChange={(achievements) => setDraft({ ...draft, achievements })}
+                  removeLabel={t("common.remove")}
+                />
+                <StructuredListEditor
+                  addLabel={t("snapshot.addItem")}
+                  emptyLabel={t("snapshot.emptyList")}
+                  items={draft.blockers}
+                  label={t("projects.blockers")}
+                  moveDownLabel={t("snapshot.moveDown")}
+                  moveUpLabel={t("snapshot.moveUp")}
+                  onChange={(blockers) => setDraft({ ...draft, blockers })}
+                  removeLabel={t("common.remove")}
+                />
+                <div className="span-2">
+                  <StructuredListEditor
+                    addLabel={t("snapshot.addNextStep")}
+                    emptyLabel={t("snapshot.emptyNextSteps")}
+                    items={draft.nextSteps}
+                    label={t("projects.nextSteps")}
+                    maxItems={3}
+                    moveDownLabel={t("snapshot.moveDown")}
+                    moveUpLabel={t("snapshot.moveUp")}
+                    onChange={(nextSteps) => setDraft({ ...draft, nextSteps })}
+                    removeLabel={t("common.remove")}
                   />
-                  <small>{t("snapshot.achievementsHelp")}</small>
-                </label>
-                <label>
-                  {t("projects.blockers")}
-                  <textarea
-                    maxLength={20_000}
-                    rows={6}
-                    value={draft.blockers}
-                    onChange={(event) =>
-                      setDraft({ ...draft, blockers: event.target.value })
-                    }
-                    placeholder={t("snapshot.blockersPlaceholder")}
-                  />
-                  <small>{t("snapshot.blockersHelp")}</small>
-                </label>
-                <label className="span-2">
-                  {t("projects.nextSteps")}
-                  <textarea
-                    aria-invalid={nextStepsExceeded}
-                    className={nextStepsExceeded ? "input-invalid" : undefined}
-                    maxLength={20_000}
-                    rows={4}
-                    value={draft.nextSteps}
-                    onChange={(event) =>
-                      setDraft({ ...draft, nextSteps: event.target.value })
-                    }
-                    placeholder={t("snapshot.nextStepsPlaceholder")}
-                  />
-                  <small className={nextStepsExceeded ? "field-error" : undefined}>
-                    {t("snapshot.nextStepsCount", { count: parsedNextSteps.length })}
-                    {nextStepsExceeded ? t("snapshot.nextStepsExceeded") : "。"}
-                  </small>
-                </label>
+                </div>
               </div>
             </fieldset>
           </section>
@@ -398,6 +438,7 @@ export function SnapshotPage() {
                   disabled={saving}
                   onClick={() => {
                     setDraft(current ? toDraft(current) : EMPTY_DRAFT);
+                    setRepairDraft(undefined);
                     setError(undefined);
                     setNotice(undefined);
                   }}

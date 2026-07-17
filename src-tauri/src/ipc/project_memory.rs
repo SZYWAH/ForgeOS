@@ -3,8 +3,9 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::application::{
-    DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiContext,
-    ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
+    DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, MemoryQualityIssue,
+    ProjectAiContext, ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
+    SnapshotRepairDraft,
 };
 
 use super::{
@@ -173,6 +174,54 @@ pub struct DevelopmentHistoryPageDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MemoryQualityIssueDto {
+    code: String,
+    severity: String,
+    section: String,
+}
+
+impl From<MemoryQualityIssue> for MemoryQualityIssueDto {
+    fn from(value: MemoryQualityIssue) -> Self {
+        Self {
+            code: value.code.as_str().into(),
+            severity: value.severity.as_str().into(),
+            section: value.section,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotRepairDraftDto {
+    project_id: String,
+    basis_snapshot_version: i64,
+    source_mode: String,
+    current_goal: String,
+    status_summary: String,
+    achievements: Vec<String>,
+    blockers: Vec<String>,
+    next_steps: Vec<String>,
+    quality_issues: Vec<MemoryQualityIssueDto>,
+}
+
+impl From<SnapshotRepairDraft> for SnapshotRepairDraftDto {
+    fn from(value: SnapshotRepairDraft) -> Self {
+        Self {
+            project_id: value.project_id,
+            basis_snapshot_version: value.basis_snapshot_version,
+            source_mode: value.source_mode,
+            current_goal: value.current_goal,
+            status_summary: value.status_summary,
+            achievements: value.achievements,
+            blockers: value.blockers,
+            next_steps: value.next_steps,
+            quality_issues: value.quality_issues.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectAiContextDto {
     project_id: String,
     content_markdown: String,
@@ -242,6 +291,18 @@ pub async fn build_project_ai_context(
 ) -> Result<ProjectAiContextDto, IpcError> {
     kernel
         .build_project_ai_context(&project_id)
+        .await
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn build_snapshot_repair_draft(
+    kernel: State<'_, ProjectMemoryQueryKernel>,
+    project_id: String,
+) -> Result<SnapshotRepairDraftDto, IpcError> {
+    kernel
+        .build_snapshot_repair_draft(&project_id)
         .await
         .map(Into::into)
         .map_err(Into::into)

@@ -109,6 +109,7 @@ pub fn run() {
             ipc::project_memory::get_project_memory_overview,
             ipc::project_memory::list_development_history,
             ipc::project_memory::build_project_ai_context,
+            ipc::project_memory::build_snapshot_repair_draft,
             ipc::achievements::list_project_achievements,
             ipc::achievements::get_project_achievement,
             ipc::achievements::create_project_achievement,

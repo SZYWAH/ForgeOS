@@ -4,6 +4,7 @@ import type {
   ProjectMemoryOverview,
   ProjectMemorySummary,
   ProjectAiContext,
+  SnapshotRepairDraft,
 } from "../types/project-memory";
 
 export const projectMemoryApi = {
@@ -19,4 +20,6 @@ export const projectMemoryApi = {
     }),
   buildAiContext: (projectId: string) =>
     invoke<ProjectAiContext>("build_project_ai_context", { projectId }),
+  buildSnapshotRepairDraft: (projectId: string) =>
+    invoke<SnapshotRepairDraft>("build_snapshot_repair_draft", { projectId }),
 };

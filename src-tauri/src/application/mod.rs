@@ -42,6 +42,7 @@ pub use memory_content::{
 pub use project_memory::{
     DevelopmentHistoryItem, DevelopmentHistoryPage, GitCommitSummary, ProjectAiContext,
     ProjectMemoryError, ProjectMemoryOverview, ProjectMemoryQueryKernel, ProjectMemorySummary,
+    SnapshotRepairDraft,
 };
 pub use project_pulse::{ProjectPulseError, ProjectPulseKernel};
 pub use repository::{RepositoryKernel, RepositoryKernelError};
