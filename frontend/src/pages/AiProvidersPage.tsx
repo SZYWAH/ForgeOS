@@ -10,6 +10,12 @@ import type {
 import { formatUpdatedAt } from "../utils/format";
 import { useTranslation } from "react-i18next";
 import { PageIntro } from "../components/ui/PlainLanguage";
+import {
+  AppButton,
+  EmptyState,
+  Notice,
+  Surface,
+} from "../components/ui/VisualSystem";
 
 const EMPTY_CONFIG: AiProviderConfigInput = {
   name: "",
@@ -230,14 +236,25 @@ export function AiProvidersPage() {
 
   return (
     <div className="page-stack ai-provider-page">
-      <PageIntro title={t("ai.servicesTitle")} technicalTerm={t("terms.provider")} description={t("ai.servicesDescription")} primaryAction={<button className="primary-button" onClick={() => setShowCreate((value) => !value)} type="button">{showCreate ? t("common.cancel") : t("common.create")}</button>} />
+      <PageIntro
+        title={t("ai.servicesTitle")}
+        technicalTerm={t("terms.provider")}
+        description={t("ai.servicesDescription")}
+        primaryAction={(
+          <AppButton
+            onClick={() => setShowCreate((value) => !value)}
+            variant="primary"
+          >
+            {showCreate ? t("common.cancel") : t("common.create")}
+          </AppButton>
+        )}
+      />
 
-      <div className="ai-boundary-banner">
-        <strong>{t("ai.safetyTitle")}</strong>
-        <span>{t("ai.safetyDescription")}</span>
-      </div>
-      {error ? <div className="error-banner provider-message">{error}</div> : null}
-      {notice ? <div className="success-banner provider-message">{notice}</div> : null}
+      <Notice className="ai-boundary-banner" title={t("ai.safetyTitle")} tone="info">
+        {t("ai.safetyDescription")}
+      </Notice>
+      {error ? <Notice className="provider-message" tone="danger">{error}</Notice> : null}
+      {notice ? <Notice className="provider-message" tone="success">{notice}</Notice> : null}
 
       {showCreate ? (
         <form className="panel provider-create-form" onSubmit={handleCreate}>
@@ -263,31 +280,45 @@ export function AiProvidersPage() {
             </label>
           </div>
           <div className="form-actions provider-form-actions">
-            <button className="primary-button" disabled={saving} type="submit">{saving ? t("common.saving") : t("common.create")}</button>
+            <AppButton loading={saving} type="submit" variant="primary">
+              {saving ? t("common.saving") : t("common.create")}
+            </AppButton>
           </div>
         </form>
       ) : null}
 
-      <div className="provider-workbench">
+      {!showCreate && providers.length === 0 ? (
+        <Surface
+          className="provider-empty-surface"
+          padding="compact"
+          variant="outlined"
+        >
+          <EmptyState
+            density="compact"
+            description={t("ai.selectServiceDescription")}
+            title={t("ai.noServices")}
+          />
+        </Surface>
+      ) : null}
+
+      {providers.length > 0 ? <div className="provider-workbench">
         <section className="panel provider-list-panel">
           <div className="panel-header"><div><h2>{t("ai.configuredServices")}</h2><p>{t("ai.serviceCount", { count: providers.length })}</p></div></div>
-          {providers.length === 0 ? <p className="empty-state">{t("ai.noServices")}</p> : (
-            <div className="provider-list record-list-pane">
-              {providers.map((provider) => (
-                <button
-                  className={provider.id === selectedId ? "selected" : ""}
-                  key={provider.id}
-                  onClick={() => setSearchParams({ selected: provider.id })}
-                  type="button"
-                >
-                  <span className={`provider-state provider-state--${provider.enabled ? "enabled" : "disabled"}`}>{provider.enabled ? t("common.enabled") : t("common.disabled")}</span>
-                  <strong>{provider.name}</strong>
-                  <small>{provider.model}</small>
-                  <span className={`key-state ${provider.apiKeyConfigured ? "configured" : ""}`}>{provider.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="provider-list record-list-pane">
+            {providers.map((provider) => (
+              <button
+                className={provider.id === selectedId ? "selected" : ""}
+                key={provider.id}
+                onClick={() => setSearchParams({ selected: provider.id })}
+                type="button"
+              >
+                <span className={`provider-state provider-state--${provider.enabled ? "enabled" : "disabled"}`}>{provider.enabled ? t("common.enabled") : t("common.disabled")}</span>
+                <strong>{provider.name}</strong>
+                <small>{provider.model}</small>
+                <span className={`key-state ${provider.apiKeyConfigured ? "configured" : ""}`}>{provider.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
         <div className="provider-detail-stack">
@@ -300,13 +331,19 @@ export function AiProvidersPage() {
                     <h2>{selected.name}</h2>
                     <p>v{selected.version} · {t("common.updatedAt")} {formatUpdatedAt(selected.updatedAt)}</p>
                   </div>
-                  <button className={selected.enabled ? "danger-button" : "secondary-button"} disabled={saving} onClick={() => void handleToggle()} type="button">
+                  <AppButton
+                    disabled={saving}
+                    onClick={() => void handleToggle()}
+                    variant={selected.enabled ? "danger" : "secondary"}
+                  >
                     {selected.enabled ? t("ai.disable") : t("ai.enable")}
-                  </button>
+                  </AppButton>
                 </div>
                 <ProviderFields value={draft} onChange={setDraft} />
                 <div className="form-actions provider-form-actions">
-                  <button className="primary-button" disabled={saving} type="submit">{t("ai.saveConfiguration")}</button>
+                  <AppButton loading={saving} type="submit" variant="primary">
+                    {t("ai.saveConfiguration")}
+                  </AppButton>
                 </div>
               </form>
 
@@ -317,8 +354,8 @@ export function AiProvidersPage() {
                 </div>
                 <form className="provider-secret-form" onSubmit={handleSaveKey}>
                   <input autoComplete="new-password" placeholder={t("ai.keyPlaceholder")} type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} />
-                  <button className="secondary-button" disabled={saving || !apiKeyDraft.trim()} type="submit">{t("ai.saveKey")}</button>
-                  <button className="danger-button" disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} type="button">{t("ai.clearKey")}</button>
+                  <AppButton disabled={saving || !apiKeyDraft.trim()} type="submit" variant="secondary">{t("ai.saveKey")}</AppButton>
+                  <AppButton disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} variant="danger">{t("ai.clearKey")}</AppButton>
                 </form>
               </section>
 
@@ -336,7 +373,7 @@ export function AiProvidersPage() {
                 </div>
                 <div className="form-actions provider-form-actions">
                   <span>{selected.enabled ? t("ai.requestReady") : t("ai.enableBeforeCall")}</span>
-                  <button className="primary-button" disabled={invoking || !selected.enabled} type="submit">{invoking ? t("ai.invoking") : t("ai.invoke")}</button>
+                  <AppButton disabled={!selected.enabled} loading={invoking} type="submit" variant="primary">{invoking ? t("ai.invoking") : t("ai.invoke")}</AppButton>
                 </div>
                 {result ? (
                   <div className="provider-result">
@@ -351,7 +388,7 @@ export function AiProvidersPage() {
             <section className="panel provider-detail-empty"><strong>{t("ai.selectService")}</strong><p>{t("ai.selectServiceDescription")}</p></section>
           )}
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@ export function AppLayout({ workspace }: { workspace: Workspace }) {
         <span className="main-nav__group">{t("navigation.ai")}</span>
         <NavLink to="/settings/ai-providers">{t("navigation.aiServices")}</NavLink>
         <span className="main-nav__group">{t("navigation.settings")}</span>
-        <NavLink to="/settings">{t("navigation.appSettings")}</NavLink>
+        <NavLink end to="/settings">{t("navigation.appSettings")}</NavLink>
       </nav>
       <div className="workspace-card"><span>{t("navigation.workspace")}</span><strong>{workspace.name}</strong><small>{workspace.timezone}</small></div>
     </aside>

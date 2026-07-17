@@ -1,5 +1,33 @@
 # ForgeOS Development Log
 
+## 2026-07-16 — ForgeOS D8 Visual System Refactor
+
+### 当前阶段
+
+D8：视觉系统基础、应用壳层、共享组件和全页面兼容迁移完成，等待最终实机验收。
+
+### 完成内容
+
+- 将原单体样式降为受控兼容层，并建立 Token、Base、Shell、Components、Patterns、Pages、Utilities 七个明确级联层。
+- 统一冷灰画布、深色侧栏、品牌蓝、Segoe UI 字体、Cascadia Code 技术标识、4/8 间距、6/8px 圆角和两级阴影。
+- 新增 AppButton、Surface、StatusBadge、Notice、EmptyState 和 ListDetailLayout，共享 Loading、Disabled、Focus、语义状态与空列表详情行为。
+- 重构应用侧栏、顶栏、内容宽度、唯一滚动区和 900px 窄窗口布局。
+- 统一项目总览、项目概览、研发历史、成果与资料、AI 上下文、状态审核、设置、仓库和只读兼容页面的视觉表面。
+- AI 服务空状态不再渲染巨大双栏空白面；有数据时继续使用紧凑列表详情布局。
+- 新增视觉系统契约与 CSS 静态检查，禁止在新视觉层中绕过 Token 增加硬编码颜色。
+
+### 边界
+
+- 未修改文案、路由、数据库、Rust、IPC、领域规则、MCP 或项目事实。
+- 未引入 Fluent UI、Primer、Tailwind、图标库、深色主题或复杂动画。
+
+### 验证结果
+
+- `npm run typecheck`、`npm run test` 与 `npm run build` 已通过，前端共 51 项测试通过。
+- `cargo fmt --check`、`cargo check`、`cargo test` 与 ForgeOS MCP 测试已通过；仅两个依赖真实 Codex/GitHub 环境的 Smoke Test 按设计忽略。
+- `git diff --check` 与新视觉层硬编码颜色检查已通过。
+- Tauri 实机已确认新应用壳层和项目概览能够加载；完整窗口与缩放矩阵保留为最终验收项。
+
 本文件记录 ForgeOS 的阶段目标、真实完成内容、验证结果和下一步计划。
 计划不能提前写成已完成事实。
 

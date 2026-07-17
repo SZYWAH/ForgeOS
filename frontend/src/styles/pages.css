@@ -1,0 +1,29 @@
+.memory-projects-page, .project-overview-document, .memory-history-page, .achievement-page, .ai-context-page, .ai-provider-page, .settings-page, .snapshot-page, .sessions-page, .evidence-page { max-width: var(--page-max-width); }
+.project-masthead, .project-brief, .workbench-runtime-strip, .workbench-baseline, .project-identity-brief { border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-surface); }
+.project-masthead { padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.project-memory-nav, .project-tabs { border-color: var(--color-border); }
+.project-memory-nav a, .project-tabs a, .project-tabs summary { color: var(--color-text-secondary); font-size: var(--text-secondary); font-weight: 600; }
+.project-memory-nav a.active, .project-tabs a.active { color: var(--color-brand); border-color: var(--color-brand); }
+.project-brief { border-radius: var(--radius-surface); }
+.project-brief__header, .project-brief__sync, .project-brief__footer, .project-brief__section, .project-brief__goal, .project-brief__summary, .workbench-baseline__header, .workbench-baseline__body, .workbench-baseline__footer { border-color: var(--color-border); }
+.project-brief__section--warning { border-left-color: var(--color-warning); background: var(--color-warning-soft); }
+.project-engineering-strip, .workbench-runtime-strip { border-radius: var(--radius-surface); background: var(--color-surface); }
+.workbench-signal { border-color: var(--color-border); }
+.memory-project-row__title, .project-brief__goal strong, .project-brief__section h3, .development-activity__summary strong, .achievement-card h3 { color: var(--color-text); }
+.memory-project-row__goal, .memory-project-row__next, .project-brief__summary, .development-activity__summary p, .achievement-card p { color: var(--color-text-secondary); }
+.pulse-card { border-color: var(--color-border-strong); box-shadow: var(--shadow-surface); }
+.pulse-card__header, .sync-progress, .sync-result, .pulse-section, .pulse-meta, .pulse-git-strip, .pulse-git-strip article { border-color: var(--color-border); background: var(--color-surface); }
+.pulse-card__header { background: var(--color-surface-subtle); }
+.pulse-section--warning { background: var(--color-warning-soft); }
+.provider-workbench, .repository-workbench, .evidence-workbench, .candidate-workbench, .execution-workbench, .github-import-workbench, .context-workbench { grid-template-columns: minmax(280px, 312px) minmax(0, 1fr); align-items: start; gap: var(--space-4); }
+.provider-list-panel, .repository-list, .evidence-list-panel, .provider-detail-stack, .repository-detail-stack, .evidence-detail-stack { align-self: start; }
+.provider-list > button.selected { box-shadow: inset 3px 0 var(--color-brand); background: var(--color-surface-selected); }
+.provider-list > button.selected strong, .provider-list > button:hover strong { color: var(--color-brand-active); }
+.provider-message, .github-boundary, .git-readonly-banner, .ai-boundary-banner { border-color: var(--color-border); color: var(--color-text-secondary); background: var(--color-surface-subtle); }
+.provider-detail-empty, .evidence-detail-empty, .session-empty-state, .snapshot-empty-state, .project-brief__empty, .workbench-baseline__empty { min-height: 160px; color: var(--color-text-secondary); background: var(--color-surface); }
+.context-markdown-preview, .provider-result pre, .execution-result-view, .github-readme-preview, .candidate-content { color: var(--color-text); background: var(--color-surface-subtle); font-family: var(--font-mono); }
+.context-export-items button.selected, .github-draft-list button.selected { box-shadow: inset 3px 0 var(--color-brand); background: var(--color-surface-selected); }
+.settings-form, .snapshot-editor, .session-editor, .achievement-editor, .provider-editor, .provider-secret-panel, .provider-invoke-panel, .evidence-editor { border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-surface); }
+.frozen-page { max-width: 960px; }
+.frozen-record-list { border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
+.not-found, .setup-card, .app-boot { color: var(--color-text); background: var(--color-surface); }

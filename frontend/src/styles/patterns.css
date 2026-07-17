@@ -1,0 +1,16 @@
+.list-detail-layout { display: grid; grid-template-columns: minmax(280px, 312px) minmax(0, 1fr); align-items: start; gap: var(--space-4); }
+.list-detail-layout--empty { display: block; max-width: 760px; }
+.list-detail-layout__list, .list-detail-layout__detail { min-width: 0; align-self: start; }
+.form-page, .settings-page { max-width: 960px; }
+.form-page :where(.settings-form, .project-form), .settings-page :where(.settings-form, .project-form) { max-width: 760px; }
+.form-actions, .provider-form-actions, .evidence-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+:where(.provider-list, .repository-list, .evidence-list, .candidate-list, .execution-list, .frozen-record-list) > :where(button, a, article) { border-color: var(--color-border); color: var(--color-text-secondary); background: var(--color-surface); }
+:where(.provider-list, .repository-list, .evidence-list, .candidate-list, .execution-list, .frozen-record-list) > :where(button, a, article):hover { background: var(--color-surface-subtle); }
+:where(.provider-list, .repository-list, .evidence-list, .candidate-list, .execution-list) > .selected,
+:where(.provider-list, .repository-list, .evidence-list, .candidate-list, .execution-list) > [aria-current="true"] { box-shadow: inset 3px 0 var(--color-brand); background: var(--color-surface-selected); }
+.memory-project-list, .development-timeline, .achievement-list, .materials-list, .history-list-grid { border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); box-shadow: var(--shadow-surface); }
+.memory-project-row, .development-activity, .achievement-card { border-color: var(--color-border); background: var(--color-surface); }
+.memory-project-row:hover, .development-activity:hover { background: var(--color-surface-subtle); }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-6); margin: 0 0 var(--space-3); }
+.section-heading h2 { margin: 0; color: var(--color-text); font-size: var(--text-section); font-weight: 650; line-height: var(--leading-section); }
+.section-heading p { max-width: 58ch; margin: 0; color: var(--color-text-secondary); font-size: var(--text-secondary); }

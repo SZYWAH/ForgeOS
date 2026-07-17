@@ -218,6 +218,16 @@ ForgeOS 的页面只负责展示摘要和支持决策，数据库中的原始事
 - 概览允许清理旧 Codex 附件包装形成可读预览，但展开后必须显示未经修改的原始字段值。
 - 新增长内容页面优先复用 `CollapsibleText`、`BoundedList`、`RecordDisclosure` 和 `CompactIdentifier`，不得重新引入分散的固定高度。
 
+## Visual System Contract
+
+视觉样式的详细契约见 `docs/visual-system.md`。新增或修改页面时：
+
+- 必须复用视觉 Token 与共享组件，不得在页面样式中硬编码颜色、圆角、阴影或控件高度。
+- 必须选择 Index、Workbench、List Detail 或 Form 中的一种页面模式。
+- 每页首屏最多一个主操作；空状态不得保留无意义的详情面板或等高卡片。
+- 必须保留键盘焦点、语义状态、长内容边界和 `prefers-reduced-motion`。
+- 修改共享 Shell、Panel、表单或按钮时，必须回归所有已注册路由。
+
 ## Development Memory Contract
 
 - 项目一级导航只包含概览、研发历史、成果与资料、AI 项目上下文。
