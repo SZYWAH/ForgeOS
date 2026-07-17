@@ -15,6 +15,7 @@ type CurrentSnapshotCardProps = {
   projectId: string;
   projectName: string;
   archived: boolean;
+  superseded?: boolean;
   variant?: "default" | "reference";
 };
 
@@ -22,6 +23,7 @@ export function CurrentSnapshotCard({
   projectId,
   projectName,
   archived,
+  superseded = false,
   variant = "default",
 }: CurrentSnapshotCardProps) {
   const { t } = useTranslation();
@@ -60,7 +62,7 @@ export function CurrentSnapshotCard({
         <header className="workbench-baseline__header">
           <div>
             <span>{t("workbench.confirmedFacts")}</span>
-            <h2 id="confirmed-baseline-title">{t("workbench.confirmedBaseline")}</h2>
+            <h2 id="confirmed-baseline-title">{t("contextTrust.confirmedState")}</h2>
           </div>
           {snapshot !== undefined ? (
             <Link
@@ -95,6 +97,7 @@ export function CurrentSnapshotCard({
                 <span>{t("workbench.lastConfirmed", { time: formatUpdatedAt(snapshot.confirmedAt) })}</span>
                 <span>{t("snapshot.stateVersion")} v{snapshot.version}</span>
               </div>
+              {superseded ? <p className="workbench-baseline__superseded">{t("contextTrust.confirmedSuperseded")}</p> : null}
               <div className="workbench-baseline__lead">
                 <article>
                   <h3>{t("workbench.currentGoal")}</h3>

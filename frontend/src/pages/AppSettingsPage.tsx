@@ -26,15 +26,24 @@ export function AppSettingsPage() {
     <PageIntro title={t("settings.title")} description={t("settings.description")} />
     {loadWarning && <div className="notice warning"><span>{t("settings.readFailed")}</span><button className="button secondary" onClick={() => void reload()}>{t("common.retry")}</button></div>}
     <form className="panel settings-form" onSubmit={submit}>
-      <section>
-        <label htmlFor="language-mode">{t("settings.language")}</label>
+      <fieldset className="language-choice-group">
+        <legend>{t("settings.language")}</legend>
         <p className="helper-text">{t("settings.languageHelp")}</p>
-        <select id="language-mode" value={languageMode} onChange={(event) => setLanguageMode(event.target.value as LanguageMode)}>
-          <option value="system">{t("settings.system")}</option>
-          <option value="zh-CN">{t("settings.simplifiedChinese")}</option>
-          <option value="en-US">{t("settings.english")}</option>
-        </select>
-      </section>
+        <div className="language-choice-group__options">
+          {(["system", "zh-CN", "en-US"] as LanguageMode[]).map((value) => (
+            <label className="language-choice" key={value}>
+              <input
+                checked={languageMode === value}
+                name="language-mode"
+                onChange={() => setLanguageMode(value)}
+                type="radio"
+                value={value}
+              />
+              <span>{value === "system" ? t("settings.system") : value === "zh-CN" ? t("settings.simplifiedChinese") : t("settings.english")}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <section>
         <label className="check-row"><input type="checkbox" checked={showTerms} disabled={resolveLocale(languageMode) !== "zh-CN"} onChange={(event) => setShowTerms(event.target.checked)} /><span>{t("settings.technicalTerms")}</span></label>
         <p className="helper-text">{t("settings.technicalTermsHelp")}</p>

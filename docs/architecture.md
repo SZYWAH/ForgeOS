@@ -558,3 +558,25 @@ flowchart LR
 - Candidate、Task Proposal 和 Execution 只保留 list/get Command；写 Command 不再注册到 Tauri。
 
 MCP 最终工具面为 `list_projects`、`get_project_context`、`get_project_history`、`get_project_achievements`、`build_ai_context`。所有核心工具接受 Project ID 或 Repository Path 二选一。路径只用于当前请求匹配，支持 Windows 大小写不敏感和子目录匹配，嵌套仓库选择最长注册路径；路径不进入日志和返回结果。
+
+## 研发记忆质量与安全投影
+
+```mermaid
+flowchart LR
+  Sources["Snapshot / Pulse / Session / Observation / README"] --> Policy["MemoryContentPolicy\n清洗 + 去重 + 脱敏"]
+  Policy --> History["研发历史读模型"]
+  Policy --> Repair["Snapshot Repair Draft"]
+  Policy --> Context["Project AI Context"]
+  Context --> Desktop["桌面结构化预览"]
+  Context --> Export["新 Context Export"]
+  Context --> MCP["MCP 只读工具"]
+  Repair --> Review["用户编辑与确认"]
+  Review --> Version["新版 Snapshot"]
+```
+
+- `MemoryContentPolicy` 位于 Application 层，是提示包装清理、语义去重、README 摘录、路径/Secret 脱敏和长度预算的唯一实现。
+- 质量问题返回稳定代码与 warning/blocking 等级；前端负责本地化，不解析英文错误消息。
+- 研发历史在读取时去除重复 Activity/Outcome，不修改旧 Observation；Manual Session Notes 只作为活动摘要。
+- Snapshot Repair Draft 是只读建议。保存仍经过 Snapshot Domain 与乐观版本检查，旧版本永久保留。
+- AI Context 的结构化字段和 Markdown 来自同一安全投影；Hash 对最终 Markdown 计算。旧 ContextExport 永不重算。
+- blocking Context 不允许复制、生成新 Export 或通过 MCP 返回 Markdown；MCP 仍不触发同步、不写数据库。

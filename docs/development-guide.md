@@ -238,3 +238,14 @@ ForgeOS 的页面只负责展示摘要和支持决策，数据库中的原始事
 - 系统整理出的成果只能保存为 Draft，必须经过用户确认才能成为正式成果。
 - MCP 的 Repository Path 只用于本次定位，不得记录、返回或写入 Context。
 - Candidate、Task Proposal 与 Execution 已冻结；不得在新页面重新引入创建、审批或状态流转入口。
+
+## Memory Content Integrity Contract
+
+- 所有进入研发历史、AI 项目上下文、Context Export 或 MCP 的自由文本必须经过 `MemoryContentPolicy`；禁止在 IPC、Renderer 或页面中复制清洗规则。
+- 清洗只作用于读模型和新草稿，不得回写旧 Snapshot、Observation、Session、Evidence 或 ContextExport。
+- Activity 与 Outcome 必须语义独立；同一 Agent 最终回答不能同时填充两个字段。Manual Session Notes 不得同时冒充“为什么这么做”。
+- README 类 Scope 只允许输出定位、功能和范围摘要；安装命令、环境变量、代码块、备份说明和绝对路径不得进入 AI Context。
+- 疑似真实 Secret 和未清除提示包装属于 blocking；必须禁用复制、导出和 MCP Markdown 返回。示例值可以不阻断，但不得进入 Scope 摘要。
+- Snapshot 修复必须先生成 Repair Draft，由用户编辑并通过现有版本检查保存为新版本；禁止原地覆盖历史。
+- 结构化列表必须使用独立项目编辑器。Next Steps 最多三项，不得把整段 Markdown 按行拆成大量条目。
+- AI Context 页面只保留一个主要复制入口；原始安全 Markdown、Hash 和技术范围默认折叠。

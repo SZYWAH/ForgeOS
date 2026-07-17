@@ -55,7 +55,7 @@ describe("application language settings", () => {
 
     render(<AppPreferencesProvider><AppSettingsPage /></AppPreferencesProvider>);
     await screen.findByRole("heading", { name: "应用设置" });
-    fireEvent.change(screen.getByLabelText("界面语言"), { target: { value: "en-US" } });
+    fireEvent.click(screen.getByRole("radio", { name: "English" }));
     fireEvent.click(screen.getByRole("button", { name: "保存应用设置" }));
 
     await screen.findByRole("heading", { name: "Application settings" });
@@ -75,7 +75,7 @@ describe("application language settings", () => {
 
     render(<AppPreferencesProvider><AppSettingsPage /></AppPreferencesProvider>);
     await screen.findByRole("heading");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "en-US" } });
+    fireEvent.click(screen.getByRole("radio", { name: "English" }));
     fireEvent.click(screen.getByRole("button", { name: "保存应用设置" }));
 
     await waitFor(() => expect(preferencesApi.get).toHaveBeenCalledTimes(2));

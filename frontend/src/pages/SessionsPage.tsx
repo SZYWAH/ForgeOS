@@ -107,8 +107,8 @@ export function SessionsPage() {
             {isExpanded ? <div className="development-activity__detail">
               <HistoryField label={t("memory.activityGoal")} value={item.goal} />
               <HistoryField label={t("memory.rationale")} value={item.rationale} />
-              <HistoryField label={t("memory.activityDone")} value={item.activity} />
-              <HistoryField label={t("memory.outcome")} value={item.outcome} />
+              <HistoryField label={t("contextTrust.activitySummary")} value={item.activity} />
+              <HistoryField label={t("contextTrust.actualResult")} value={item.outcome} />
               <HistoryField label={t("memory.validation")} value={item.validation} />
               <HistoryField label={t("memory.resumeFrom")} value={item.handoff} />
               {item.gitCommits.length > 0 ? <details><summary>{t("memory.commitCount", { count: item.gitCommits.length })}</summary><ul>{item.gitCommits.map((commit) => <li key={commit.sha}><code>{commit.sha.slice(0, 10)}</code> {commit.message}</li>)}</ul></details> : null}

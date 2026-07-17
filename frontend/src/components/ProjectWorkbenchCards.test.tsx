@@ -239,7 +239,7 @@ describe("project workbench cards", () => {
 
   it("keeps confirmed Snapshot facts collapsed in reference mode", async () => {
     render(<MemoryRouter><CurrentSnapshotCard archived={false} projectId="project-1" projectName="ForgeOS" variant="reference" /></MemoryRouter>);
-    expect(await screen.findByRole("heading", { name: "已确认的当前状态" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "上次人工确认状态" })).toBeInTheDocument();
     const disclosure = screen.getByText("展开已确认内容").closest("details");
     expect(disclosure).not.toHaveAttribute("open");
     fireEvent.click(screen.getByText("展开已确认内容"));

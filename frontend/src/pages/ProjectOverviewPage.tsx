@@ -13,6 +13,7 @@ import { projectMemoryApi } from "../api/project-memory";
 import type { Project } from "../types/project";
 import type { ProjectAchievement } from "../types/achievement";
 import type { DevelopmentHistoryItem } from "../types/project-memory";
+import type { ProjectAiContext } from "../types/project-memory";
 import { displayLabel, formatUpdatedAt, lifecycleLabel, statusLabel } from "../utils/format";
 import { useTranslation } from "react-i18next";
 
@@ -52,20 +53,33 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
   const pendingReview = activity.pulse?.status === "pending_review";
   const [history, setHistory] = useState<DevelopmentHistoryItem[]>([]);
   const [achievements, setAchievements] = useState<ProjectAchievement[]>([]);
+  const [safeIdentity, setSafeIdentity] = useState<ProjectAiContext["identity"]>();
+  const [baselineSuperseded, setBaselineSuperseded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
       projectMemoryApi.overview(project.id),
       achievementApi.list(project.id),
-    ]).then(([memory, achievementValues]) => {
+      projectMemoryApi.buildAiContext(project.id),
+    ]).then(([memory, achievementValues, aiContext]) => {
       if (!cancelled) {
         setHistory(memory.recentHistory);
         setAchievements(achievementValues.filter((value) => value.status === "confirmed").slice(0, 3));
+        setSafeIdentity(aiContext.identity);
+        setBaselineSuperseded(aiContext.confirmedState?.supersededByNewerActivity ?? false);
       }
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [project.id]);
+
+  const identityFields = [
+    safeIdentity?.vision ?? project.vision,
+    safeIdentity?.targetUser ?? project.targetUser,
+    safeIdentity?.scopeSummary ?? project.scope,
+    safeIdentity?.techStack ?? project.techStack,
+  ];
+  const missingIdentityCount = identityFields.filter((value) => !value.trim()).length;
 
   return (
     <div className="page-stack project-overview-document">
@@ -102,11 +116,12 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
           <div><h2 id="project-identity-heading">{t("memory.projectIdentity")}</h2><p>{t("memory.projectIdentityDescription")}</p></div>
         </header>
         <div className="project-identity-brief__grid">
-          <article><span>{t("memory.vision")}</span><CollapsibleText collapsedLines={2} value={project.vision || project.description || t("common.notProvided")} /></article>
-          <article><span>{t("memory.targetUser")}</span><CollapsibleText collapsedLines={2} value={project.targetUser || t("common.notProvided")} /></article>
-          <article><span>{t("memory.scope")}</span><CollapsibleText collapsedLines={2} value={project.scope || t("common.notProvided")} /></article>
-          <article><span>{t("memory.techStack")}</span><CollapsibleText collapsedLines={2} value={project.techStack || t("common.notProvided")} /></article>
+          <article><span>{t("memory.vision")}</span><CollapsibleText collapsedLines={2} value={identityFields[0] || safeIdentity?.description || project.description || t("common.notProvided")} /></article>
+          <article><span>{t("memory.targetUser")}</span><CollapsibleText collapsedLines={2} value={identityFields[1] || t("common.notProvided")} /></article>
+          <article><span>{t("memory.scope")}</span><CollapsibleText collapsedLines={2} value={identityFields[2] || t("common.notProvided")} /></article>
+          <article><span>{t("memory.techStack")}</span><CollapsibleText collapsedLines={2} value={identityFields[3] || t("common.notProvided")} /></article>
         </div>
+        {missingIdentityCount > 0 ? <p className="project-identity-brief__missing">{t("contextTrust.identityMissing", { count: missingIdentityCount })} <Link to={`/projects/${project.id}/settings`}>{t("contextTrust.completeIdentity")}</Link></p> : null}
       </section>
 
       <ProjectPulseCard
@@ -117,7 +132,7 @@ function ProjectOverviewWorkbench({ project }: { project: Project }) {
         variant="document"
       />
 
-      <CurrentSnapshotCard archived={archived} projectId={project.id} projectName={project.name} variant="reference" />
+      <CurrentSnapshotCard archived={archived} projectId={project.id} projectName={project.name} superseded={baselineSuperseded} variant="reference" />
 
       <section className="project-engineering" aria-labelledby="project-engineering-title">
         <header>

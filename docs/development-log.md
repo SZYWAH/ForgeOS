@@ -922,3 +922,35 @@ D7：统一研发历史、结构化成果与四页项目工作台。
 - 在两个真实项目中分别执行一次“同步最新进展”，验证近一年 Commit 首次回溯和 355 条 Observation 的活动聚合展示。
 - 审核一个 eligible Pulse，确认只生成一个成果草稿；补充影响和简历表述后再人工确认。
 - 重启 Codex MCP，确认工具列表只显示新的五个只读工具，并从仓库子目录定位正确项目。
+
+# 2026-07-17 — ForgeOS 研发记忆可信度与关键页面修复
+
+## 当前阶段
+
+D7 质量修复：统一项目记忆清洗、安全 AI 上下文和 Snapshot 修复草稿。
+
+## 完成内容
+
+- 新增确定性 `MemoryContentPolicy`，统一处理 Codex 提示包装、语义重复、README 过载、绝对路径、疑似凭据、Unicode 截断与列表去重。
+- 新导入 Codex 活动不再把同一条 Agent 最终回答同时保存为 Activity 和 Outcome；旧 Observation 在研发历史读模型中去重，数据库内容保持不变。
+- 新增 `build_snapshot_repair_draft` 只读用例和 IPC，按待审核 Pulse、最近研发历史、现有 Snapshot 的顺序生成可编辑草稿。
+- Snapshot 的成果、问题与下一步改为逐项编辑；下一步继续限制为最多三项，保存仍创建新版本并执行乐观版本检查。
+- AI 项目上下文改为身份、确认基线、未确认观察、最近历史、确认成果、Git 状态和下一步的结构化安全投影；技术 Markdown 和 Hash 默认折叠。
+- 新 Context Export 与 MCP 共用安全投影；疑似真实 Secret 或未清除提示包装时阻断复制与输出，旧 ContextExport 不重算。
+- 项目标题区移除伪卡片背景，确认状态改为“上次人工确认状态”，研发历史改为纵向语义顺序，应用语言改为可访问的原生单选组。
+- 新增 ADR-020，记录不改写历史、读时安全投影和人工确认修复的边界。
+
+## 安全边界
+
+- 未新增 Migration，未修改旧 Snapshot、Observation、Session、Evidence 或 ContextExport。
+- 未调用 AI 自动清洗，未增加 MCP 写工具，未执行 Codex 或 Git 写操作。
+- 所有正式状态更新仍必须由用户确认。
+
+## 验证结果
+
+- `npm run typecheck`、`npm run test -- --run` 与 `npm run build` 通过；9 个测试文件共 53 项测试通过。生产构建仅保留既有的主包大于 500 kB 提示。
+- `cargo fmt --check`、`cargo check` 与主程序全量 `cargo test` 通过：79 项单元测试中 78 项通过，1 项默认忽略；全部领域与数据库集成测试通过。
+- Windows Codex App Server 只读 Smoke Test 已单独启用并通过；`forgeos-mcp` 单元、STDIO 集成与五工具只读边界测试全部通过。
+- 真实 ForgeOS SQLite `integrity_check = ok`，`foreign_key_check = 0`；2 个 Project、1 条 Snapshot、383 条 Observation、14 条 Pulse 和 0 条 ContextExport 保持不变。
+- 使用真实数据库执行 MCP 冒烟：Daymark 的安全上下文为 warning 且可读取；CodeLens-Pro 因项目 Scope 中存在非占位 `API_KEY` 赋值被 blocking 门槛拒绝，未返回 Markdown。
+- `git diff --check` 无空白错误。本轮未启动新的桌面开发进程；浏览器可见验收因本地 1420 开发服务未运行而未执行，不虚报 960×720 至 1920×1080 的人工视觉矩阵。
