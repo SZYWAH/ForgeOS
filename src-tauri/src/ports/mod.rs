@@ -3,6 +3,7 @@
 mod ai;
 mod codex;
 mod codex_activity;
+mod codex_mcp;
 mod context;
 mod git;
 mod github;
@@ -17,6 +18,7 @@ pub use codex_activity::{
     CodexActivityBatch, CodexActivitySource, CodexActivitySourceError, CodexConnectorHealth,
     CodexTurnActivity,
 };
+pub use codex_mcp::{CodexMcpClient, CodexMcpClientError, CodexMcpServerConfig};
 pub use context::{
     redact_external_text, redact_git_evidence_description, ContextRenderError, ContextRenderInput,
     ContextRenderer,

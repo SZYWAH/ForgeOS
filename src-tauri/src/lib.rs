@@ -9,6 +9,27 @@ pub mod read_models;
 
 use tauri::Manager;
 
+pub fn cleanup_owned_codex_mcp() {
+    use std::{path::Path, sync::Arc};
+
+    use application::CodexMcpKernel;
+    use infrastructure::codex_cli::CodexCliMcpClient;
+
+    let expected = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .map(|directory| directory.join("forgeos-mcp.exe"));
+    let kernel = CodexMcpKernel::new(Arc::new(CodexCliMcpClient::new(None)), expected);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    if let Ok(runtime) = runtime {
+        // Uninstall must remain best-effort. Ownership checks inside the kernel
+        // prevent removal of a user-customized MCP entry.
+        let _ = runtime.block_on(kernel.remove_owned());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -17,6 +38,7 @@ pub fn run() {
             jobs::spawn_scheduler(app.handle().clone(), state.project_pulse_kernel.clone());
             app.manage(state.database);
             app.manage(state.app_preferences_kernel);
+            app.manage(state.codex_mcp_kernel);
             app.manage(state.project_kernel);
             app.manage(state.ai_provider_kernel);
             app.manage(state.context_pack_kernel);
@@ -33,6 +55,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ipc::app_preferences::get_app_preferences,
             ipc::app_preferences::update_app_preferences,
+            ipc::codex_mcp::get_codex_mcp_registration,
+            ipc::codex_mcp::configure_codex_mcp,
+            ipc::codex_mcp::remove_codex_mcp_registration,
             ipc::health::get_system_status,
             ipc::workspaces::get_current_workspace,
             ipc::workspaces::create_workspace,

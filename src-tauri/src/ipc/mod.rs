@@ -2,6 +2,7 @@ pub mod achievements;
 pub mod ai_candidates;
 pub mod ai_providers;
 pub mod codex_executions;
+pub mod codex_mcp;
 pub mod codex_task_proposals;
 pub mod context_packs;
 mod dto;

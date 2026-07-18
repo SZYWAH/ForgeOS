@@ -3,6 +3,8 @@ mod activity_repository;
 pub mod ai_client;
 pub mod app_preferences;
 pub mod codex_activity;
+pub mod codex_cli;
+pub mod codex_locator;
 pub mod codex_runner;
 pub mod context_renderer;
 pub mod database;

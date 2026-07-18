@@ -10,9 +10,17 @@ const preferencesApi = vi.hoisted(() => ({
   update: vi.fn(),
 }));
 
+const codexMcpApi = vi.hoisted(() => ({
+  get: vi.fn(),
+  configure: vi.fn(),
+  remove: vi.fn(),
+}));
+
 vi.mock("../api/app-preferences", () => ({
   appPreferencesApi: preferencesApi,
 }));
+
+vi.mock("../api/codex-mcp", () => ({ codexMcpApi }));
 
 function keys(value: object, prefix = ""): string[] {
   return Object.entries(value).flatMap(([key, child]) => {
@@ -31,6 +39,17 @@ describe("application language settings", () => {
       version: 1,
       createdAt: "2026-07-15T00:00:00Z",
       updatedAt: "2026-07-15T00:00:00Z",
+    });
+    codexMcpApi.get.mockReset();
+    codexMcpApi.configure.mockReset();
+    codexMcpApi.remove.mockReset();
+    codexMcpApi.get.mockResolvedValue({
+      state: "sidecar_missing",
+      codexVersion: "codex-cli test",
+      expectedCommand: null,
+      configuredCommand: null,
+      enabled: false,
+      canConfigure: false,
     });
   });
 
@@ -74,12 +93,12 @@ describe("application language settings", () => {
     });
 
     render(<AppPreferencesProvider><AppSettingsPage /></AppPreferencesProvider>);
-    await screen.findByRole("heading");
+    await screen.findByRole("heading", { level: 1 });
     fireEvent.click(screen.getByRole("radio", { name: "English" }));
     fireEvent.click(screen.getByRole("button", { name: "保存应用设置" }));
 
     await waitFor(() => expect(preferencesApi.get).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("heading")).toHaveTextContent("应用设置");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("应用设置");
     expect(screen.getByText("应用设置已经发生变化")).toBeInTheDocument();
     expect(screen.getByText("重新加载设置后再保存。")).toBeInTheDocument();
     expect(screen.getByText(/app_preferences_version_conflict/)).toBeInTheDocument();

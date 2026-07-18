@@ -3,11 +3,29 @@ use serde::Serialize;
 use crate::{
     application::{
         AchievementError, AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
-        CodexExecutionError, CodexTaskProposalError, ContextPackError, GitHubImportError,
-        ProjectMemoryError, ProjectPulseError, RepositoryKernelError,
+        CodexExecutionError, CodexMcpError, CodexTaskProposalError, ContextPackError,
+        GitHubImportError, ProjectMemoryError, ProjectPulseError, RepositoryKernelError,
     },
     domain::DomainError,
 };
+
+impl From<CodexMcpError> for IpcError {
+    fn from(error: CodexMcpError) -> Self {
+        let (code, retryable) = match &error {
+            CodexMcpError::CodexUnavailable => ("codex_mcp_codex_unavailable", true),
+            CodexMcpError::SidecarMissing => ("codex_mcp_sidecar_missing", false),
+            CodexMcpError::Conflict => ("codex_mcp_conflict", false),
+            CodexMcpError::NotOwned => ("codex_mcp_not_owned", false),
+            CodexMcpError::VerificationFailed => ("codex_mcp_verification_failed", true),
+            CodexMcpError::Client(_) => ("codex_mcp_cli_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

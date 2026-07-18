@@ -1,9 +1,4 @@
-use std::{
-    env, fs, io,
-    path::{Path, PathBuf},
-    process::Stdio,
-    time::Duration,
-};
+use std::{fs, io, path::Path, process::Stdio, time::Duration};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -18,6 +13,8 @@ use crate::ports::{
     redact_external_text, CodexActivityBatch, CodexActivitySource, CodexActivitySourceError,
     CodexConnectorHealth, CodexTurnActivity,
 };
+
+use super::codex_locator::{discover_codex_executable, hide_tokio_window};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const ALLOWED_METHODS: &[&str] = &[
@@ -36,15 +33,15 @@ impl CodexActivitySource for CodexAppServerAdapter {
         &self,
         configured_executable: Option<&str>,
     ) -> Result<CodexConnectorHealth, CodexActivitySourceError> {
-        let executable =
-            discover_executable(configured_executable).ok_or(CodexActivitySourceError::NotFound)?;
+        let executable = discover_codex_executable(configured_executable)
+            .ok_or(CodexActivitySourceError::NotFound)?;
         let mut command = Command::new(&executable);
         command
             .arg("--version")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        hide_window(&mut command);
+        hide_tokio_window(&mut command);
         let output = timeout(REQUEST_TIMEOUT, command.output())
             .await
             .map_err(|_| CodexActivitySourceError::Timeout)?
@@ -76,8 +73,8 @@ impl CodexActivitySource for CodexAppServerAdapter {
         max_turns: usize,
         max_normalized_bytes: usize,
     ) -> Result<CodexActivityBatch, CodexActivitySourceError> {
-        let executable =
-            discover_executable(configured_executable).ok_or(CodexActivitySourceError::NotFound)?;
+        let executable = discover_codex_executable(configured_executable)
+            .ok_or(CodexActivitySourceError::NotFound)?;
         let canonical_repository = fs::canonicalize(repository_path)
             .map_err(|error| CodexActivitySourceError::Process(error.to_string()))?;
         let mut server = AppServerSession::start(&executable).await?;
@@ -214,7 +211,7 @@ impl AppServerSession {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        hide_window(&mut command);
+        hide_tokio_window(&mut command);
         let mut child = command.spawn().map_err(map_spawn_error)?;
         let stdin = child
             .stdin
@@ -626,65 +623,6 @@ fn path_equals(left: &Path, right: &Path) -> bool {
         )
 }
 
-fn discover_executable(configured: Option<&str>) -> Option<PathBuf> {
-    if let Some(path) = configured.map(PathBuf::from).filter(|path| path.is_file()) {
-        return Some(path);
-    }
-    if command_available("codex") {
-        return Some(PathBuf::from("codex"));
-    }
-    let mut candidates = Vec::new();
-    if let Some(local) = env::var_os("LOCALAPPDATA").map(PathBuf::from) {
-        let alias = local
-            .join("Microsoft")
-            .join("WindowsApps")
-            .join("codex.exe");
-        if alias.is_file() {
-            candidates.push(alias);
-        }
-        let bundled = local.join("OpenAI").join("Codex").join("bin");
-        candidates.extend(
-            fs::read_dir(bundled)
-                .into_iter()
-                .flatten()
-                .filter_map(Result::ok)
-                .map(|entry| entry.path().join("codex.exe"))
-                .filter(|path| path.is_file()),
-        );
-    }
-    if let Some(program_files) = env::var_os("ProgramFiles").map(PathBuf::from) {
-        candidates.extend(
-            fs::read_dir(program_files.join("WindowsApps"))
-                .into_iter()
-                .flatten()
-                .filter_map(Result::ok)
-                .filter(|entry| {
-                    entry
-                        .file_name()
-                        .to_string_lossy()
-                        .to_ascii_lowercase()
-                        .starts_with("openai.codex_")
-                })
-                .map(|entry| entry.path().join("app").join("resources").join("codex.exe"))
-                .filter(|path| path.is_file()),
-        );
-    }
-    candidates.sort_by_key(|path| {
-        fs::metadata(path)
-            .and_then(|metadata| metadata.modified())
-            .ok()
-    });
-    candidates.pop()
-}
-fn command_available(command: &str) -> bool {
-    std::process::Command::new(command)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
 fn drain_stderr(stderr: ChildStderr) {
     tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
@@ -698,14 +636,6 @@ fn map_spawn_error(error: io::Error) -> CodexActivitySourceError {
         CodexActivitySourceError::Process(error.to_string())
     }
 }
-#[cfg(windows)]
-fn hide_window(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    command.as_std_mut().creation_flags(0x0800_0000);
-}
-#[cfg(not(windows))]
-fn hide_window(_command: &mut Command) {}
-
 #[cfg(test)]
 mod tests {
     use super::*;

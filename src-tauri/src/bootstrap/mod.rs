@@ -8,14 +8,16 @@ pub use error::BootstrapError;
 
 use crate::{
     application::{
-        AchievementKernel, AiCandidateKernel, AiProviderKernel, AppPreferencesKernel,
-        CodexExecutionKernel, CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel,
-        ProjectKernel, ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
+        codex_mcp::resolve_expected_sidecar, AchievementKernel, AiCandidateKernel,
+        AiProviderKernel, AppPreferencesKernel, CodexExecutionKernel, CodexMcpKernel,
+        CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel, ProjectKernel,
+        ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
         app_preferences::SqliteAppPreferencesRepository,
         codex_activity::CodexAppServerAdapter,
+        codex_cli::CodexCliMcpClient,
         codex_runner::RecordOnlyCodexRunner,
         context_renderer::MarkdownContextRenderer,
         database::{self, DatabaseState},
@@ -31,6 +33,7 @@ const DATA_DIR_ENV: &str = "FORGEOS_DATA_DIR";
 pub struct BootstrapState {
     pub database: DatabaseState,
     pub app_preferences_kernel: AppPreferencesKernel,
+    pub codex_mcp_kernel: CodexMcpKernel,
     pub project_kernel: ProjectKernel,
     pub ai_provider_kernel: AiProviderKernel,
     pub context_pack_kernel: ContextPackKernel,
@@ -55,6 +58,10 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     let app_preferences_kernel = AppPreferencesKernel::new(Arc::new(
         SqliteAppPreferencesRepository::new(database.pool.clone()),
     ));
+    let codex_mcp_kernel = CodexMcpKernel::new(
+        Arc::new(CodexCliMcpClient::new(None)),
+        resolve_expected_sidecar(),
+    );
     let project_kernel = ProjectKernel::new(repository.clone());
     let ai_provider_kernel = AiProviderKernel::new(
         repository.clone(),
@@ -95,6 +102,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     Ok(BootstrapState {
         database,
         app_preferences_kernel,
+        codex_mcp_kernel,
         project_kernel,
         ai_provider_kernel,
         context_pack_kernel,
