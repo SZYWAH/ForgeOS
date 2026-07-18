@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 1420",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm --prefix frontend run build",
+    "beforeBuildCommand": "npm run prepare:sidecar && npm --prefix frontend run build",
     "frontendDist": "../frontend/dist"
   },
   "app": {
@@ -27,7 +27,29 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "SZYWAH",
+    "shortDescription": "Personal development memory for independent developers",
+    "longDescription": "ForgeOS keeps project context, development history, achievements, and read-only Codex integration in one local-first Windows application.",
+    "icon": ["icons/icon.ico"],
+    "externalBin": ["binaries/forgeos-mcp"],
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "template": "windows/installer.nsi",
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false,
+        "compression": "lzma",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "windows/installer-hooks.nsh"
+      }
+    }
   }
 }
-
