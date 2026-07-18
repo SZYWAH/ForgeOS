@@ -954,3 +954,26 @@ D7 质量修复：统一项目记忆清洗、安全 AI 上下文和 Snapshot 修
 - 真实 ForgeOS SQLite `integrity_check = ok`，`foreign_key_check = 0`；2 个 Project、1 条 Snapshot、383 条 Observation、14 条 Pulse 和 0 条 ContextExport 保持不变。
 - 使用真实数据库执行 MCP 冒烟：Daymark 的安全上下文为 warning 且可读取；CodeLens-Pro 因项目 Scope 中存在非占位 `API_KEY` 赋值被 blocking 门槛拒绝，未返回 Markdown。
 - `git diff --check` 无空白错误。本轮未启动新的桌面开发进程；浏览器可见验收因本地 1420 开发服务未运行而未执行，不虚报 960×720 至 1920×1080 的人工视觉矩阵。
+
+# 2026-07-18 — ForgeOS v0.1.0 Windows Preview Delivery
+
+## 当前阶段
+
+Windows x64 预发布交付与 MCP 一键接入。
+
+## 完成内容
+
+- 启用 Tauri NSIS Bundle，以当前用户模式生成小型在线 WebView2 安装包。
+- 将 Release `forgeos-mcp.exe` 作为 Sidecar 打包，并增加版本和数据库只读诊断。
+- 应用设置新增 Codex 连接状态、连接、冲突替换和断开入口。
+- 通过官方 Codex CLI 管理用户级 STDIO MCP，写入前备份，写入后验证，失败时回滚。
+- 新增基于严格名称、命令、参数和 Transport 的所有权判断。
+- 基于 Tauri 2.11.4 模板实现升级保留与普通卸载安全清理。
+- 生成多分辨率 Windows ICO、统一 Release 构建脚本、安装器 Smoke Test 与预发布说明。
+
+## 验证结果
+
+- 安装包体积 8.04 MiB，符合 30 MiB 预算。
+- 隔离安装、Sidecar Hash、版本、数据库诊断、Codex 注册、模拟升级保留和普通卸载清理均通过。
+- 真实 Codex 配置未参与安装器测试；测试使用独立 `CODEX_HOME`。
+- 安装包未签名，SmartScreen 风险已在 Release Notes 中明确说明。

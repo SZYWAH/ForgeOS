@@ -580,3 +580,23 @@ flowchart LR
 - Snapshot Repair Draft 是只读建议。保存仍经过 Snapshot Domain 与乐观版本检查，旧版本永久保留。
 - AI Context 的结构化字段和 Markdown 来自同一安全投影；Hash 对最终 Markdown 计算。旧 ContextExport 永不重算。
 - blocking Context 不允许复制、生成新 Export 或通过 MCP 返回 Markdown；MCP 仍不触发同步、不写数据库。
+
+## Windows Preview Delivery
+
+```text
+Release build
+  -> forgeos.exe
+  -> forgeos-mcp.exe (Tauri Sidecar)
+  -> NSIS current-user installer
+
+Application Settings
+  -> CodexMcpKernel
+  -> official codex mcp get/add/remove
+  -> user-level config.toml backup + verify + rollback
+```
+
+- Sidecar 与桌面程序安装在同一目录，不加入 PATH，不注册服务，不监听 HTTP/TCP。
+- 开发版只有显式设置 `FORGEOS_MCP_PATH` 时才能测试连接，避免把 `target` 路径写入正式 Codex 配置。
+- Codex 配置所有权要求名称为 `forgeos`、STDIO、空参数且命令严格匹配当前安装目录。
+- NSIS 升级调用旧卸载器时传入 `/FORGEOS_UPGRADE=1`，因此保留 MCP；普通卸载通过主程序无界面清理入口安全移除完全匹配的连接。
+- 安装器默认保留 SQLite 数据和应用偏好；WebView2 使用在线 Bootstrapper。

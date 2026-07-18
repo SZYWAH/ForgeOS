@@ -1,5 +1,25 @@
 # ForgeOS
 
+## Windows v0.1.0 预览版
+
+ForgeOS 提供 Windows x64 当前用户安装包。安装包同时包含只读的 `forgeos-mcp.exe`，无需单独下载或手动启动。
+
+安装完成后：
+
+1. 打开“应用设置”。
+2. 在“Codex 连接”中点击“连接 Codex”。
+3. 重启 Codex，让 `forgeos` MCP 生效。
+
+ForgeOS MCP 使用 STDIO 按需启动，只读取本机 ForgeOS 数据库；它不会执行代码、修改 Git 或写入 ForgeOS。安装包未签名，Windows SmartScreen 可能显示“未知发布者”。目标电脑缺少 WebView2 时，安装器会联网下载 Microsoft Bootstrapper。
+
+本地构建预览安装包：
+
+```powershell
+npm run release:windows
+```
+
+产物位于 `dist-release/`。详细流程见 `docs/release-v0.1.0.md`。
+
 > 当前阶段：D6 Codex Activity Intake + Project Pulse。ForgeOS 通过 Codex App Server 与只读 Git 观察生成待审核研发态势，用户确认后才写入正式 Snapshot / Session。
 
 ForgeOS（Forge Operating System）是面向独立开发者的个人 AI 辅助软件研发操作系统。
