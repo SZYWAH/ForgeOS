@@ -977,3 +977,43 @@ Windows x64 预发布交付与 MCP 一键接入。
 - 隔离安装、Sidecar Hash、版本、数据库诊断、Codex 注册、模拟升级保留和普通卸载清理均通过。
 - 真实 Codex 配置未参与安装器测试；测试使用独立 `CODEX_HOME`。
 - 安装包未签名，SmartScreen 风险已在 Release Notes 中明确说明。
+
+# 2026-07-20 — ForgeOS D9.0 GitHub Project Intelligence Architecture Freeze
+
+## 当前阶段
+
+D9.0 架构与交互冻结。版本继续保持 `0.1.0`；本阶段没有创建运行时代码、Migration 或安装包。
+
+## 目标
+
+在开始 D9.1 前，冻结公开 GitHub Repository 分析的产品边界、数据归属、报告 Schema、IPC、来源预算、安全合同和页面流程，使实现阶段不再需要临时决定权限或领域归属。
+
+## 完成内容
+
+- 新增 ADR-022，确定 Workspace 级外部 Repository 分析方案。
+- 新增 `github-analysis-contract.md`，统一状态机、报告结构、来源引用、错误码、进度事件和页面状态。
+- 规划但未创建 `0019_github_project_intelligence.sql`，包含 Analysis Run 与受限 Source 摘要。
+- 固定 GitHub Tree、文本文件、单文件、总文本、AI 输入和自定义问题预算。
+- 明确 Repository 内容为不可信输入，Token 继续使用 Windows Credential Manager，AI 不获得 Tool、Shell 或 Credential。
+- 明确 Analysis Report、GitHub Import Draft 和 Project 三段生命周期。
+- 保留 `/github-import` 作为统一入口，并规划报告详情路由。
+
+## 边界确认
+
+- 只支持 Public Repository。
+- 不克隆、不执行代码、不持续同步。
+- 不创建 GitHub 写操作、Codex 执行、Agent 或 MCP 写工具。
+- AI 仅由用户主动开启；失败回退规则报告。
+- 报告绑定默认分支的具体 HEAD SHA，每个结论必须带真实来源与置信度。
+- 用户明确导入前，不创建 Project 或正式研发事实。
+
+## 验证结果
+
+- GitHub 官方文档确认递归 Tree 上限为 100,000 项或 7 MB；ForgeOS 产品预算固定为更保守的 20,000 项。
+- GitHub 官方文档确认未认证公开请求主限额为每小时 60 次，个人访问令牌通常为每小时 5,000 次。
+- GitHub SBOM 只读取已有 SPDX 兼容导出；缺失时合同要求回退 Manifest 分析，不请求生成远程对象。
+- D9.0 验收只执行文档范围、枚举一致性和 `git diff --check`；完整构建从 D9.1 实现开始恢复。
+
+## 下一步计划
+
+等待确认后进入 D9.1：创建 Migration 0019，并实现最小的 Public Repository 规则分析纵向切片。D9.1 才统一将前端、Tauri 与 Rust Crate 版本更新到 `0.2.0`。

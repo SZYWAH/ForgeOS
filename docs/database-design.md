@@ -788,3 +788,78 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `project_achievement_sources`：保存 Pulse、Snapshot、Session、Evidence、Codex Observation 或 Repository Commit 来源。
 
 状态为 `draft / confirmed / archived`。系统生成内容只能是 Draft；Confirmed 必须包含标题和结果，并且方案、验证或影响至少一项非空。同一 Pulse 最多生成一条成果草稿。触发器验证每种来源存在且属于同一 Project，跨项目来源写入会被拒绝。
+
+## D9 计划 Migration 0019：GitHub Project Intelligence
+
+状态：仅完成设计冻结，D9.0 不创建或执行 Migration。D9.1 必须以新的前向 Migration `0019_github_project_intelligence.sql` 实现，不修改 `0001-0018`。
+
+### `github_analysis_runs`
+
+用途：保存 Workspace 下针对公开 GitHub Repository 的不可变分析请求和报告。该表不要求 `project_id`；只有用户完成导入后，`imported_project_id` 才可指向正式 Project。
+
+计划字段：
+
+- `id TEXT PRIMARY KEY`
+- `workspace_id TEXT NOT NULL REFERENCES workspaces(id)`
+- `github_repository_id INTEGER NOT NULL`
+- `owner TEXT NOT NULL`
+- `name TEXT NOT NULL`
+- `repository_url TEXT NOT NULL`
+- `default_branch TEXT NOT NULL`
+- `source_commit_sha TEXT NOT NULL`
+- `focus_type TEXT NOT NULL CHECK (focus_type IN ('overview', 'architecture', 'learning', 'reproduction', 'secondary_development', 'custom'))`
+- `custom_prompt TEXT NULL`
+- `status TEXT NOT NULL CHECK (status IN ('queued', 'collecting', 'analyzing', 'ready', 'partial', 'failed', 'archived'))`
+- `analysis_mode TEXT NOT NULL CHECK (analysis_mode IN ('rules', 'ai'))`
+- `readiness TEXT NOT NULL CHECK (readiness IN ('ready', 'warning', 'incomplete', 'blocked'))`
+- `analyzer_revision TEXT NOT NULL`
+- `request_hash TEXT NOT NULL`
+- `report_json TEXT NULL CHECK (report_json IS NULL OR json_valid(report_json))`
+- `report_markdown TEXT NULL`
+- `content_hash TEXT NULL`
+- `imported_project_id TEXT NULL REFERENCES projects(id)`
+- `started_at TEXT NULL`
+- `completed_at TEXT NULL`
+- `created_at TEXT NOT NULL`
+- `updated_at TEXT NOT NULL`
+- `version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)`
+
+计划约束与索引：
+
+- `UNIQUE(workspace_id, request_hash)`，其中 Hash 覆盖 Repository ID、HEAD SHA、分析重点、Prompt Hash、模式和分析器版本。
+- `(workspace_id, created_at DESC)` 用于分析历史。
+- `(github_repository_id, source_commit_sha)` 用于 HEAD 历史与过期判断。
+- `(status, updated_at)` 用于恢复未完成 Run。
+- `imported_project_id` 必须属于同一 Workspace；由触发器验证。
+- `repository_url` 必须是去除 Credential 的规范化 GitHub HTTPS URL。
+
+### `github_analysis_sources`
+
+用途：保存实际进入报告的受限、脱敏来源摘要和引用身份。
+
+计划字段：
+
+- `id TEXT PRIMARY KEY`
+- `analysis_run_id TEXT NOT NULL REFERENCES github_analysis_runs(id) ON DELETE CASCADE`
+- `source_type TEXT NOT NULL CHECK (source_type IN ('metadata', 'tree', 'readme', 'documentation', 'manifest', 'license', 'workflow', 'test_config', 'build_config', 'release', 'commit', 'sbom', 'entrypoint'))`
+- `source_path TEXT NOT NULL`
+- `source_sha TEXT NULL`
+- `content_hash TEXT NOT NULL`
+- `excerpt TEXT NOT NULL`
+- `source_order INTEGER NOT NULL CHECK (source_order >= 0)`
+
+计划约束与索引：
+
+- `UNIQUE(analysis_run_id, source_type, source_path)`。
+- `(analysis_run_id, source_order)` 保证 Renderer 顺序稳定。
+- `source_path` 只能是 Repository 相对路径；Repository 级元数据使用空字符串。
+- `excerpt` 只能保存受限摘要，不保存完整源码、二进制、Diff、绝对本地路径、Token 或 Credential。
+
+### 生命周期与数据归属
+
+- Analysis Run 属于 Workspace，不属于 Project。
+- Analysis Source 只能属于一个 Analysis Run。
+- `import_github_analysis` 只建立到现有 GitHub Import Draft 的人工审核流程；不得直接把报告写入 Project、Snapshot、Session、Evidence 或 Achievement。
+- 相同请求复用现有 Run；HEAD、Prompt、模式或分析器版本变化时创建新 Run。
+- Archive 只改变状态，不物理删除报告或来源链。
+- 完整 Schema、报告引用规则和错误语义见 `docs/github-analysis-contract.md`。

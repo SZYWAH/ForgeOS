@@ -249,3 +249,34 @@ ForgeOS 的页面只负责展示摘要和支持决策，数据库中的原始事
 - Snapshot 修复必须先生成 Repair Draft，由用户编辑并通过现有版本检查保存为新版本；禁止原地覆盖历史。
 - 结构化列表必须使用独立项目编辑器。Next Steps 最多三项，不得把整段 Markdown 按行拆成大量条目。
 - AI Context 页面只保留一个主要复制入口；原始安全 Markdown、Hash 和技术范围默认折叠。
+
+## GitHub Project Intelligence Contract
+
+D9.1 及后续实现必须先阅读：
+
+- `docs/adr/ADR-022-github-project-intelligence.md`
+- `docs/github-analysis-contract.md`
+- `docs/adr/ADR-012-github-readonly-import.md`
+- `docs/adr/ADR-018-forgeos-development-memory-focus.md`
+
+开发规则：
+
+1. Analysis、GitHub Import Draft、Project 必须保持独立模型和生命周期，禁止为复用方便把 Analysis Report 直接写入 Project 正式事实。
+2. GitHub 集成必须是只读 Port。允许的方法必须显式列入白名单；不得提供 Clone、Fork、Issue/PR/Release 写入或通用请求逃生口。
+3. 采集器必须在发出文件请求前应用 Tree、文件数、单文件大小和总文本预算；不得先下载全部内容再截断。
+4. Repository 内容一律按不可信输入处理。提示词、Secret、Credential、绝对路径和危险文件必须在持久化及 AI 调用前处理。
+5. 规则分析是必备基线。AI 只能由用户主动启用，失败必须回退规则报告，且不能改变运行权限。
+6. 每个报告结论必须使用共享的 `SourcedConclusion` 结构；引用必须属于当前 Run，空引用结论不得进入报告。
+7. JSON 报告是唯一语义来源；Markdown 由共享 Renderer 确定性生成，禁止页面、MCP 或 IPC 各自拼接另一份报告。
+8. 所有日期、状态、错误码和前端翻译键必须使用合同中冻结的枚举。中文和英文资源的键集合必须一致。
+9. `start_github_analysis` 必须快速返回 Run ID。进度写入持久化状态并通过固定 Tauri Event 广播；页面刷新后仍能恢复。
+10. Rate Limit、Tree 截断、无 README、无 License、无 SBOM、Monorepo、二进制 Repository 和 Prompt Injection 都是必测场景，不得只覆盖理想 Repository。
+11. D9.1 实现时统一把前端、Tauri 和相关 Rust Crate 版本更新到 `0.2.0`；D9.0 禁止修改版本。
+12. 新能力不得扩张 MCP 写权限、Codex Execution、Git Adapter 或本地 Shell 权限。
+
+### 文档与代码一致性检查
+
+- 数据库 CHECK 值、Rust 枚举、IPC DTO、前端状态和语言资源必须逐项对应。
+- 来源预算只能在一个共享策略模块中定义，测试可以读取同一常量，禁止散落魔法数字。
+- 错误对用户显示可操作建议；GitHub 原始响应只进入脱敏后的技术详情。
+- 任何超出 ADR-022 的能力必须先新增 ADR，不得以“为未来预留”为理由在 Port 中加入写方法。

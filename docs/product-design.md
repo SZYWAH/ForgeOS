@@ -146,3 +146,49 @@ Snapshot、Repository 和 Pulse 审核继续作为高级维护能力。AI Candid
 - 数百条 Codex Turn 以少量研发活动展示，而不是逐条平铺。
 - 系统生成的成果始终是草稿，只有人工确认后进入正式研发记忆。
 - Codex 可以通过仓库目录自动定位唯一 ForgeOS Project，并读取严格隔离的上下文。
+
+## D9.0 GitHub 项目分析定位
+
+ForgeOS 在不改变“个人研发记忆助手”主线的前提下，增加一个前置理解能力：用户可以先分析一个公开 GitHub 项目，再决定是否把它接管为自己的 ForgeOS Project。
+
+这一能力不是“万能 GitHub 客户端”，也不是代码运行平台。它回答的是：
+
+- 这个项目解决什么问题，有哪些主要功能？
+- 代码、模块和入口大致如何组织？
+- 使用什么技术栈，如何构建、运行和测试？
+- License、依赖和二次开发有哪些注意事项？
+- 如果想学习、复现或二开，推荐从哪里开始阅读？
+
+### 三段式产品流程
+
+```mermaid
+flowchart LR
+    A["分析公开 GitHub 项目"] --> B["获得带来源的 Analysis Report"]
+    B -->|"用户决定接管"| C["GitHub Import Draft"]
+    C -->|"人工确认"| D["ForgeOS Project"]
+```
+
+边界：
+
+- Analysis Report 是外部项目理解结果，不是 Snapshot、Session、Evidence 或 Achievement。
+- 分析不要求先创建 Project，也不会自动污染项目列表。
+- 只有用户主动点击“导入为 ForgeOS 项目”，才进入现有导入与 Project 创建流程。
+- D9 仅支持公开 Repository；默认不克隆、不运行、不持续同步。
+- 规则报告始终可用；AI 只在用户主动启用时增强报告。
+- 报告绑定默认分支的具体 HEAD Commit，HEAD 变化时保留旧报告并提示重新分析。
+
+### 成功标准
+
+- 用户输入公开 Repository URL 后，可以获得结构化且可追溯的项目理解报告。
+- 报告的每个非空结论都能回到真实来源，而不是无依据的 AI 推断。
+- 大型、不完整或受限 Repository 明确显示“部分完成”，不伪装成完整分析。
+- 用户可以在充分理解后导入项目，但分析本身不会创建正式研发事实。
+- Project A、Project B 与外部 Analysis Run 继续保持清晰边界。
+
+### D9.0/D9.1 明确不做
+
+- 私有 Repository。
+- Clone、Fork、Checkout、Commit、Push、PR 或 Release 写操作。
+- Shell、构建、测试、复现执行或 Codex 自动二开。
+- Webhook、后台持续同步和 Agent。
+- 将外部项目报告自动写入正式 Project 事实。
