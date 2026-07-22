@@ -4,7 +4,8 @@ use crate::{
     application::{
         AchievementError, AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
         CodexExecutionError, CodexMcpError, CodexTaskProposalError, ContextPackError,
-        GitHubImportError, ProjectMemoryError, ProjectPulseError, RepositoryKernelError,
+        GitHubAnalysisError, GitHubImportError, ProjectMemoryError, ProjectPulseError,
+        RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -18,6 +19,36 @@ impl From<CodexMcpError> for IpcError {
             CodexMcpError::NotOwned => ("codex_mcp_not_owned", false),
             CodexMcpError::VerificationFailed => ("codex_mcp_verification_failed", true),
             CodexMcpError::Client(_) => ("codex_mcp_cli_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
+impl From<GitHubAnalysisError> for IpcError {
+    fn from(error: GitHubAnalysisError) -> Self {
+        let (code, retryable) = match &error {
+            GitHubAnalysisError::WorkspaceNotFound => ("workspace_not_found", false),
+            GitHubAnalysisError::RunNotFound => ("github_analysis_not_found", false),
+            GitHubAnalysisError::PublicOnly => ("github_analysis_public_only", false),
+            GitHubAnalysisError::AlreadyRunning => ("github_analysis_already_running", true),
+            GitHubAnalysisError::InvalidPrompt => ("github_analysis_prompt_rejected", false),
+            GitHubAnalysisError::VersionConflict => ("github_analysis_version_conflict", false),
+            GitHubAnalysisError::Source(crate::ports::GitHubProjectSourceError::NotFound) => {
+                ("github_analysis_not_found", false)
+            }
+            GitHubAnalysisError::Source(crate::ports::GitHubProjectSourceError::RateLimited {
+                ..
+            }) => ("github_analysis_rate_limited", true),
+            GitHubAnalysisError::Source(_) => ("github_analysis_source_unavailable", true),
+            GitHubAnalysisError::SecretStore(_) => ("credential_store_error", true),
+            GitHubAnalysisError::CorruptData(_) | GitHubAnalysisError::Validation(_) => {
+                ("github_analysis_blocked", false)
+            }
+            GitHubAnalysisError::Storage(_) => ("github_analysis_storage_error", true),
         };
         Self {
             code,

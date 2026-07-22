@@ -10,8 +10,8 @@ use crate::{
     application::{
         codex_mcp::resolve_expected_sidecar, AchievementKernel, AiCandidateKernel,
         AiProviderKernel, AppPreferencesKernel, CodexExecutionKernel, CodexMcpKernel,
-        CodexTaskProposalKernel, ContextPackKernel, GitHubImportKernel, ProjectKernel,
-        ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
+        CodexTaskProposalKernel, ContextPackKernel, GitHubAnalysisKernel, GitHubImportKernel,
+        ProjectKernel, ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
@@ -42,6 +42,7 @@ pub struct BootstrapState {
     pub codex_task_proposal_kernel: CodexTaskProposalKernel,
     pub codex_execution_kernel: CodexExecutionKernel,
     pub github_import_kernel: GitHubImportKernel,
+    pub github_analysis_kernel: GitHubAnalysisKernel,
     pub project_pulse_kernel: ProjectPulseKernel,
     pub project_memory_kernel: ProjectMemoryQueryKernel,
     pub achievement_kernel: AchievementKernel,
@@ -80,14 +81,19 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     let codex_execution_kernel =
         CodexExecutionKernel::new(repository.clone(), Arc::new(RecordOnlyCodexRunner));
     let repository_kernel = RepositoryKernel::new(repository.clone(), Arc::new(GitCliAdapter));
+    let github_client = Arc::new(
+        GitHubRestClient::new().map_err(|error| BootstrapError::GitHubClient(error.to_string()))?,
+    );
+    let github_token_store = Arc::new(WindowsCredentialGitHubTokenStore::default());
     let github_import_kernel = GitHubImportKernel::new(
         repository.clone(),
-        Arc::new(
-            GitHubRestClient::new()
-                .map_err(|error| BootstrapError::GitHubClient(error.to_string()))?,
-        ),
-        Arc::new(WindowsCredentialGitHubTokenStore::default()),
+        github_client.clone(),
+        github_token_store.clone(),
     );
+    let github_analysis_kernel =
+        GitHubAnalysisKernel::new(repository.clone(), github_client, github_token_store);
+    tauri::async_runtime::block_on(github_analysis_kernel.recover_interrupted_runs())
+        .map_err(|error| BootstrapError::GitHubClient(error.to_string()))?;
     let project_pulse_kernel = ProjectPulseKernel::new(
         repository.clone(),
         Arc::new(CodexAppServerAdapter),
@@ -111,6 +117,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         codex_task_proposal_kernel,
         codex_execution_kernel,
         github_import_kernel,
+        github_analysis_kernel,
         project_pulse_kernel,
         project_memory_kernel,
         achievement_kernel,
