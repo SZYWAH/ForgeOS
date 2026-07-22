@@ -1017,3 +1017,41 @@ D9.0 架构与交互冻结。版本继续保持 `0.1.0`；本阶段没有创建�
 ## 下一步计划
 
 等待确认后进入 D9.1：创建 Migration 0019，并实现最小的 Public Repository 规则分析纵向切片。D9.1 才统一将前端、Tauri 与 Rust Crate 版本更新到 `0.2.0`。
+
+# 2026-07-20 — ForgeOS D9.1 Public GitHub Rules Analysis
+
+## 当前阶段
+
+D9.1 公开 GitHub 项目规则分析闭环。应用、前端、桌面端 Rust Crate 与 MCP Crate 的开发版本统一更新为 `0.2.0`；本阶段没有创建安装包、Tag 或 Release。
+
+## 完成内容
+
+- 新增 Migration 0019，建立 Workspace 级 `github_analysis_runs` 与受限来源摘要 `github_analysis_sources`，包含请求幂等、单 Workspace 运行中约束、状态恢复、乐观版本和项目来源隔离。
+- 新增公开 GitHub Repository 只读采集 Port 与 REST Adapter，只使用 GET 请求读取 Metadata、默认分支 HEAD、Tree、受限文本来源、最近 Commit、Release 和已有 SBOM。
+- 固定 20,000 个 Tree Entry、64 个文本文件、单文件 128 KiB、总文本 2 MiB 和单来源持久化摘录 8,000 字符的安全预算；匿名低额度时主动保留必要请求额度。
+- 实现 `github-rules-v1` 确定性分析，生成简介、功能、技术栈、架构、入口、构建测试、依赖、License、风险、阅读顺序、静态复现难度、二开切入点和自定义问题回答。
+- 所有非空结论必须绑定当前 Run 的真实 Source ID 与置信度；来源无效时拒绝保存报告，同一安全来源生成稳定 JSON、Markdown 与 SHA-256 Hash。
+- 新增 Analysis Application、SQLite Repository、IPC、Tauri 后台执行与进度事件，支持开始、状态恢复、报告、历史、重新分析和归档；导入为 Project 与 AI 增强仍未注册。
+- `/github-import` 默认进入项目分析模式，保留“导入自己的项目”兼容入口；新增报告详情路由、进度指标、来源展开、复制、重新分析和归档。
+- AI 模式输入在 D9.1 安全回退为规则分析并返回不可用警告，不调用任何 AI Provider。
+
+## 安全边界
+
+- 仅支持 Public Repository；不克隆、不运行代码、不持续同步、不修改 GitHub。
+- 不保存完整源码、二进制、原始 API Response、绝对本地路径、Token、Credential 或作者邮箱。
+- Repository 内容始终作为不可信数据；进入 SQLite 前执行提示包装清理、路径与凭据脱敏，无法安全清理时将报告标记为 blocked。
+- 静态规则不会宣称已经构建、运行或测试项目。
+- 不修改 MCP Tool、Project 正式事实或现有 GitHub Import 生命周期。
+
+## 验证结果
+
+- `npm run typecheck`、`npm run test -- --run` 与 `npm run build` 通过；11 个前端测试文件共 57 项测试通过。生产构建仅保留既有的主包大于 500 kB 提示。
+- 主程序 `cargo fmt --check`、`cargo check` 与全量 `cargo test` 通过：90 项单元测试通过、1 项需要本机 Codex 历史的 Smoke Test 按设计忽略；14 项数据库和领域集成测试通过，GitHub Live Test 按设计忽略。
+- `forgeos-mcp` 格式检查与全量测试通过；五工具只读白名单、诊断模式和 STDIO 项目隔离测试共 3 项通过。
+- Migration 0019 的内存数据库升级、单 Workspace 并发约束、安全相对路径、完整性与外键测试通过。
+- 本机现有 ForgeOS 数据库以只读模式验证：`integrity_check = ok`、`foreign_key_check = 0`。该数据库仍停留在 Migration 0018，Migration 0019 将在首次启动 0.2.0 桌面开发版时由正常启动流程应用。
+- `git diff --check` 通过；未执行可选的真实 GitHub 网络 Smoke Test，因此公开仓库端到端网络行为仍需实机验收。
+
+## 下一步计划
+
+等待确认后进行 D9.1 实机验收：启动 0.2.0 桌面开发版，使用公开小型仓库和 Monorepo 各完成一次规则分析，验证限流、部分完成、报告来源与刷新恢复。AI 增强和“导入为 Project”继续留到 D9.2。

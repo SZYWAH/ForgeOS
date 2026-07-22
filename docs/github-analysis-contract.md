@@ -1,9 +1,9 @@
 # ForgeOS GitHub Analysis Contract
 
-- 状态：D9.0 架构冻结
-- 适用范围：计划中的 D9.1 GitHub Project Intelligence
+- 状态：D9.1 rules-only 纵向切片已实现
+- 适用范围：D9.1 GitHub Project Intelligence
 
-非实现声明：本文定义后续接口和行为；D9.0 不创建数据库表、IPC、页面或采集代码。
+实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；AI 增强和导入衔接仍属于后续阶段。
 
 ## 1. 术语与生命周期边界
 

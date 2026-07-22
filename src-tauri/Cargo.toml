@@ -1,6 +1,6 @@
 [package]
 name = "forgeos"
-version = "0.1.0"
+version = "0.2.0"
 description = "ForgeOS desktop engineering foundation"
 authors = ["ForgeOS contributors"]
 edition = "2021"

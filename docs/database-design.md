@@ -789,19 +789,19 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 
 状态为 `draft / confirmed / archived`。系统生成内容只能是 Draft；Confirmed 必须包含标题和结果，并且方案、验证或影响至少一项非空。同一 Pulse 最多生成一条成果草稿。触发器验证每种来源存在且属于同一 Project，跨项目来源写入会被拒绝。
 
-## D9 计划 Migration 0019：GitHub Project Intelligence
+## Migration 0019：GitHub Project Intelligence
 
-状态：仅完成设计冻结，D9.0 不创建或执行 Migration。D9.1 必须以新的前向 Migration `0019_github_project_intelligence.sql` 实现，不修改 `0001-0018`。
+状态：D9.1 已以前向 Migration `0019_github_project_intelligence.sql` 实现，不修改 `0001-0018`。桌面 Schema 检查包含分析表；MCP 只验证 Core Schema，因此桌面端尚未首次迁移时不会阻止只读 MCP 读取旧数据库。
 
 ### `github_analysis_runs`
 
 用途：保存 Workspace 下针对公开 GitHub Repository 的不可变分析请求和报告。该表不要求 `project_id`；只有用户完成导入后，`imported_project_id` 才可指向正式 Project。
 
-计划字段：
+核心字段：
 
 - `id TEXT PRIMARY KEY`
 - `workspace_id TEXT NOT NULL REFERENCES workspaces(id)`
-- `github_repository_id INTEGER NOT NULL`
+- `github_repository_id TEXT NOT NULL`
 - `owner TEXT NOT NULL`
 - `name TEXT NOT NULL`
 - `repository_url TEXT NOT NULL`
@@ -810,6 +810,7 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `focus_type TEXT NOT NULL CHECK (focus_type IN ('overview', 'architecture', 'learning', 'reproduction', 'secondary_development', 'custom'))`
 - `custom_prompt TEXT NULL`
 - `status TEXT NOT NULL CHECK (status IN ('queued', 'collecting', 'analyzing', 'ready', 'partial', 'failed', 'archived'))`
+- `stage TEXT NULL CHECK (stage IN ('resolving', 'collecting_tree', 'reading_sources', 'rules_analysis', 'ai_analysis', 'persisting'))`
 - `analysis_mode TEXT NOT NULL CHECK (analysis_mode IN ('rules', 'ai'))`
 - `readiness TEXT NOT NULL CHECK (readiness IN ('ready', 'warning', 'incomplete', 'blocked'))`
 - `analyzer_revision TEXT NOT NULL`
@@ -817,6 +818,9 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `report_json TEXT NULL CHECK (report_json IS NULL OR json_valid(report_json))`
 - `report_markdown TEXT NULL`
 - `content_hash TEXT NULL`
+- `tree_entries_seen / files_read / files_skipped / source_bytes` 采集计数
+- `api_requests_used / api_requests_remaining / api_rate_limit_reset_at` GitHub 预算状态
+- `error_code / error_summary` 脱敏后的失败信息
 - `imported_project_id TEXT NULL REFERENCES projects(id)`
 - `started_at TEXT NULL`
 - `completed_at TEXT NULL`
@@ -824,12 +828,13 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `updated_at TEXT NOT NULL`
 - `version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)`
 
-计划约束与索引：
+约束与索引：
 
 - `UNIQUE(workspace_id, request_hash)`，其中 Hash 覆盖 Repository ID、HEAD SHA、分析重点、Prompt Hash、模式和分析器版本。
 - `(workspace_id, created_at DESC)` 用于分析历史。
 - `(github_repository_id, source_commit_sha)` 用于 HEAD 历史与过期判断。
-- `(status, updated_at)` 用于恢复未完成 Run。
+- Partial Unique Index 保证同一 Workspace 同时最多一个 `queued / collecting / analyzing` Run。
+- 应用启动时把遗留运行中 Run 恢复为 `failed / github_analysis_interrupted`。
 - `imported_project_id` 必须属于同一 Workspace；由触发器验证。
 - `repository_url` 必须是去除 Credential 的规范化 GitHub HTTPS URL。
 
@@ -837,7 +842,7 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 
 用途：保存实际进入报告的受限、脱敏来源摘要和引用身份。
 
-计划字段：
+字段：
 
 - `id TEXT PRIMARY KEY`
 - `analysis_run_id TEXT NOT NULL REFERENCES github_analysis_runs(id) ON DELETE CASCADE`
@@ -848,7 +853,7 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `excerpt TEXT NOT NULL`
 - `source_order INTEGER NOT NULL CHECK (source_order >= 0)`
 
-计划约束与索引：
+约束与索引：
 
 - `UNIQUE(analysis_run_id, source_type, source_path)`。
 - `(analysis_run_id, source_order)` 保证 Renderer 顺序稳定。

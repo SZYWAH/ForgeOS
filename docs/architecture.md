@@ -601,7 +601,7 @@ Application Settings
 - NSIS 升级调用旧卸载器时传入 `/FORGEOS_UPGRADE=1`，因此保留 MCP；普通卸载通过主程序无界面清理入口安全移除完全匹配的连接。
 - 安装器默认保留 SQLite 数据和应用偏好；WebView2 使用在线 Bootstrapper。
 
-## D9 GitHub Project Intelligence（架构冻结）
+## D9 GitHub Project Intelligence
 
 D9 在现有 GitHub Import 之前增加 Workspace 级外部项目分析层。该层不依赖 Project，也不复用 ProjectSnapshot、DevelopmentSession 或 Evidence 保存报告。
 
@@ -616,22 +616,20 @@ flowchart TD
     PORT1 --> GH["GitHub Read-only REST Adapter"]
     PORT2 --> DB["SQLite Analysis Runs and Sources"]
     SAFE --> RULES
-    SAFE -->|"用户主动启用"| AI["Existing AI Provider Port"]
     RULES --> REPORT["Sourced Analysis Report"]
-    AI --> REPORT
-    REPORT -->|"用户点击导入"| IMPORT["Existing GitHub Import Draft"]
+    REPORT -.->|"D9.2 计划"| IMPORT["Existing GitHub Import Draft"]
     IMPORT -->|"人工确认"| PROJECT["Project Kernel"]
 ```
 
 ### 模块职责
 
 - `GitHubProjectSource`：解析公开 Repository 身份，读取 metadata、默认分支 HEAD、Tree 和受限来源。只暴露读取方法。
-- `GitHubAnalysisKernel`：编排幂等请求、采集预算、状态机、规则分析、可选 AI 增强、报告验证和导入边界。
+- `GitHubAnalysisKernel`：编排幂等请求、采集预算、状态机、规则分析、报告验证和归档。D9.1 对 AI 请求明确回退规则报告，不调用 Provider。
 - `SourceSelectionPolicy`：按固定优先级选择最多 64 个文本文件，并执行大小、类型、路径和总量预算。
 - `GitHubAnalysisContentPolicy`：把 Repository 内容视为不可信数据，执行 Secret、绝对路径和提示词脱敏。
 - `GitHubAnalysisRenderer`：从通过引用校验的结构化报告确定性生成 Markdown 和 `content_hash`。
 - `GitHubAnalysisRepository`：保存 Analysis Run 与受限 Source 摘要，不直接访问 Project 正式事实表。
-- 现有 `AIProviderPort`：只接收脱敏后的 Working Set；不获得 Tool Calling、Shell 或 Credential。
+- 现有 `AIProviderPort`：D9.1 不调用；后续增强也只能接收脱敏后的 Working Set，且不获得 Tool Calling、Shell 或 Credential。
 
 ### 数据链路
 
@@ -642,10 +640,10 @@ Public Repository URL
   -> read-only source collection under fixed budgets
   -> sanitize and persist bounded source summaries
   -> deterministic rules report
-  -> optional user-triggered AI enhancement
+  -> D9.1 deterministic rules-v1 analysis
   -> validate sourceIds and confidence
   -> persist JSON + stable Markdown + content hash
-  -> optional user-triggered import draft
+  -> history, report, reanalysis and archive
 ```
 
 ### 只读边界
@@ -661,7 +659,7 @@ Public Repository URL
 - 每个 Run 绑定默认分支的具体 HEAD SHA 和 `analyzer_revision`。
 - `request_hash` 覆盖 Repository ID、HEAD、分析重点、自定义 Prompt Hash、模式和分析器版本；缓存命中不重复调用 GitHub 或 AI。
 - Tree 截断、预算耗尽、SBOM 缺失或部分来源失败生成 `partial`，不得标记为完整。
-- AI 失败或引用无效时丢弃 AI 输出并回退规则报告。
-- 导入只创建现有 GitHub Import Draft；Project 仍由用户人工确认创建。
+- D9.1 不调用 AI Provider；传入 AI 模式时返回 `github_analysis_ai_unavailable` 并复用规则报告。
+- 导入接口保留合同但不注册 Command；Project 仍与 Analysis Run 隔离。
 
-完整接口、状态、来源预算和错误码以 `docs/github-analysis-contract.md` 为唯一实施合同。D9.0 不创建上述模块或数据库对象。
+完整接口、状态、来源预算和错误码以 `docs/github-analysis-contract.md` 为唯一实施合同。D9.1 已实现 rules-only 纵向切片；AI 增强和导入衔接延后。

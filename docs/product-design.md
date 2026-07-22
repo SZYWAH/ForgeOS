@@ -174,7 +174,7 @@ flowchart LR
 - 分析不要求先创建 Project，也不会自动污染项目列表。
 - 只有用户主动点击“导入为 ForgeOS 项目”，才进入现有导入与 Project 创建流程。
 - D9 仅支持公开 Repository；默认不克隆、不运行、不持续同步。
-- 规则报告始终可用；AI 只在用户主动启用时增强报告。
+- 规则报告始终可用；D9.1 只提供本地确定性规则报告，AI 增强延后。
 - 报告绑定默认分支的具体 HEAD Commit，HEAD 变化时保留旧报告并提示重新分析。
 
 ### 成功标准
@@ -185,10 +185,11 @@ flowchart LR
 - 用户可以在充分理解后导入项目，但分析本身不会创建正式研发事实。
 - Project A、Project B 与外部 Analysis Run 继续保持清晰边界。
 
-### D9.0/D9.1 明确不做
+### D9.1 明确不做
 
 - 私有 Repository。
 - Clone、Fork、Checkout、Commit、Push、PR 或 Release 写操作。
 - Shell、构建、测试、复现执行或 Codex 自动二开。
 - Webhook、后台持续同步和 Agent。
 - 将外部项目报告自动写入正式 Project 事实。
+- AI 增强和“导入为 Project”衔接。

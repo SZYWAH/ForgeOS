@@ -21,7 +21,7 @@ impl OpenAiCompatibleClient {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(90))
-            .user_agent("ForgeOS/0.1 AI-Provider-Foundation")
+            .user_agent("ForgeOS/0.2 AI-Provider-Foundation")
             .build()?;
         Ok(Self { client })
     }
