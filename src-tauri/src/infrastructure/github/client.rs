@@ -6,7 +6,11 @@ use serde::Deserialize;
 
 use crate::{
     domain::{GitHubCommitFact, GitHubReleaseFact, GitHubRepositoryFacts},
-    ports::{GitHubClient, GitHubClientError},
+    ports::{
+        GitHubAnalysisRepositoryMetadata, GitHubClient, GitHubClientError, GitHubHead,
+        GitHubProjectSource, GitHubProjectSourceError, GitHubRateLimit, GitHubSupplementalSources,
+        GitHubTextSource, GitHubTree, GitHubTreeEntry,
+    },
 };
 
 const API_ROOT: &str = "https://api.github.com";
@@ -19,7 +23,7 @@ pub struct GitHubRestClient {
 impl GitHubRestClient {
     pub fn new() -> Result<Self, GitHubClientError> {
         let client = Client::builder()
-            .user_agent("ForgeOS/0.1 read-only GitHub connector")
+            .user_agent("ForgeOS/0.2 read-only GitHub connector")
             .build()
             .map_err(|error| GitHubClientError::Transport(error.to_string()))?;
         Ok(Self { client })
@@ -109,6 +113,53 @@ impl GitHubRestClient {
             url: release.html_url,
         }))
     }
+
+    async fn analysis_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        url: String,
+        token: Option<&str>,
+    ) -> Result<(T, GitHubRateLimit), GitHubProjectSourceError> {
+        let response = self
+            .request(url, token)
+            .send()
+            .await
+            .map_err(analysis_transport)?;
+        let rate = analysis_rate_limit(&response);
+        let status = response.status();
+        if !status.is_success() {
+            return Err(analysis_response_error(status, response).await);
+        }
+        let body = response
+            .json()
+            .await
+            .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+        Ok((body, rate))
+    }
+
+    async fn optional_analysis_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        url: String,
+        token: Option<&str>,
+    ) -> Result<(Option<T>, GitHubRateLimit), GitHubProjectSourceError> {
+        let response = self
+            .request(url, token)
+            .send()
+            .await
+            .map_err(analysis_transport)?;
+        let rate = analysis_rate_limit(&response);
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok((None, rate));
+        }
+        let status = response.status();
+        if !status.is_success() {
+            return Err(analysis_response_error(status, response).await);
+        }
+        let body = response
+            .json()
+            .await
+            .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+        Ok((Some(body), rate))
+    }
 }
 
 #[async_trait]
@@ -174,6 +225,187 @@ impl GitHubClient for GitHubRestClient {
     }
 }
 
+#[async_trait]
+impl GitHubProjectSource for GitHubRestClient {
+    async fn get_repository(
+        &self,
+        owner: &str,
+        name: &str,
+        token: Option<&str>,
+    ) -> Result<GitHubAnalysisRepositoryMetadata, GitHubProjectSourceError> {
+        let (repository, rate): (RepositoryResponse, _) = self
+            .analysis_json(format!("{API_ROOT}/repos/{owner}/{name}"), token)
+            .await?;
+        Ok(GitHubAnalysisRepositoryMetadata {
+            repository_id: repository.id.to_string(),
+            owner: repository.owner.login,
+            name: repository.name,
+            url: repository.html_url,
+            description: repository.description.unwrap_or_default(),
+            default_branch: repository.default_branch,
+            private: repository.private,
+            language: repository.language,
+            topics: repository.topics,
+            license_spdx: repository.license.and_then(|value| value.spdx_id),
+            rate_limit: rate,
+        })
+    }
+
+    async fn get_default_head(
+        &self,
+        owner: &str,
+        name: &str,
+        default_branch: &str,
+        token: Option<&str>,
+    ) -> Result<GitHubHead, GitHubProjectSourceError> {
+        let url = github_url(owner, name, &["commits", default_branch])?;
+        let (commit, rate): (HeadCommitResponse, _) = self.analysis_json(url, token).await?;
+        Ok(GitHubHead {
+            sha: commit.sha,
+            rate_limit: rate,
+        })
+    }
+
+    async fn get_tree(
+        &self,
+        owner: &str,
+        name: &str,
+        head_sha: &str,
+        token: Option<&str>,
+    ) -> Result<GitHubTree, GitHubProjectSourceError> {
+        let mut url =
+            reqwest::Url::parse(&github_url(owner, name, &["git", "trees", head_sha])?)
+                .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+        url.query_pairs_mut().append_pair("recursive", "1");
+        let (tree, rate): (TreeResponse, _) = self.analysis_json(url.into(), token).await?;
+        Ok(GitHubTree {
+            entries: tree
+                .tree
+                .into_iter()
+                .map(|entry| GitHubTreeEntry {
+                    path: entry.path,
+                    kind: entry.kind,
+                    sha: entry.sha,
+                    size: entry.size,
+                })
+                .collect(),
+            truncated: tree.truncated,
+            rate_limit: rate,
+        })
+    }
+
+    async fn get_text_source(
+        &self,
+        owner: &str,
+        name: &str,
+        path: &str,
+        head_sha: &str,
+        token: Option<&str>,
+    ) -> Result<GitHubTextSource, GitHubProjectSourceError> {
+        let mut parts = vec!["contents"];
+        parts.extend(path.split('/').filter(|part| !part.is_empty()));
+        let mut url = reqwest::Url::parse(&github_url(owner, name, &parts)?)
+            .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+        url.query_pairs_mut().append_pair("ref", head_sha);
+        let response = self
+            .request(url.into(), token)
+            .header(header::ACCEPT, "application/vnd.github.raw+json")
+            .send()
+            .await
+            .map_err(analysis_transport)?;
+        let rate = analysis_rate_limit(&response);
+        let status = response.status();
+        if !status.is_success() {
+            return Err(analysis_response_error(status, response).await);
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > 128 * 1024)
+        {
+            return Err(GitHubProjectSourceError::SourceTooLarge);
+        }
+        let bytes = response.bytes().await.map_err(analysis_transport)?;
+        if bytes.len() > 128 * 1024 {
+            return Err(GitHubProjectSourceError::SourceTooLarge);
+        }
+        let content = String::from_utf8(bytes.to_vec()).map_err(|_| {
+            GitHubProjectSourceError::InvalidResponse("source is not UTF-8 text".into())
+        })?;
+        Ok(GitHubTextSource {
+            path: path.to_owned(),
+            sha: String::new(),
+            content,
+            rate_limit: rate,
+        })
+    }
+
+    async fn get_supplemental_sources(
+        &self,
+        owner: &str,
+        name: &str,
+        head_sha: &str,
+        token: Option<&str>,
+    ) -> Result<GitHubSupplementalSources, GitHubProjectSourceError> {
+        let mut commits_url = reqwest::Url::parse(&github_url(owner, name, &["commits"])?)
+            .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+        commits_url
+            .query_pairs_mut()
+            .append_pair("sha", head_sha)
+            .append_pair("per_page", "10");
+        let (commits, _): (Vec<CommitResponse>, _) =
+            self.analysis_json(commits_url.into(), token).await?;
+        let (release, _): (Option<ReleaseResponse>, _) = self
+            .optional_analysis_json(
+                format!("{API_ROOT}/repos/{owner}/{name}/releases/latest"),
+                token,
+            )
+            .await?;
+        let (sbom, rate): (Option<serde_json::Value>, _) = match self
+            .optional_analysis_json(
+                format!("{API_ROOT}/repos/{owner}/{name}/dependency-graph/sbom"),
+                token,
+            )
+            .await
+        {
+            Ok(value) => value,
+            // Metadata and HEAD already succeeded with the same credential. A
+            // 403 here means the repository has no readable dependency graph,
+            // not that the complete public analysis must fail.
+            Err(GitHubProjectSourceError::Unauthorized) => (
+                None,
+                GitHubRateLimit {
+                    remaining: None,
+                    reset_at: None,
+                },
+            ),
+            Err(error) => return Err(error),
+        };
+        Ok(GitHubSupplementalSources {
+            commits: commits
+                .into_iter()
+                .map(|value| {
+                    (
+                        value.sha,
+                        value
+                            .commit
+                            .message
+                            .lines()
+                            .next()
+                            .unwrap_or_default()
+                            .to_owned(),
+                    )
+                })
+                .collect(),
+            release: release.map(|value| (value.tag_name, value.name.unwrap_or_default())),
+            sbom: sbom
+                .and_then(|value| value.get("sbom").cloned())
+                .and_then(|value| serde_json::to_string(&value).ok()),
+            requests_used: 3,
+            rate_limit: rate,
+        })
+    }
+}
+
 #[derive(Deserialize)]
 struct RepositoryResponse {
     id: u64,
@@ -186,6 +418,36 @@ struct RepositoryResponse {
     language: Option<String>,
     #[serde(default)]
     topics: Vec<String>,
+    #[serde(default)]
+    private: bool,
+    license: Option<LicenseResponse>,
+}
+
+#[derive(Deserialize)]
+struct LicenseResponse {
+    spdx_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct HeadCommitResponse {
+    sha: String,
+}
+
+#[derive(Deserialize)]
+struct TreeResponse {
+    #[serde(default)]
+    tree: Vec<TreeEntryResponse>,
+    #[serde(default)]
+    truncated: bool,
+}
+
+#[derive(Deserialize)]
+struct TreeEntryResponse {
+    path: String,
+    #[serde(rename = "type")]
+    kind: String,
+    sha: String,
+    size: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -250,6 +512,64 @@ async fn response_error(status: StatusCode, response: reqwest::Response) -> GitH
 
 fn transport(error: reqwest::Error) -> GitHubClientError {
     GitHubClientError::Transport(error.to_string())
+}
+
+fn analysis_transport(error: reqwest::Error) -> GitHubProjectSourceError {
+    GitHubProjectSourceError::Transport(error.to_string())
+}
+
+fn analysis_rate_limit(response: &reqwest::Response) -> GitHubRateLimit {
+    GitHubRateLimit {
+        remaining: response
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok()),
+        reset_at: response
+            .headers()
+            .get("x-ratelimit-reset")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+    }
+}
+
+async fn analysis_response_error(
+    status: StatusCode,
+    response: reqwest::Response,
+) -> GitHubProjectSourceError {
+    let rate = analysis_rate_limit(&response);
+    match status {
+        StatusCode::NOT_FOUND => GitHubProjectSourceError::NotFound,
+        StatusCode::UNAUTHORIZED => GitHubProjectSourceError::Unauthorized,
+        StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS
+            if rate.remaining == Some(0) || status == StatusCode::TOO_MANY_REQUESTS =>
+        {
+            GitHubProjectSourceError::RateLimited {
+                remaining: rate.remaining,
+                reset_at: rate.reset_at,
+            }
+        }
+        StatusCode::FORBIDDEN => GitHubProjectSourceError::Unauthorized,
+        _ => GitHubProjectSourceError::Http {
+            status: status.as_u16(),
+            message: sanitize_error(&response.text().await.unwrap_or_default()),
+        },
+    }
+}
+
+fn github_url(owner: &str, name: &str, tail: &[&str]) -> Result<String, GitHubProjectSourceError> {
+    let mut url = reqwest::Url::parse(API_ROOT)
+        .map_err(|error| GitHubProjectSourceError::InvalidResponse(error.to_string()))?;
+    {
+        let mut segments = url.path_segments_mut().map_err(|_| {
+            GitHubProjectSourceError::InvalidResponse("invalid GitHub API base URL".into())
+        })?;
+        segments.push("repos").push(owner).push(name);
+        for value in tail {
+            segments.push(value);
+        }
+    }
+    Ok(url.into())
 }
 
 fn sanitize_error(value: &str) -> String {
