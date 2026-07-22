@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveLocale, useAppPreferences } from "../contexts/AppPreferencesProvider";
 import type { LanguageMode } from "../types/app-preferences";
@@ -20,7 +20,7 @@ export function AppSettingsPage() {
   const [mcpNotice, setMcpNotice] = useState<string>();
   const [mcpError, setMcpError] = useState<LocalizedAppError | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setLanguageMode(preferences.languageMode);
     setShowTerms(preferences.showTechnicalTerms);
   }, [preferences]);

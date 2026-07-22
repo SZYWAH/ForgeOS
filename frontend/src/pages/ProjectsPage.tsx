@@ -91,6 +91,7 @@ export function ProjectsPage() {
             <div className="add-project-menu__items">
               <button type="button" onClick={() => setFormOpen(true)}>{t("memory.newProject")}</button>
               <button type="button" onClick={() => navigate("/github-import")}>{t("memory.importFromGithub")}</button>
+              <button type="button" onClick={() => navigate("/github-import?mode=analysis")}>{t("githubAnalysis.analyzeProject")}</button>
             </div>
           </details>
         }

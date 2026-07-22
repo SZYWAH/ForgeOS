@@ -14,6 +14,7 @@ import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { CodexTasksPage } from "./pages/CodexTasksPage";
 import { CodexExecutionsPage } from "./pages/CodexExecutionsPage";
 import { GitHubImportPage } from "./pages/GitHubImportPage";
+import { GitHubAnalysisReportPage } from "./pages/GitHubAnalysisReportPage";
 import { ProjectPulsePage } from "./pages/ProjectPulsePage";
 import { ProjectSettingsPage } from "./pages/ProjectSettingsPage";
 import { AppSettingsPage } from "./pages/AppSettingsPage";
@@ -41,6 +42,7 @@ function App() {
               <Route path="settings/ai-providers" element={<AiProvidersPage />} />
               <Route path="settings" element={<AppSettingsPage />} />
               <Route path="github-import" element={<GitHubImportPage />} />
+              <Route path="github-import/analyses/:analysisId" element={<GitHubAnalysisReportPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

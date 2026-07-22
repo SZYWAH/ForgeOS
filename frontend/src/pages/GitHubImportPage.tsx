@@ -1,13 +1,19 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { githubApi } from "../api/github";
 import { getErrorMessage } from "../api/project-kernel";
 import type { GitHubConnector, GitHubImportDraft } from "../types/github";
 import { displayLabel, formatUpdatedAt } from "../utils/format";
 import { useTranslation } from "react-i18next";
 import { PageIntro } from "../components/ui/PlainLanguage";
+import { GitHubAnalysisPage } from "./GitHubAnalysisPage";
 
 export function GitHubImportPage() {
+  const [searchParams] = useSearchParams();
+  return searchParams.get("mode") === "import" ? <GitHubImportLegacyPage /> : <GitHubAnalysisPage />;
+}
+
+function GitHubImportLegacyPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [connector, setConnector] = useState<GitHubConnector>();
@@ -54,7 +60,7 @@ export function GitHubImportPage() {
 
   return (
     <div className="page-stack">
-      <PageIntro title={t("github.title")} description={t("github.description")} />
+      <PageIntro title={t("github.title")} description={t("github.description")} secondaryActions={<button className="secondary-button" type="button" onClick={() => navigate("/github-import?mode=analysis")}>{t("githubAnalysis.analysisMode")}</button>} />
 
       <section className="panel github-boundary">
         <strong>{t("github.readOnlyTitle")}</strong><span>{t("github.readOnlyDescription")}</span>
