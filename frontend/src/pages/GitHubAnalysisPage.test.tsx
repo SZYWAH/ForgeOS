@@ -38,6 +38,7 @@ const status = {
   aiInvoked: false,
   createdAt: "2026-07-20T00:00:00Z",
   version: 3,
+  analyzerRevision: "github-rules-v2",
 } as const;
 
 describe("GitHub project analysis workbench", () => {
@@ -77,5 +78,29 @@ describe("GitHub project analysis workbench", () => {
     expect(screen.getByRole("heading", { name: "License 与二开提示" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制分析报告" })).toBeDisabled();
     expect(screen.getByText(/没有创建 ForgeOS 项目/)).toBeInTheDocument();
+  });
+
+  it("presents a release registry as metadata infrastructure instead of product source", async () => {
+    const source = { id: "source-1", sourceType: "readme", sourcePath: "README.md", excerpt: "Community plugins and release metadata", sourceOrder: 0 };
+    analysisApi.getReport.mockResolvedValue({
+      status: { ...status, status: "ready", readiness: "warning" },
+      contentMarkdown: "# release registry report",
+      contentHash: "b".repeat(64),
+      sources: [source],
+      report: {
+        schemaVersion: "github-report-v2",
+        repository: { owner: "owner", name: "releases", url: status.repositoryUrl, defaultBranch: "main", headCommitSha: status.sourceCommitSha },
+        repositoryKind: { value: "release_registry", confidence: "high", sourceIds: [source.id] },
+        capabilities: [], techStack: [], productTechStack: [], repositoryToolingStack: [], architecture: [], entrypoints: [], buildAndRun: [], testStrategy: [], risks: [], recommendedReadingOrder: [], extensionPoints: [], recentActivity: [], qualityWarnings: ["license_missing"],
+        sectionAvailability: { product_tech_stack: "not_applicable", architecture: "not_applicable", recent_activity: "source_not_present" },
+        reproductionAssessment: { value: { difficulty: "unknown", prerequisites: [], caveats: ["Static analysis only"] }, confidence: "low", sourceIds: [source.id] },
+        completeness: { readiness: "warning", filesSelected: 1, filesSkipped: 0, treeEntriesSeen: 5, sourceBytes: 50 },
+      },
+    });
+    render(<MemoryRouter initialEntries={["/github-import/analyses/run-1"]}><Routes><Route path="/github-import/analyses/:analysisId" element={<GitHubAnalysisReportPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText("发布与社区目录")).toBeInTheDocument();
+    expect(screen.getByText(/不是产品应用源码仓库/)).toBeInTheDocument();
+    expect(screen.getAllByText(/不适用/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "复制分析报告" })).toBeEnabled();
   });
 });

@@ -1055,3 +1055,33 @@ D9.1 公开 GitHub 项目规则分析闭环。应用、前端、桌面端 Rust C
 ## 下一步计划
 
 等待确认后进行 D9.1 实机验收：启动 0.2.0 桌面开发版，使用公开小型仓库和 Monorepo 各完成一次规则分析，验证限流、部分完成、报告来源与刷新恢复。AI 增强和“导入为 Project”继续留到 D9.2。
+
+# 2026-07-22 — ForgeOS D9.1.1 GitHub Analysis Report Quality
+
+## 当前阶段
+
+D9.1.1 规则报告质量冻结。本阶段不增加 Migration、AI、Clone、Shell、GitHub 写入或 Project 自动导入；旧 `github-rules-v1` 报告保持不可变，新分析使用 `github-rules-v2`。
+
+## 完成内容
+
+- 新增 Source Application、Library、Monorepo、Release Registry、Documentation、Template 与 Unknown 的确定性仓库性质识别，每个结论继续绑定当前 Run 的真实来源。
+- 报告升级为向后兼容的 `github-report-v2`，拆分产品技术栈与仓库维护工具，并增加章节可用性、最近五个 Commit 和最新 Release。
+- Release Registry 不再冒充产品源码；架构、入口、构建与复现章节根据仓库性质显示真实结论或明确的不适用原因。
+- 修正警告语义：无 License、无 SBOM 和存在替代来源时的无 README 为 `ready + warning`；Tree 截断、预算耗尽、关键来源失败和无可靠文本才是 `partial + incomplete`。
+- SBOM 只生成包数量、依赖生态和主要依赖摘要；缺失时回退 Manifest。Commit 不保存作者邮箱、Body 或 Diff。
+- GitHub URL 支持仓库根地址、`.git`、Release、Issue、Tree 和 Blob 页面，统一规范化到 Repository 根地址；非 GitHub Host 和不支持的深层路径返回普通 URL 校验错误。
+- 报告页优先展示仓库性质和边界，使用真实 Analyzer Revision，拆分技术栈，解释空章节原因，并让最近活动继续可追溯到来源。
+
+## 验证结果
+
+- 规则分析定向测试覆盖六种仓库性质、提示型警告、Release Registry 技术栈隔离、结构化最近活动、v1 JSON 兼容与稳定报告输出。
+- 前端增加 Release Registry 语义、Warning 可复制、Blocked 禁止复制和 v2 章节显示回归测试。
+- 真实只读网络 Smoke Test 已通过 `obsidianmd/obsidian-releases`、`sharkdp/bat` 与 `tauri-apps/tauri`；该测试保持默认忽略，不进入普通单元测试套件。
+- `obsidianmd/obsidian-releases` 被识别为 Release Registry，结果为 `ready + warning`，产品技术栈为空，并带最近 Commit 与 Release。
+- `sharkdp/bat` 被识别为 Source Application，产品技术栈存在可靠 Manifest 来源。
+- `tauri-apps/tauri` 初次验收暴露 README/License 占满来源预算的问题；修正分类配额后根 Workspace Manifest 被保留，仓库正确识别为 Monorepo，并输出来源支持的产品技术栈。
+- 计划中的 `SZYWAH/ForgeOS` 经 GitHub CLI 只读核对为 Private，符合 D9 Public-only 边界，因此未绕过权限分析，改用公开源码应用 `sharkdp/bat` 完成等价验收。
+
+## 下一步计划
+
+完成 `obsidianmd/obsidian-releases`、`SZYWAH/ForgeOS` 与 `tauri-apps/tauri` 的只读实机验收后，冻结 D9 规则分析层，再单独规划用户主动触发的 AI 增强。AI 不能扩张 GitHub、Shell、Codex 或 MCP 权限。
