@@ -10,6 +10,7 @@ pub mod context_renderer;
 pub mod database;
 pub mod git;
 pub mod github;
+mod github_analysis_repository;
 mod memory_repository;
 pub mod repositories;
 pub mod secret_store;

@@ -13,6 +13,7 @@ mod context_export;
 mod error;
 mod evidence;
 mod github;
+mod github_analysis;
 mod project;
 mod project_memory;
 mod project_pulse;
@@ -40,6 +41,14 @@ pub use evidence::{
 pub use github::{
     parse_github_repository_url, GitHubAuthType, GitHubCommitFact, GitHubConnector,
     GitHubImportDraft, GitHubImportStatus, GitHubReleaseFact, GitHubRepositoryFacts,
+};
+pub use github_analysis::{
+    GitHubAnalysisCompleteness, GitHubAnalysisConfidence, GitHubAnalysisFocus, GitHubAnalysisMode,
+    GitHubAnalysisReadiness, GitHubAnalysisReport, GitHubAnalysisRepositoryIdentity,
+    GitHubAnalysisRun, GitHubAnalysisSource, GitHubAnalysisSourceType, GitHubAnalysisStage,
+    GitHubAnalysisStatus, GitHubAnalysisWarning, GitHubArchitectureModule, GitHubDependencySummary,
+    GitHubEntrypoint, GitHubLicenseSummary, GitHubReproductionAssessment, ReproductionDifficulty,
+    SourcedConclusion,
 };
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
 pub use project_memory::{RepositoryCommitObservation, RepositoryHistoryCursor};

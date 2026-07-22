@@ -26,7 +26,8 @@ pub async fn connect(path: &Path) -> Result<DatabaseState, DatabaseInitError> {
         .await?;
 
     MIGRATOR.run(&pool).await?;
-    verify_schema(&pool).await?;
+    verify_core_schema(&pool).await?;
+    verify_desktop_schema(&pool).await?;
 
     Ok(DatabaseState { pool })
 }
@@ -49,11 +50,11 @@ pub async fn connect_read_only(path: &Path) -> Result<DatabaseState, DatabaseIni
         .connect_with(options)
         .await?;
 
-    verify_schema(&pool).await?;
+    verify_core_schema(&pool).await?;
     Ok(DatabaseState { pool })
 }
 
-async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+async fn verify_core_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master \
          WHERE type = 'table' AND name IN (\
@@ -398,6 +399,30 @@ async fn verify_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+async fn verify_desktop_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let table_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('github_analysis_runs', 'github_analysis_sources')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if table_count != 2 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS desktop analysis schema is incomplete".to_owned(),
+        ));
+    }
+    let run_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('github_analysis_runs') WHERE name IN ('workspace_id', 'github_repository_id', 'source_commit_sha', 'request_hash', 'status', 'readiness', 'report_json', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if run_columns != 8 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS GitHub analysis run schema is incomplete".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseInitError {
     #[error(transparent)]
@@ -494,9 +519,12 @@ mod tests {
             .await
             .expect("Context Pack migrations should run");
 
-        verify_schema(&pool)
+        verify_core_schema(&pool)
             .await
             .expect("schema should contain the Context Pack foundation");
+        verify_desktop_schema(&pool)
+            .await
+            .expect("schema should contain the GitHub analysis foundation");
 
         let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects")
             .fetch_one(&pool)
@@ -565,6 +593,55 @@ mod tests {
                 .await
                 .expect("Rust should be able to read codex_execution_records");
         assert_eq!(execution_count, 0);
+    }
+
+    #[tokio::test]
+    async fn github_analysis_migration_enforces_workspace_concurrency_and_safe_sources() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite should connect");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        MIGRATOR.run(&pool).await.expect("migrations");
+        sqlx::query("INSERT INTO workspaces (id, name, timezone, created_at, updated_at) VALUES ('w', 'Workspace', 'UTC', '2026-07-20T00:00:00Z', '2026-07-20T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        let insert = |id: &str, hash: String| {
+            sqlx::query("INSERT INTO github_analysis_runs (id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, status, analysis_mode, readiness, analyzer_revision, request_hash, created_at, updated_at) VALUES (?, 'w', 'repo', 'owner', 'repo', 'https://github.com/owner/repo', 'main', '0123456789abcdef', 'overview', 'queued', 'rules', 'incomplete', 'github-rules-v1', ?, '2026-07-20T00:00:00Z', '2026-07-20T00:00:00Z')")
+                .bind(id.to_owned()).bind(hash)
+        };
+        insert("run-1", "a".repeat(64))
+            .execute(&pool)
+            .await
+            .expect("first active run");
+        assert!(insert("run-2", "b".repeat(64))
+            .execute(&pool)
+            .await
+            .is_err());
+        sqlx::query("UPDATE github_analysis_runs SET status = 'failed' WHERE id = 'run-1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        insert("run-2", "b".repeat(64))
+            .execute(&pool)
+            .await
+            .expect("terminal run releases active slot");
+        let unsafe_source = sqlx::query("INSERT INTO github_analysis_sources (id, analysis_run_id, source_type, source_path, content_hash, excerpt, source_order) VALUES ('s', 'run-2', 'readme', 'C:/secret/README.md', ?, 'safe', 0)")
+            .bind("c".repeat(64)).execute(&pool).await;
+        assert!(unsafe_source.is_err());
+        let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(integrity, "ok");
+        let foreign_keys: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_check")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(foreign_keys, 0);
     }
 
     #[tokio::test]
