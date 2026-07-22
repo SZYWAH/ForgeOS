@@ -1,9 +1,9 @@
 # ForgeOS GitHub Analysis Contract
 
-- 状态：D9.1 rules-only 纵向切片已实现
+- 状态：D9.1.1 rules-v2 质量强化已实现
 - 适用范围：D9.1 GitHub Project Intelligence
 
-实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；AI 增强和导入衔接仍属于后续阶段。
+实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；D9.1.1 增加仓库性质识别、产品技术栈与维护工具拆分、最近活动和章节可用性。AI 增强和导入衔接仍属于后续阶段。
 
 ## 1. 术语与生命周期边界
 
@@ -225,7 +225,10 @@ interface GitHubAnalysisReport {
 | 报告字段 | 首选来源类型 | 降级来源 | 置信度上限规则 |
 |---|---|---|---|
 | `overview`、`capabilities` | readme、documentation、metadata | manifest | 只有 metadata 时最高为 `medium`。 |
-| `techStack` | manifest、tree、build_config | readme、workflow | 仅 README 自述时最高为 `medium`。 |
+| `repositoryKind` | readme、tree、manifest、release、workflow | metadata | 必须明确区分源码、库、Monorepo、发布索引、文档和模板仓库。 |
+| `productTechStack` | 产品源码、产品 manifest、可靠文档 | readme | Workflow、格式化脚本和发布脚本不得进入产品技术栈。 |
+| `repositoryToolingStack` | manifest、workflow、build_config | documentation | 只说明仓库维护方式，不代表产品实现。 |
+| `techStack` | v1 兼容字段 | 无 | v2 写入与 `productTechStack` 相同内容，旧报告保持不变。 |
 | `architecture` | tree、documentation、manifest | readme、entrypoint | 未读取入口或模块配置时最高为 `medium`。 |
 | `entrypoints` | entrypoint、manifest、build_config | readme | 只有 README 命令时最高为 `low`。 |
 | `buildAndRun` | build_config、manifest、workflow | readme | 从未实际执行，任何结论最高为 `medium`。 |
@@ -267,7 +270,17 @@ GitHub 递归 Tree 的平台上限目前为 100,000 项和 7 MB；ForgeOS 使用
 - Minified、生成代码、超大 Lockfile 原文。
 - `.env` 和疑似密钥文件。
 
-超限、Tree 截断、SBOM 缺失或关键文件读取失败时，Run 必须进入 `partial` 或 `failed`，并返回具体警告。SBOM 只读取已有的 SPDX 兼容导出；缺失时使用 Manifest 静态摘要，不请求生成新 SBOM。参考 [GitHub SBOM API](https://docs.github.com/en/rest/dependency-graph/sboms)。
+超限、Tree 截断、关键文件读取失败或没有足够可分析文本时，Run 必须进入 `partial + incomplete` 或 `failed`，并返回具体警告。无 License、无 SBOM，以及存在其他可靠来源时的无 README 仅产生 `ready + warning`。SBOM 只读取已有的 SPDX 兼容导出；缺失时使用 Manifest 静态摘要，不请求生成新 SBOM。参考 [GitHub SBOM API](https://docs.github.com/en/rest/dependency-graph/sboms)。
+
+### D9.1.1 报告兼容与状态语义
+
+- 旧 `github-rules-v1` JSON、Markdown 和 Hash 永久保留，读取时使用兼容默认值。
+- 新报告固定为 `analyzer_revision = github-rules-v2` 与 `schemaVersion = github-report-v2`。
+- 相同 HEAD 由 v1 重新分析时，因为 Analyzer Revision 进入 Request Hash，只创建一个新的 v2 Run。
+- `license_missing`、`sbom_missing` 和成功清理的提示包装是提示型警告，不降低 Run 为 Partial。
+- Tree 截断、采集预算耗尽、关键来源失败和无可靠文本属于覆盖不完整。
+- Secret 无法安全处理或 Source ID 校验失败属于安全阻断。
+- 每个 v2 章节必须提供 `available`、`source_not_present`、`not_applicable`、`budget_limited` 或 `static_analysis_insufficient`，页面不得只显示裸横线。
 
 ## 7. 安全合同
 

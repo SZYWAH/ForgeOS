@@ -7,9 +7,10 @@ use serde::Deserialize;
 use crate::{
     domain::{GitHubCommitFact, GitHubReleaseFact, GitHubRepositoryFacts},
     ports::{
-        GitHubAnalysisRepositoryMetadata, GitHubClient, GitHubClientError, GitHubHead,
-        GitHubProjectSource, GitHubProjectSourceError, GitHubRateLimit, GitHubSupplementalSources,
-        GitHubTextSource, GitHubTree, GitHubTreeEntry,
+        GitHubAnalysisRepositoryMetadata, GitHubClient, GitHubClientError, GitHubCommitMetadata,
+        GitHubHead, GitHubProjectSource, GitHubProjectSourceError, GitHubRateLimit,
+        GitHubReleaseMetadata, GitHubSupplementalSources, GitHubTextSource, GitHubTree,
+        GitHubTreeEntry,
     },
 };
 
@@ -383,20 +384,23 @@ impl GitHubProjectSource for GitHubRestClient {
         Ok(GitHubSupplementalSources {
             commits: commits
                 .into_iter()
-                .map(|value| {
-                    (
-                        value.sha,
-                        value
-                            .commit
-                            .message
-                            .lines()
-                            .next()
-                            .unwrap_or_default()
-                            .to_owned(),
-                    )
+                .map(|value| GitHubCommitMetadata {
+                    sha: value.sha,
+                    subject: value
+                        .commit
+                        .message
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned(),
+                    authored_at: value.commit.author.map(|author| author.date),
                 })
                 .collect(),
-            release: release.map(|value| (value.tag_name, value.name.unwrap_or_default())),
+            release: release.map(|value| GitHubReleaseMetadata {
+                tag_name: value.tag_name,
+                name: value.name.unwrap_or_default(),
+                published_at: value.published_at,
+            }),
             sbom: sbom
                 .and_then(|value| value.get("sbom").cloned())
                 .and_then(|value| serde_json::to_string(&value).ok()),

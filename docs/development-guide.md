@@ -273,6 +273,10 @@ D9.1 及后续实现必须先阅读：
 10. Rate Limit、Tree 截断、无 README、无 License、无 SBOM、Monorepo、二进制 Repository 和 Prompt Injection 都是必测场景，不得只覆盖理想 Repository。
 11. D9.1 已统一把前端、Tauri 和相关 Rust Crate 版本更新到 `0.2.0`；后续修改必须继续保持版本入口一致。
 12. 新能力不得扩张 MCP 写权限、Codex Execution、Git Adapter 或本地 Shell 权限。
+13. D9.1.1 后的新分析必须使用 `github-rules-v2`：先判断 Repository Kind，再生成适用章节。Release Registry 和 Documentation 不得套用源码项目模板。
+14. 产品技术栈与仓库维护工具必须分别推断。Workflow、Formatter、Release Script 不能作为产品语言或框架证据。
+15. `license_missing`、`sbom_missing` 是提示型警告；只有覆盖预算、关键来源或安全完整性问题才能把报告降级为 Partial 或 Blocked。
+16. Commit、Release 与 SBOM 摘要必须保持确定性，不保存作者邮箱、Commit Body、Diff、完整 SPDX 文档或 GitHub 原始响应。
 
 ### 文档与代码一致性检查
 

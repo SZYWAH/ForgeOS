@@ -80,9 +80,23 @@ pub struct GitHubTextSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitHubCommitMetadata {
+    pub sha: String,
+    pub subject: String,
+    pub authored_at: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitHubReleaseMetadata {
+    pub tag_name: String,
+    pub name: String,
+    pub published_at: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitHubSupplementalSources {
-    pub commits: Vec<(String, String)>,
-    pub release: Option<(String, String)>,
+    pub commits: Vec<GitHubCommitMetadata>,
+    pub release: Option<GitHubReleaseMetadata>,
     pub sbom: Option<String>,
     pub requests_used: i64,
     pub rate_limit: GitHubRateLimit,

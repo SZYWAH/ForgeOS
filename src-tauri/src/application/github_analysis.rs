@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     str::FromStr,
     sync::Arc,
 };
@@ -17,7 +17,9 @@ use crate::{
         GitHubAnalysisRepositoryIdentity, GitHubAnalysisRun, GitHubAnalysisSource,
         GitHubAnalysisSourceType, GitHubAnalysisStage, GitHubAnalysisStatus, GitHubAnalysisWarning,
         GitHubArchitectureModule, GitHubDependencySummary, GitHubEntrypoint, GitHubLicenseSummary,
-        GitHubReproductionAssessment, ReproductionDifficulty, SourcedConclusion,
+        GitHubRecentActivity, GitHubRecentActivityKind, GitHubRepositoryKind,
+        GitHubReproductionAssessment, GitHubSectionAvailability, ReproductionDifficulty,
+        SourcedConclusion,
     },
     ports::{
         redact_external_text, ApiKeyStore, GitHubAnalysisPage, GitHubAnalysisRepository,
@@ -31,7 +33,7 @@ use super::{
     MemoryContentPolicy, MemoryQualitySeverity,
 };
 
-pub const ANALYZER_REVISION: &str = "github-rules-v1";
+pub const ANALYZER_REVISION: &str = "github-rules-v2";
 const MAX_TREE_ENTRIES: usize = 20_000;
 const MAX_FILES: usize = 64;
 const MAX_SOURCE_BYTES: usize = 2 * 1024 * 1024;
@@ -49,6 +51,8 @@ pub enum GitHubAnalysisError {
     AlreadyRunning,
     #[error("custom analysis question must contain at most 2,000 characters")]
     InvalidPrompt,
+    #[error("GitHub repository URL is invalid")]
+    InvalidRepositoryUrl,
     #[error("GitHub analysis version conflict")]
     VersionConflict,
     #[error("GitHub analysis source failed: {0}")]
@@ -170,7 +174,7 @@ impl GitHubAnalysisKernel {
             return Err(GitHubAnalysisError::InvalidPrompt);
         }
         let (owner, name) = parse_github_repository_url(&input.repository_url)
-            .map_err(|error| GitHubAnalysisError::Validation(error.to_string()))?;
+            .map_err(|_| GitHubAnalysisError::InvalidRepositoryUrl)?;
         let token = self.github_token().await?;
         let metadata = self
             .source
@@ -542,25 +546,41 @@ impl GitHubAnalysisKernel {
                 Ok(supplemental) => {
                     run.api_requests_used += supplemental.requests_used;
                     apply_rate(run, &supplemental.rate_limit);
-                    for (sha, message) in supplemental.commits {
-                        let excerpt =
-                            truncate_unicode(&redact_external_text(&message), MAX_SOURCE_CHARS);
+                    for commit in supplemental.commits {
+                        let excerpt = serde_json::json!({
+                            "sha": commit.sha.clone(),
+                            "subject": truncate_unicode(
+                                &redact_external_text(&commit.subject),
+                                500,
+                            ),
+                            "authoredAt": commit.authored_at,
+                        })
+                        .to_string();
                         sources.push(make_source(
                             &run.id,
                             GitHubAnalysisSourceType::Commit,
-                            sha.clone(),
-                            Some(sha),
+                            commit.sha.clone(),
+                            Some(commit.sha),
                             excerpt,
                             sources.len() as i64,
                         )?);
                     }
-                    if let Some((tag, name)) = supplemental.release {
+                    if let Some(release) = supplemental.release {
+                        let excerpt = serde_json::json!({
+                            "tagName": release.tag_name.clone(),
+                            "name": truncate_unicode(
+                                &redact_external_text(&release.name),
+                                500,
+                            ),
+                            "publishedAt": release.published_at,
+                        })
+                        .to_string();
                         sources.push(make_source(
                             &run.id,
                             GitHubAnalysisSourceType::Release,
-                            tag,
+                            release.tag_name,
                             None,
-                            truncate_unicode(&redact_external_text(&name), MAX_SOURCE_CHARS),
+                            excerpt,
                             sources.len() as i64,
                         )?);
                     }
@@ -570,7 +590,7 @@ impl GitHubAnalysisKernel {
                             GitHubAnalysisSourceType::Sbom,
                             "sbom".into(),
                             None,
-                            truncate_unicode(&redact_external_text(&sbom), MAX_SOURCE_CHARS),
+                            summarize_sbom_excerpt(&sbom),
                             sources.len() as i64,
                         )?);
                     } else {
@@ -619,10 +639,13 @@ impl GitHubAnalysisKernel {
             progress,
         )
         .await?;
-        let status = if report.completeness.readiness == GitHubAnalysisReadiness::Ready {
-            GitHubAnalysisStatus::Ready
-        } else {
-            GitHubAnalysisStatus::Partial
+        let status = match report.completeness.readiness {
+            GitHubAnalysisReadiness::Ready | GitHubAnalysisReadiness::Warning => {
+                GitHubAnalysisStatus::Ready
+            }
+            GitHubAnalysisReadiness::Incomplete | GitHubAnalysisReadiness::Blocked => {
+                GitHubAnalysisStatus::Partial
+            }
         };
         let expected = run.version;
         run.finish(&report, markdown, hash, status, Utc::now())
@@ -749,8 +772,50 @@ fn select_sources(entries: &[GitHubTreeEntry], limit: usize) -> Vec<SourceCandid
         })
     });
     let mut selected = Vec::new();
+    let mut selected_paths = HashSet::new();
+
+    for candidate in candidates.iter().filter(|candidate| {
+        !candidate.path.contains('/')
+            && matches!(
+                candidate.source_type,
+                GitHubAnalysisSourceType::Readme
+                    | GitHubAnalysisSourceType::License
+                    | GitHubAnalysisSourceType::Manifest
+            )
+    }) {
+        push_candidate(&mut selected, &mut selected_paths, candidate.clone(), limit);
+    }
+
     let mut manifest_roots = HashSet::new();
+    for candidate in candidates
+        .iter()
+        .filter(|candidate| candidate.source_type == GitHubAnalysisSourceType::Manifest)
+    {
+        if selected.len() >= limit {
+            break;
+        }
+        let root = candidate
+            .path
+            .split('/')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !root.is_empty() && manifest_roots.insert(root) {
+            push_candidate(&mut selected, &mut selected_paths, candidate.clone(), limit);
+        }
+    }
+
     for candidate in candidates {
+        if selected.len() >= limit {
+            break;
+        }
+        let type_count = selected
+            .iter()
+            .filter(|selected| selected.source_type == candidate.source_type)
+            .count();
+        if type_count >= source_type_limit(candidate.source_type) {
+            continue;
+        }
         if candidate.source_type == GitHubAnalysisSourceType::Manifest {
             let root = candidate
                 .path
@@ -759,17 +824,38 @@ fn select_sources(entries: &[GitHubTreeEntry], limit: usize) -> Vec<SourceCandid
                 .unwrap_or_default()
                 .to_ascii_lowercase();
             if !root.is_empty() && manifest_roots.insert(root) {
-                selected.push(candidate);
+                push_candidate(&mut selected, &mut selected_paths, candidate, limit);
                 continue;
             }
         }
-        selected.push(candidate);
-        if selected.len() >= limit {
-            break;
-        }
+        push_candidate(&mut selected, &mut selected_paths, candidate, limit);
     }
-    selected.truncate(limit);
     selected
+}
+
+fn push_candidate(
+    selected: &mut Vec<SourceCandidate>,
+    selected_paths: &mut HashSet<String>,
+    candidate: SourceCandidate,
+    limit: usize,
+) {
+    if selected.len() < limit && selected_paths.insert(candidate.path.clone()) {
+        selected.push(candidate);
+    }
+}
+
+fn source_type_limit(source_type: GitHubAnalysisSourceType) -> usize {
+    match source_type {
+        GitHubAnalysisSourceType::Readme => 8,
+        GitHubAnalysisSourceType::License => 4,
+        GitHubAnalysisSourceType::Manifest => 20,
+        GitHubAnalysisSourceType::Documentation => 8,
+        GitHubAnalysisSourceType::Workflow => 6,
+        GitHubAnalysisSourceType::TestConfig => 6,
+        GitHubAnalysisSourceType::BuildConfig => 6,
+        GitHubAnalysisSourceType::Entrypoint => 6,
+        _ => usize::MAX,
+    }
 }
 
 fn is_safe_text_candidate(entry: &GitHubTreeEntry) -> bool {
@@ -858,6 +944,10 @@ fn is_manifest(file: &str) -> bool {
             | "build.gradle.kts"
             | "composer.json"
             | "gemfile"
+            | "pnpm-workspace.yaml"
+            | "lerna.json"
+            | "settings.gradle"
+            | "settings.gradle.kts"
     )
 }
 fn is_entrypoint(path: &str, file: &str) -> bool {
@@ -968,19 +1058,34 @@ impl GitHubRulesAnalyzer {
         let readme = by_type(GitHubAnalysisSourceType::Readme).into_iter().next();
         let manifests = by_type(GitHubAnalysisSourceType::Manifest);
         let tree = by_type(GitHubAnalysisSourceType::Tree).into_iter().next();
-        let mut tech = detect_tech_stack(&manifests, tree.as_ref().copied());
-        tech.sort_by(|left, right| left.value.cmp(&right.value));
-        tech.dedup_by(|left, right| left.value == right.value);
-        let overview = readme.map(|source| {
-            sourced(
-                first_meaningful_paragraph(&source.excerpt),
-                GitHubAnalysisConfidence::Medium,
-                source,
-            )
-        });
-        let capabilities = readme.map(extract_capabilities).unwrap_or_default();
-        let architecture = architecture_conclusions(tree.as_ref().copied());
-        let entrypoints: Vec<SourcedConclusion<GitHubEntrypoint>> =
+        let repository_kind = classify_repository(run, readme, &manifests, tree.as_ref().copied());
+        let kind = repository_kind.value;
+        let source_like = matches!(
+            kind,
+            GitHubRepositoryKind::SourceApplication
+                | GitHubRepositoryKind::Library
+                | GitHubRepositoryKind::Monorepo
+        );
+        let overview = repository_overview(readme, &repository_kind);
+        let capabilities = capability_conclusions(readme, tree.as_ref().copied(), kind);
+        let mut product_tech_stack = if source_like {
+            detect_tech_stack(&manifests, tree.as_ref().copied())
+        } else {
+            vec![]
+        };
+        sort_and_dedupe_conclusions(&mut product_tech_stack);
+        let mut repository_tooling_stack = detect_repository_tooling(
+            &manifests,
+            &by_type(GitHubAnalysisSourceType::Workflow),
+            &by_type(GitHubAnalysisSourceType::BuildConfig),
+        );
+        sort_and_dedupe_conclusions(&mut repository_tooling_stack);
+        let architecture = if source_like {
+            architecture_conclusions(tree.as_ref().copied())
+        } else {
+            vec![]
+        };
+        let entrypoints: Vec<SourcedConclusion<GitHubEntrypoint>> = if source_like {
             by_type(GitHubAnalysisSourceType::Entrypoint)
                 .into_iter()
                 .take(10)
@@ -994,14 +1099,24 @@ impl GitHubRulesAnalyzer {
                         source,
                     )
                 })
-                .collect();
-        let build_and_run =
-            build_rules(&manifests, &by_type(GitHubAnalysisSourceType::BuildConfig));
-        let test_strategy = test_rules(
-            &manifests,
-            &by_type(GitHubAnalysisSourceType::TestConfig),
-            &by_type(GitHubAnalysisSourceType::Workflow),
-        );
+                .collect()
+        } else {
+            vec![]
+        };
+        let build_and_run = if source_like {
+            build_rules(&manifests, &by_type(GitHubAnalysisSourceType::BuildConfig))
+        } else {
+            vec![]
+        };
+        let test_strategy = if source_like {
+            test_rules(
+                &manifests,
+                &by_type(GitHubAnalysisSourceType::TestConfig),
+                &by_type(GitHubAnalysisSourceType::Workflow),
+            )
+        } else {
+            vec![]
+        };
         let dependencies = dependency_summary(
             &manifests,
             by_type(GitHubAnalysisSourceType::Sbom).first().copied(),
@@ -1020,15 +1135,30 @@ impl GitHubRulesAnalyzer {
                 source,
             )
         });
-        let risks = risk_rules(&manifests, tree.as_ref().copied());
+        let risks = if source_like {
+            risk_rules(&manifests, tree.as_ref().copied())
+        } else {
+            vec![]
+        };
         let recommended_reading_order = reading_order(
             readme,
             &manifests,
             &by_type(GitHubAnalysisSourceType::Entrypoint),
             tree.as_ref().copied(),
         );
-        let reproduction_assessment = reproduction(build_and_run.is_empty(), &manifests, metadata);
-        let extension_points = extension_rules(&architecture, &entrypoints);
+        let reproduction_assessment = reproduction(
+            build_and_run.is_empty(),
+            &manifests,
+            metadata,
+            kind,
+            &repository_kind,
+        );
+        let extension_points = if source_like {
+            extension_rules(&architecture, &entrypoints)
+        } else {
+            vec![]
+        };
+        let recent_activity = recent_activity(sources);
         let user_question_answer = run
             .custom_prompt
             .as_deref()
@@ -1037,16 +1167,51 @@ impl GitHubRulesAnalyzer {
             warnings.push(GitHubAnalysisWarning::PromptSanitized);
         }
         dedupe_warnings(&mut warnings);
+        let has_coverage_warning = warnings.iter().any(|warning| {
+            matches!(
+                warning,
+                GitHubAnalysisWarning::TreeTruncated
+                    | GitHubAnalysisWarning::BudgetExceeded
+                    | GitHubAnalysisWarning::SourceUnavailable
+                    | GitHubAnalysisWarning::NoAnalyzableText
+            )
+        }) || (warnings.contains(&GitHubAnalysisWarning::ReadmeMissing)
+            && overview.is_none()
+            && manifests.is_empty()
+            && entrypoints.is_empty());
         let readiness = if blocked {
             GitHubAnalysisReadiness::Blocked
-        } else if warnings.contains(&GitHubAnalysisWarning::NoAnalyzableText) {
+        } else if has_coverage_warning {
             GitHubAnalysisReadiness::Incomplete
         } else if warnings.is_empty() {
             GitHubAnalysisReadiness::Ready
         } else {
             GitHubAnalysisReadiness::Warning
         };
+        let section_availability = section_availability(
+            kind,
+            &warnings,
+            overview.is_some(),
+            !capabilities.is_empty(),
+            !product_tech_stack.is_empty(),
+            !repository_tooling_stack.is_empty(),
+            !architecture.is_empty(),
+            !entrypoints.is_empty(),
+            !build_and_run.is_empty(),
+            !test_strategy.is_empty(),
+            dependencies.is_some(),
+            license.is_some(),
+            !recent_activity.is_empty(),
+            !risks.is_empty(),
+            !extension_points.is_empty(),
+            !recommended_reading_order.is_empty(),
+            true,
+            run.custom_prompt
+                .as_deref()
+                .map(|_| user_question_answer.is_some()),
+        );
         Ok(GitHubAnalysisReport {
+            schema_version: Some("github-report-v2".into()),
             repository: GitHubAnalysisRepositoryIdentity {
                 owner: run.owner.clone(),
                 name: run.name.clone(),
@@ -1054,9 +1219,12 @@ impl GitHubRulesAnalyzer {
                 default_branch: run.default_branch.clone(),
                 head_commit_sha: run.source_commit_sha.clone(),
             },
+            repository_kind: Some(repository_kind),
             overview,
             capabilities,
-            tech_stack: tech,
+            tech_stack: product_tech_stack.clone(),
+            product_tech_stack,
+            repository_tooling_stack,
             architecture,
             entrypoints,
             build_and_run,
@@ -1067,6 +1235,8 @@ impl GitHubRulesAnalyzer {
             recommended_reading_order,
             reproduction_assessment,
             extension_points,
+            recent_activity,
+            section_availability,
             user_question_answer,
             completeness: GitHubAnalysisCompleteness {
                 readiness,
@@ -1091,6 +1261,168 @@ fn sourced<T>(
         source_ids: vec![source.id.clone()],
     }
 }
+
+fn classify_repository(
+    run: &GitHubAnalysisRun,
+    readme: Option<&GitHubAnalysisSource>,
+    manifests: &[&GitHubAnalysisSource],
+    tree: Option<&GitHubAnalysisSource>,
+) -> SourcedConclusion<GitHubRepositoryKind> {
+    let fallback = readme
+        .or(tree)
+        .expect("metadata and tree sources are always available");
+    let corpus = format!(
+        "{}\n{}\n{}",
+        run.name.to_ascii_lowercase(),
+        readme
+            .map_or("", |source| source.excerpt.as_str())
+            .to_ascii_lowercase(),
+        tree.map_or("", |source| source.excerpt.as_str())
+            .to_ascii_lowercase(),
+    );
+    let top_level_manifests = manifests
+        .iter()
+        .filter_map(|source| source.source_path.split_once('/').map(|(root, _)| root))
+        .collect::<BTreeSet<_>>();
+    let workspace_manifest = manifests.iter().copied().find(|source| {
+        let path = source.source_path.to_ascii_lowercase();
+        let excerpt = source.excerpt.to_ascii_lowercase();
+        excerpt.contains("[workspace]")
+            || excerpt.contains("\"workspaces\"")
+            || path.ends_with("pnpm-workspace.yaml")
+            || path.ends_with("lerna.json")
+            || path.ends_with("settings.gradle")
+            || path.ends_with("settings.gradle.kts")
+    });
+    let (value, confidence, source) = if let Some(workspace) = workspace_manifest {
+        (
+            GitHubRepositoryKind::Monorepo,
+            GitHubAnalysisConfidence::High,
+            workspace,
+        )
+    } else if top_level_manifests.len() >= 2 || corpus.contains("workspace") && manifests.len() >= 3
+    {
+        (
+            GitHubRepositoryKind::Monorepo,
+            GitHubAnalysisConfidence::High,
+            tree.unwrap_or(fallback),
+        )
+    } else if run.name.to_ascii_lowercase().contains("releases")
+        || corpus.contains("community-plugins.json")
+        || corpus.contains("community-css-themes.json")
+        || corpus.contains("release registry")
+        || corpus.contains("community plugin list")
+    {
+        (
+            GitHubRepositoryKind::ReleaseRegistry,
+            GitHubAnalysisConfidence::High,
+            tree.unwrap_or(fallback),
+        )
+    } else if manifests.is_empty()
+        && (run.name.to_ascii_lowercase().contains("docs")
+            || corpus.contains("documentation repository")
+            || corpus.contains("documentation site"))
+    {
+        (
+            GitHubRepositoryKind::Documentation,
+            GitHubAnalysisConfidence::Medium,
+            fallback,
+        )
+    } else if corpus.contains("starter template")
+        || corpus.contains("project template")
+        || run.name.to_ascii_lowercase().contains("template")
+    {
+        (
+            GitHubRepositoryKind::Template,
+            GitHubAnalysisConfidence::Medium,
+            fallback,
+        )
+    } else if !manifests.is_empty()
+        && (corpus.contains(" library")
+            || corpus.contains(" sdk")
+            || corpus.contains(" crate")
+            || corpus.contains("package for"))
+    {
+        (
+            GitHubRepositoryKind::Library,
+            GitHubAnalysisConfidence::Medium,
+            readme.unwrap_or(fallback),
+        )
+    } else if !manifests.is_empty() || corpus.contains("src/main.") || corpus.contains("src-tauri")
+    {
+        (
+            GitHubRepositoryKind::SourceApplication,
+            GitHubAnalysisConfidence::Medium,
+            readme.unwrap_or(fallback),
+        )
+    } else {
+        (
+            GitHubRepositoryKind::Unknown,
+            GitHubAnalysisConfidence::Low,
+            fallback,
+        )
+    };
+    sourced(value, confidence, source)
+}
+
+fn repository_overview(
+    readme: Option<&GitHubAnalysisSource>,
+    repository_kind: &SourcedConclusion<GitHubRepositoryKind>,
+) -> Option<SourcedConclusion<String>> {
+    let paragraph = readme
+        .map(|source| first_meaningful_paragraph(&source.excerpt))
+        .filter(|value| !value.is_empty());
+    let value = match repository_kind.value {
+        GitHubRepositoryKind::ReleaseRegistry => format!(
+            "该仓库主要保存发布、版本或社区目录元数据，不是产品应用源码仓库。{}",
+            paragraph
+                .map(|value| format!(" {value}"))
+                .unwrap_or_default()
+        ),
+        _ => paragraph?,
+    };
+    Some(SourcedConclusion {
+        value: truncate_unicode(&value, 800),
+        confidence: repository_kind.confidence,
+        source_ids: repository_kind.source_ids.clone(),
+    })
+}
+
+fn capability_conclusions(
+    readme: Option<&GitHubAnalysisSource>,
+    tree: Option<&GitHubAnalysisSource>,
+    kind: GitHubRepositoryKind,
+) -> Vec<SourcedConclusion<String>> {
+    if kind == GitHubRepositoryKind::ReleaseRegistry {
+        let Some(source) = tree.or(readme) else {
+            return vec![];
+        };
+        let corpus = source.excerpt.to_ascii_lowercase();
+        let mut values = Vec::new();
+        if corpus.contains("community-plugins") {
+            values.push("维护社区插件目录和插件发布元数据。".to_owned());
+        }
+        if corpus.contains("community-css-themes") {
+            values.push("维护社区主题目录和主题发布元数据。".to_owned());
+        }
+        if corpus.contains("versions.json") || corpus.contains("releases") {
+            values.push("维护可公开读取的版本与发布信息。".to_owned());
+        }
+        if values.is_empty() {
+            values.push("为外部工具提供发布或社区资源索引。".to_owned());
+        }
+        return values
+            .into_iter()
+            .map(|value| sourced(value, GitHubAnalysisConfidence::High, source))
+            .collect();
+    }
+    readme.map(extract_capabilities).unwrap_or_default()
+}
+
+fn sort_and_dedupe_conclusions(values: &mut Vec<SourcedConclusion<String>>) {
+    values.sort_by(|left, right| left.value.cmp(&right.value));
+    values.dedup_by(|left, right| left.value.eq_ignore_ascii_case(&right.value));
+}
 fn first_meaningful_paragraph(value: &str) -> String {
     value
         .lines()
@@ -1104,14 +1436,29 @@ fn first_meaningful_paragraph(value: &str) -> String {
         .collect()
 }
 fn extract_capabilities(source: &GitHubAnalysisSource) -> Vec<SourcedConclusion<String>> {
+    let mut seen = BTreeSet::new();
     source
         .excerpt
         .lines()
         .map(str::trim)
         .filter(|line| line.starts_with("- ") || line.starts_with("* "))
-        .map(|line| line.trim_start_matches(['-', '*', ' ']).to_owned())
-        .filter(|line| line.chars().count() >= 8)
-        .take(8)
+        .map(|line| {
+            line.trim_start_matches(['-', '*', ' '])
+                .trim()
+                .replace("**", "")
+                .replace('`', "")
+        })
+        .filter(|line| {
+            let normalized = line.to_ascii_lowercase();
+            line.chars().count() >= 12
+                && line.chars().count() <= 240
+                && !line.ends_with(':')
+                && !line.ends_with('：')
+                && !line.starts_with("http")
+                && !normalized.contains("badge")
+                && seen.insert(normalized)
+        })
+        .take(6)
         .map(|value| sourced(value, GitHubAnalysisConfidence::Medium, source))
         .collect()
 }
@@ -1173,6 +1520,68 @@ fn detect_tech_stack(
         }
     }
     values
+}
+
+fn detect_repository_tooling(
+    manifests: &[&GitHubAnalysisSource],
+    workflows: &[&GitHubAnalysisSource],
+    build_configs: &[&GitHubAnalysisSource],
+) -> Vec<SourcedConclusion<String>> {
+    let mut output = Vec::new();
+    for source in manifests {
+        let lower = source.source_path.to_ascii_lowercase();
+        if lower.ends_with("package.json") {
+            output.push(sourced(
+                "Node.js / npm-compatible tooling".into(),
+                GitHubAnalysisConfidence::High,
+                source,
+            ));
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&source.excerpt) {
+                let scripts = value
+                    .get("scripts")
+                    .and_then(|value| value.as_object())
+                    .into_iter()
+                    .flatten()
+                    .map(|(name, _)| name.to_ascii_lowercase())
+                    .collect::<BTreeSet<_>>();
+                if scripts
+                    .iter()
+                    .any(|name| name.contains("lint") || name.contains("format"))
+                {
+                    output.push(sourced(
+                        "Lint / formatting automation".into(),
+                        GitHubAnalysisConfidence::High,
+                        source,
+                    ));
+                }
+                if scripts
+                    .iter()
+                    .any(|name| name.contains("release") || name.contains("publish"))
+                {
+                    output.push(sourced(
+                        "Release automation".into(),
+                        GitHubAnalysisConfidence::High,
+                        source,
+                    ));
+                }
+            }
+        }
+    }
+    for source in workflows {
+        output.push(sourced(
+            "GitHub Actions".into(),
+            GitHubAnalysisConfidence::High,
+            source,
+        ));
+    }
+    for source in build_configs {
+        output.push(sourced(
+            format!("Build configuration: {}", source.source_path),
+            GitHubAnalysisConfidence::Medium,
+            source,
+        ));
+    }
+    output
 }
 
 fn architecture_conclusions(
@@ -1304,12 +1713,32 @@ fn dependency_summary(
     sbom: Option<&GitHubAnalysisSource>,
 ) -> Option<SourcedConclusion<GitHubDependencySummary>> {
     if let Some(source) = sbom {
+        let value = serde_json::from_str::<serde_json::Value>(&source.excerpt).unwrap_or_default();
+        let package_count = value
+            .get("packageCount")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize);
+        let ecosystems = value
+            .get("ecosystems")
+            .and_then(|value| value.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|value| value.as_str())
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
         return Some(sourced(
             GitHubDependencySummary {
-                package_managers: vec!["SBOM".into()],
-                direct_dependency_count: None,
+                package_managers: if ecosystems.is_empty() {
+                    vec!["SBOM".into()]
+                } else {
+                    ecosystems
+                },
+                direct_dependency_count: package_count,
                 sbom_available: true,
-                summary: "仓库提供已有 SBOM；报告仅保存受限摘要。".into(),
+                summary: package_count.map_or_else(
+                    || "仓库提供已有 SBOM；报告仅保存受限生态摘要。".into(),
+                    |count| format!("GitHub SBOM 记录了 {count} 个包；报告不保存完整依赖清单。"),
+                ),
             },
             GitHubAnalysisConfidence::High,
             source,
@@ -1450,16 +1879,22 @@ fn reproduction(
     no_build_rule: bool,
     manifests: &[&GitHubAnalysisSource],
     source: &GitHubAnalysisSource,
+    kind: GitHubRepositoryKind,
+    repository_kind: &SourcedConclusion<GitHubRepositoryKind>,
 ) -> SourcedConclusion<GitHubReproductionAssessment> {
-    let difficulty = if manifests.is_empty() {
+    let not_product_source = matches!(
+        kind,
+        GitHubRepositoryKind::ReleaseRegistry | GitHubRepositoryKind::Documentation
+    );
+    let difficulty = if not_product_source || manifests.is_empty() {
         ReproductionDifficulty::Unknown
     } else if manifests.len() > 4 || no_build_rule {
         ReproductionDifficulty::High
     } else {
         ReproductionDifficulty::Medium
     };
-    sourced(
-        GitHubReproductionAssessment {
+    SourcedConclusion {
+        value: GitHubReproductionAssessment {
             difficulty,
             prerequisites: manifests
                 .iter()
@@ -1468,11 +1903,26 @@ fn reproduction(
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect(),
-            caveats: vec!["仅基于静态文件判断，ForgeOS 未克隆、安装依赖或执行测试。".into()],
+            caveats: if not_product_source {
+                vec![
+                    "该仓库不是产品源码仓库，因此无法据此复现产品应用。".into(),
+                    "仅基于静态文件判断，ForgeOS 未克隆、安装依赖或执行测试。".into(),
+                ]
+            } else {
+                vec!["仅基于静态文件判断，ForgeOS 未克隆、安装依赖或执行测试。".into()]
+            },
         },
-        GitHubAnalysisConfidence::Medium,
-        source,
-    )
+        confidence: if not_product_source {
+            repository_kind.confidence
+        } else {
+            GitHubAnalysisConfidence::Medium
+        },
+        source_ids: if not_product_source {
+            repository_kind.source_ids.clone()
+        } else {
+            vec![source.id.clone()]
+        },
+    }
 }
 fn extension_rules(
     architecture: &[SourcedConclusion<GitHubArchitectureModule>],
@@ -1545,6 +1995,181 @@ fn answer_question(
     })
 }
 
+fn recent_activity(sources: &[GitHubAnalysisSource]) -> Vec<GitHubRecentActivity> {
+    let mut output = Vec::new();
+    for source in sources
+        .iter()
+        .filter(|source| source.source_type == GitHubAnalysisSourceType::Commit)
+        .take(5)
+    {
+        let value = serde_json::from_str::<serde_json::Value>(&source.excerpt).ok();
+        let identifier = value
+            .as_ref()
+            .and_then(|value| value.get("sha"))
+            .and_then(|value| value.as_str())
+            .unwrap_or(&source.source_path)
+            .to_owned();
+        let title = value
+            .as_ref()
+            .and_then(|value| value.get("subject"))
+            .and_then(|value| value.as_str())
+            .unwrap_or(&source.excerpt)
+            .to_owned();
+        let occurred_at = value
+            .as_ref()
+            .and_then(|value| value.get("authoredAt"))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned);
+        output.push(GitHubRecentActivity {
+            kind: GitHubRecentActivityKind::Commit,
+            identifier,
+            title,
+            occurred_at,
+            source_ids: vec![source.id.clone()],
+        });
+    }
+    if let Some(source) = sources
+        .iter()
+        .find(|source| source.source_type == GitHubAnalysisSourceType::Release)
+    {
+        let value = serde_json::from_str::<serde_json::Value>(&source.excerpt).ok();
+        let identifier = value
+            .as_ref()
+            .and_then(|value| value.get("tagName"))
+            .and_then(|value| value.as_str())
+            .unwrap_or(&source.source_path)
+            .to_owned();
+        let title = value
+            .as_ref()
+            .and_then(|value| value.get("name"))
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or(&identifier)
+            .to_owned();
+        let occurred_at = value
+            .as_ref()
+            .and_then(|value| value.get("publishedAt"))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned);
+        output.push(GitHubRecentActivity {
+            kind: GitHubRecentActivityKind::Release,
+            identifier,
+            title,
+            occurred_at,
+            source_ids: vec![source.id.clone()],
+        });
+    }
+    output
+}
+
+#[allow(clippy::too_many_arguments)]
+fn section_availability(
+    kind: GitHubRepositoryKind,
+    warnings: &[GitHubAnalysisWarning],
+    overview: bool,
+    capabilities: bool,
+    product_tech: bool,
+    tooling: bool,
+    architecture: bool,
+    entrypoints: bool,
+    build_and_run: bool,
+    tests: bool,
+    dependencies: bool,
+    license: bool,
+    recent: bool,
+    risks: bool,
+    extension_points: bool,
+    recommended_reading: bool,
+    reproduction: bool,
+    user_question: Option<bool>,
+) -> BTreeMap<String, GitHubSectionAvailability> {
+    let budget_limited = warnings.iter().any(|warning| {
+        matches!(
+            warning,
+            GitHubAnalysisWarning::TreeTruncated
+                | GitHubAnalysisWarning::BudgetExceeded
+                | GitHubAnalysisWarning::SourceUnavailable
+        )
+    });
+    let missing = |available: bool| {
+        if available {
+            GitHubSectionAvailability::Available
+        } else if budget_limited {
+            GitHubSectionAvailability::BudgetLimited
+        } else {
+            GitHubSectionAvailability::SourceNotPresent
+        }
+    };
+    let source_not_applicable = matches!(
+        kind,
+        GitHubRepositoryKind::ReleaseRegistry | GitHubRepositoryKind::Documentation
+    );
+    let source_section = |available: bool| {
+        if available {
+            GitHubSectionAvailability::Available
+        } else if source_not_applicable {
+            GitHubSectionAvailability::NotApplicable
+        } else if budget_limited {
+            GitHubSectionAvailability::BudgetLimited
+        } else {
+            GitHubSectionAvailability::StaticAnalysisInsufficient
+        }
+    };
+    let mut availability = BTreeMap::from([
+        ("overview".into(), missing(overview)),
+        ("capabilities".into(), missing(capabilities)),
+        ("product_tech_stack".into(), source_section(product_tech)),
+        ("repository_tooling_stack".into(), missing(tooling)),
+        ("architecture".into(), source_section(architecture)),
+        ("entrypoints".into(), source_section(entrypoints)),
+        ("build_and_run".into(), source_section(build_and_run)),
+        ("test_strategy".into(), source_section(tests)),
+        ("dependencies".into(), missing(dependencies)),
+        ("license".into(), missing(license)),
+        ("recent_activity".into(), missing(recent)),
+        ("risks".into(), source_section(risks)),
+        ("extension_points".into(), source_section(extension_points)),
+        (
+            "recommended_reading_order".into(),
+            missing(recommended_reading),
+        ),
+        ("reproduction_assessment".into(), missing(reproduction)),
+    ]);
+    availability.insert(
+        "user_question_answer".into(),
+        match user_question {
+            None => GitHubSectionAvailability::NotApplicable,
+            Some(answered) => missing(answered),
+        },
+    );
+    availability
+}
+
+fn summarize_sbom_excerpt(raw: &str) -> String {
+    let value = serde_json::from_str::<serde_json::Value>(raw).unwrap_or_default();
+    let packages = value
+        .get("packages")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut ecosystems = BTreeSet::new();
+    for package in &packages {
+        if let Some(purl) = package.get("purl").and_then(|value| value.as_str()) {
+            if let Some(kind) = purl
+                .strip_prefix("pkg:")
+                .and_then(|value| value.split('/').next())
+            {
+                ecosystems.insert(kind.to_owned());
+            }
+        }
+    }
+    serde_json::json!({
+        "packageCount": packages.len(),
+        "ecosystems": ecosystems,
+    })
+    .to_string()
+}
+
 fn validate_report_sources(
     report: &GitHubAnalysisReport,
     sources: &[GitHubAnalysisSource],
@@ -1595,9 +2220,33 @@ impl GitHubAnalysisRenderer {
             format!("- HEAD: {}", report.repository.head_commit_sha),
             String::new(),
         ];
+        if let Some(kind) = &report.repository_kind {
+            out.push("## Repository kind and boundary".into());
+            out.push(format!("- Kind: {}", kind.value.as_str()));
+            if kind.value == GitHubRepositoryKind::ReleaseRegistry {
+                out.push("- This repository stores release or community registry metadata; it is not the product application source repository.".into());
+            }
+            render_citations(&mut out, kind);
+            out.push(String::new());
+        }
         render_one(&mut out, "Project overview", report.overview.as_ref());
         render_many(&mut out, "Capabilities", &report.capabilities);
-        render_many(&mut out, "Tech stack", &report.tech_stack);
+        if report.schema_version.as_deref() == Some("github-report-v2") {
+            render_many_with_availability(
+                &mut out,
+                "Product technology stack",
+                &report.product_tech_stack,
+                availability(report, "product_tech_stack"),
+            );
+            render_many_with_availability(
+                &mut out,
+                "Repository maintenance tooling",
+                &report.repository_tooling_stack,
+                availability(report, "repository_tooling_stack"),
+            );
+        } else {
+            render_many(&mut out, "Tech stack", &report.tech_stack);
+        }
         out.push("## Architecture".into());
         for item in &report.architecture {
             out.push(format!(
@@ -1608,11 +2257,17 @@ impl GitHubAnalysisRenderer {
             ));
             render_citations(&mut out, item);
         }
+        if report.architecture.is_empty() {
+            out.push(availability_message(availability(report, "architecture")).into());
+        }
         out.push(String::new());
         out.push("## Entrypoints".into());
         for item in &report.entrypoints {
             out.push(format!("- `{}` — {}", item.value.path, item.value.purpose));
             render_citations(&mut out, item);
+        }
+        if report.entrypoints.is_empty() {
+            out.push(availability_message(availability(report, "entrypoints")).into());
         }
         out.push(String::new());
         render_many(
@@ -1635,7 +2290,7 @@ impl GitHubAnalysisRenderer {
             out.push(format!("- Existing SBOM: {}", value.value.sbom_available));
             render_citations(&mut out, value);
         } else {
-            out.push("No source-backed conclusion available.".into());
+            out.push(availability_message(availability(report, "dependencies")).into());
         }
         out.push(String::new());
         out.push("## License and reuse".into());
@@ -1647,7 +2302,25 @@ impl GitHubAnalysisRenderer {
             out.push(format!("- {}", value.value.reuse_guidance));
             render_citations(&mut out, value);
         } else {
-            out.push("No source-backed conclusion available.".into());
+            out.push(availability_message(availability(report, "license")).into());
+        }
+        out.push(String::new());
+        out.push("## Recent commits and release".into());
+        if report.recent_activity.is_empty() {
+            out.push(availability_message(availability(report, "recent_activity")).into());
+        }
+        for item in &report.recent_activity {
+            out.push(format!(
+                "- {} `{}` — {}{}",
+                item.kind.as_str(),
+                item.identifier,
+                item.title,
+                item.occurred_at
+                    .as_deref()
+                    .map(|value| format!(" ({value})"))
+                    .unwrap_or_default()
+            ));
+            out.push(format!("  - Sources: {}", item.source_ids.join(", ")));
         }
         out.push(String::new());
         render_many(&mut out, "Risks", &report.risks);
@@ -1705,6 +2378,49 @@ fn render_many(out: &mut Vec<String>, title: &str, values: &[SourcedConclusion<S
         render_citations(out, value);
     }
     out.push(String::new());
+}
+
+fn render_many_with_availability(
+    out: &mut Vec<String>,
+    title: &str,
+    values: &[SourcedConclusion<String>],
+    availability: GitHubSectionAvailability,
+) {
+    out.push(format!("## {title}"));
+    if values.is_empty() {
+        out.push(availability_message(availability).into());
+    }
+    for value in values {
+        out.push(format!("- {}", value.value));
+        render_citations(out, value);
+    }
+    out.push(String::new());
+}
+
+fn availability(report: &GitHubAnalysisReport, section: &str) -> GitHubSectionAvailability {
+    report
+        .section_availability
+        .get(section)
+        .copied()
+        .unwrap_or(GitHubSectionAvailability::SourceNotPresent)
+}
+
+fn availability_message(value: GitHubSectionAvailability) -> &'static str {
+    match value {
+        GitHubSectionAvailability::Available => "Source-backed content is available.",
+        GitHubSectionAvailability::SourceNotPresent => {
+            "No reliable source for this section was found in the repository."
+        }
+        GitHubSectionAvailability::NotApplicable => {
+            "This section is not applicable to the detected repository kind."
+        }
+        GitHubSectionAvailability::BudgetLimited => {
+            "The collection budget or unavailable sources prevented a complete conclusion."
+        }
+        GitHubSectionAvailability::StaticAnalysisInsufficient => {
+            "Static analysis did not identify a reliable conclusion."
+        }
+    }
 }
 fn render_citations<T>(out: &mut Vec<String>, value: &SourcedConclusion<T>) {
     out.push(format!(
@@ -1819,6 +2535,44 @@ fn error_code(error: &GitHubAnalysisError) -> (&'static str, GitHubAnalysisReadi
 mod tests {
     use super::*;
 
+    fn test_run(name: &str) -> GitHubAnalysisRun {
+        GitHubAnalysisRun::create(
+            format!("run-{name}"),
+            "workspace".into(),
+            format!("repository-{name}"),
+            "owner".into(),
+            name.into(),
+            format!("https://github.com/owner/{name}"),
+            "main".into(),
+            "0123456789abcdef".into(),
+            GitHubAnalysisFocus::Overview,
+            None,
+            GitHubAnalysisMode::Rules,
+            ANALYZER_REVISION.into(),
+            "c".repeat(64),
+            Utc::now(),
+        )
+        .expect("run")
+    }
+
+    fn test_source(
+        run: &GitHubAnalysisRun,
+        kind: GitHubAnalysisSourceType,
+        path: &str,
+        excerpt: &str,
+        order: i64,
+    ) -> GitHubAnalysisSource {
+        make_source(
+            &run.id,
+            kind,
+            path.into(),
+            Some(format!("sha-{order}")),
+            excerpt.into(),
+            order,
+        )
+        .expect("source")
+    }
+
     #[test]
     fn selector_is_deterministic_and_excludes_generated_or_secret_files() {
         let entries = vec![
@@ -1860,6 +2614,33 @@ mod tests {
                 .map(|value| value.path.as_str())
                 .collect::<Vec<_>>(),
             vec!["README.md", "package.json", "src/main.rs"]
+        );
+    }
+
+    #[test]
+    fn selector_reserves_budget_for_root_workspace_manifest() {
+        let mut entries = (0..70)
+            .map(|index| GitHubTreeEntry {
+                path: format!("examples/example-{index}/README.md"),
+                kind: "blob".into(),
+                sha: format!("readme-{index}"),
+                size: Some(10),
+            })
+            .collect::<Vec<_>>();
+        entries.push(GitHubTreeEntry {
+            path: "Cargo.toml".into(),
+            kind: "blob".into(),
+            sha: "workspace".into(),
+            size: Some(10),
+        });
+        let selected = select_sources(&entries, 64);
+        assert!(selected.iter().any(|value| value.path == "Cargo.toml"));
+        assert!(
+            selected
+                .iter()
+                .filter(|value| value.source_type == GitHubAnalysisSourceType::Readme)
+                .count()
+                <= 8
         );
     }
 
@@ -1965,5 +2746,221 @@ mod tests {
         assert!(first.contains("## Dependencies and SBOM"));
         assert!(first.contains("## License and reuse"));
         assert!(first.contains("Warning: sbom_missing"));
+    }
+
+    #[test]
+    fn repository_classifier_distinguishes_repository_kinds() {
+        let cases = [
+            (
+                "obsidian-releases",
+                "Community plugin list",
+                "blob community-plugins.json",
+                vec![],
+                GitHubRepositoryKind::ReleaseRegistry,
+            ),
+            (
+                "app",
+                "Desktop application",
+                "blob src/main.ts",
+                vec![("package.json", r#"{"dependencies":{"react":"1"}}"#)],
+                GitHubRepositoryKind::SourceApplication,
+            ),
+            (
+                "sdk",
+                "A Rust library and SDK",
+                "blob src/lib.rs",
+                vec![("Cargo.toml", "[package]\nname='sdk'")],
+                GitHubRepositoryKind::Library,
+            ),
+            (
+                "workspace",
+                "Workspace project",
+                "blob crates/a/Cargo.toml\nblob apps/b/package.json",
+                vec![
+                    ("crates/a/Cargo.toml", "[package]"),
+                    ("apps/b/package.json", "{}"),
+                ],
+                GitHubRepositoryKind::Monorepo,
+            ),
+            (
+                "cargo-workspace",
+                "Rust application workspace",
+                "blob crates/a/Cargo.toml",
+                vec![("Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]")],
+                GitHubRepositoryKind::Monorepo,
+            ),
+            (
+                "product-docs",
+                "Documentation repository",
+                "blob guide/getting-started.md",
+                vec![],
+                GitHubRepositoryKind::Documentation,
+            ),
+            (
+                "starter-template",
+                "Starter template for desktop apps",
+                "blob README.md",
+                vec![],
+                GitHubRepositoryKind::Template,
+            ),
+        ];
+        for (name, readme, tree, manifests, expected) in cases {
+            let run = test_run(name);
+            let readme_source = test_source(
+                &run,
+                GitHubAnalysisSourceType::Readme,
+                "README.md",
+                readme,
+                1,
+            );
+            let tree_source = test_source(&run, GitHubAnalysisSourceType::Tree, "", tree, 2);
+            let manifest_sources = manifests
+                .into_iter()
+                .enumerate()
+                .map(|(index, (path, excerpt))| {
+                    test_source(
+                        &run,
+                        GitHubAnalysisSourceType::Manifest,
+                        path,
+                        excerpt,
+                        index as i64 + 3,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let manifest_refs = manifest_sources.iter().collect::<Vec<_>>();
+            assert_eq!(
+                classify_repository(
+                    &run,
+                    Some(&readme_source),
+                    &manifest_refs,
+                    Some(&tree_source)
+                )
+                .value,
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn advisory_license_and_sbom_warnings_keep_report_ready_with_warning() {
+        let run = test_run("source-app");
+        let sources = vec![
+            metadata_source(&run),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Tree,
+                "",
+                "blob src/main.ts",
+                1,
+            ),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Readme,
+                "README.md",
+                "Source application\n\n- Provides a reliable desktop workflow.",
+                2,
+            ),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Manifest,
+                "package.json",
+                r#"{"dependencies":{"react":"1"}}"#,
+                3,
+            ),
+        ];
+        let report = GitHubRulesAnalyzer::analyze(
+            &run,
+            &sources,
+            vec![
+                GitHubAnalysisWarning::LicenseMissing,
+                GitHubAnalysisWarning::SbomMissing,
+            ],
+            false,
+        )
+        .expect("report");
+        assert_eq!(
+            report.completeness.readiness,
+            GitHubAnalysisReadiness::Warning
+        );
+        assert_eq!(
+            report.repository_kind.as_ref().map(|value| value.value),
+            Some(GitHubRepositoryKind::SourceApplication)
+        );
+    }
+
+    #[test]
+    fn release_registry_does_not_report_maintenance_manifest_as_product_stack() {
+        let run = test_run("obsidian-releases");
+        let sources = vec![
+            metadata_source(&run),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Tree,
+                "",
+                "blob community-plugins.json\nblob package.json",
+                1,
+            ),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Readme,
+                "README.md",
+                "Community plugin list",
+                2,
+            ),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Manifest,
+                "package.json",
+                r#"{"scripts":{"format":"prettier --write ."},"devDependencies":{"prettier":"1"}}"#,
+                3,
+            ),
+        ];
+        let report = GitHubRulesAnalyzer::analyze(&run, &sources, vec![], false).expect("report");
+        assert!(report.product_tech_stack.is_empty());
+        assert!(report
+            .repository_tooling_stack
+            .iter()
+            .any(|value| value.value.contains("Node.js")));
+        assert!(report.architecture.is_empty());
+        assert_eq!(
+            report.section_availability.get("architecture"),
+            Some(&GitHubSectionAvailability::NotApplicable)
+        );
+    }
+
+    #[test]
+    fn recent_activity_uses_structured_commit_and_release_sources() {
+        let run = test_run("activity");
+        let sources = vec![
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Commit,
+                "abc123",
+                r#"{"sha":"abc123","subject":"Improve report","authoredAt":"2026-07-22T00:00:00Z"}"#,
+                1,
+            ),
+            test_source(
+                &run,
+                GitHubAnalysisSourceType::Release,
+                "v0.2.0",
+                r#"{"tagName":"v0.2.0","name":"Preview","publishedAt":"2026-07-22T01:00:00Z"}"#,
+                2,
+            ),
+        ];
+        let activity = recent_activity(&sources);
+        assert_eq!(activity.len(), 2);
+        assert_eq!(activity[0].identifier, "abc123");
+        assert_eq!(activity[1].kind, GitHubRecentActivityKind::Release);
+        assert!(activity.iter().all(|item| item.source_ids.len() == 1));
+    }
+
+    #[test]
+    fn v1_report_json_remains_backward_compatible() {
+        let value = r#"{"repository":{"owner":"o","name":"n","url":"https://github.com/o/n","defaultBranch":"main","headCommitSha":"abc"},"overview":null,"capabilities":[],"techStack":[],"architecture":[],"entrypoints":[],"buildAndRun":[],"testStrategy":[],"dependencies":null,"license":null,"risks":[],"recommendedReadingOrder":[],"reproductionAssessment":{"value":{"difficulty":"unknown","prerequisites":[],"caveats":[]},"confidence":"low","sourceIds":["source"]},"extensionPoints":[],"userQuestionAnswer":null,"completeness":{"readiness":"warning","filesSelected":0,"filesSkipped":0,"treeEntriesSeen":0,"sourceBytes":0},"qualityWarnings":["license_missing"]}"#;
+        let report: GitHubAnalysisReport = serde_json::from_str(value).expect("v1 report");
+        assert!(report.schema_version.is_none());
+        assert!(report.product_tech_stack.is_empty());
+        assert!(report.recent_activity.is_empty());
     }
 }

@@ -640,7 +640,7 @@ Public Repository URL
   -> read-only source collection under fixed budgets
   -> sanitize and persist bounded source summaries
   -> deterministic rules report
-  -> D9.1 deterministic rules-v1 analysis
+  -> D9.1.1 deterministic rules-v2 analysis
   -> validate sourceIds and confidence
   -> persist JSON + stable Markdown + content hash
   -> history, report, reanalysis and archive
@@ -658,7 +658,11 @@ Public Repository URL
 
 - 每个 Run 绑定默认分支的具体 HEAD SHA 和 `analyzer_revision`。
 - `request_hash` 覆盖 Repository ID、HEAD、分析重点、自定义 Prompt Hash、模式和分析器版本；缓存命中不重复调用 GitHub 或 AI。
-- Tree 截断、预算耗尽、SBOM 缺失或部分来源失败生成 `partial`，不得标记为完整。
+- `github-rules-v2` 先识别 Source Application、Library、Monorepo、Release Registry、Documentation、Template 或 Unknown，再按仓库性质决定适用的报告章节。
+- 产品技术栈只来源于产品源码、产品 Manifest 或可靠文档；Workflow、格式化与发布脚本只进入仓库维护工具。
+- Tree 截断、预算耗尽、关键来源读取失败或没有足够可分析文本生成 `partial + incomplete`。
+- 无 License、无 SBOM，以及存在其他可靠来源时的无 README 只生成 `ready + warning`；缺失 SBOM 时回退 Manifest，不冒充完整依赖图。
+- 无法安全脱敏或报告引用不属于当前 Run 时生成 `blocked`，禁止复制或导出。
 - D9.1 不调用 AI Provider；传入 AI 模式时返回 `github_analysis_ai_unavailable` 并复用规则报告。
 - 导入接口保留合同但不注册 Command；Project 仍与 Analysis Run 隔离。
 

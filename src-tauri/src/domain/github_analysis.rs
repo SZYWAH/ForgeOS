@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -90,6 +90,26 @@ string_enum!(GitHubAnalysisSourceType {
 
 string_enum!(GitHubAnalysisConfidence { High => "high", Medium => "medium", Low => "low" });
 
+string_enum!(GitHubRepositoryKind {
+    SourceApplication => "source_application",
+    Library => "library",
+    Monorepo => "monorepo",
+    ReleaseRegistry => "release_registry",
+    Documentation => "documentation",
+    Template => "template",
+    Unknown => "unknown",
+});
+
+string_enum!(GitHubSectionAvailability {
+    Available => "available",
+    SourceNotPresent => "source_not_present",
+    NotApplicable => "not_applicable",
+    BudgetLimited => "budget_limited",
+    StaticAnalysisInsufficient => "static_analysis_insufficient",
+});
+
+string_enum!(GitHubRecentActivityKind { Commit => "commit", Release => "release" });
+
 string_enum!(GitHubAnalysisWarning {
     TreeTruncated => "tree_truncated",
     BudgetExceeded => "budget_exceeded",
@@ -180,11 +200,29 @@ pub struct GitHubAnalysisCompleteness {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHubRecentActivity {
+    pub kind: GitHubRecentActivityKind,
+    pub identifier: String,
+    pub title: String,
+    pub occurred_at: Option<String>,
+    pub source_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitHubAnalysisReport {
+    #[serde(default)]
+    pub schema_version: Option<String>,
     pub repository: GitHubAnalysisRepositoryIdentity,
+    #[serde(default)]
+    pub repository_kind: Option<SourcedConclusion<GitHubRepositoryKind>>,
     pub overview: Option<SourcedConclusion<String>>,
     pub capabilities: Vec<SourcedConclusion<String>>,
     pub tech_stack: Vec<SourcedConclusion<String>>,
+    #[serde(default)]
+    pub product_tech_stack: Vec<SourcedConclusion<String>>,
+    #[serde(default)]
+    pub repository_tooling_stack: Vec<SourcedConclusion<String>>,
     pub architecture: Vec<SourcedConclusion<GitHubArchitectureModule>>,
     pub entrypoints: Vec<SourcedConclusion<GitHubEntrypoint>>,
     pub build_and_run: Vec<SourcedConclusion<String>>,
@@ -195,6 +233,10 @@ pub struct GitHubAnalysisReport {
     pub recommended_reading_order: Vec<SourcedConclusion<String>>,
     pub reproduction_assessment: SourcedConclusion<GitHubReproductionAssessment>,
     pub extension_points: Vec<SourcedConclusion<String>>,
+    #[serde(default)]
+    pub recent_activity: Vec<GitHubRecentActivity>,
+    #[serde(default)]
+    pub section_availability: BTreeMap<String, GitHubSectionAvailability>,
     pub user_question_answer: Option<SourcedConclusion<String>>,
     pub completeness: GitHubAnalysisCompleteness,
     pub quality_warnings: Vec<GitHubAnalysisWarning>,

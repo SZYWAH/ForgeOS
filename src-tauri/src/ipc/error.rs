@@ -36,6 +36,7 @@ impl From<GitHubAnalysisError> for IpcError {
             GitHubAnalysisError::PublicOnly => ("github_analysis_public_only", false),
             GitHubAnalysisError::AlreadyRunning => ("github_analysis_already_running", true),
             GitHubAnalysisError::InvalidPrompt => ("github_analysis_prompt_rejected", false),
+            GitHubAnalysisError::InvalidRepositoryUrl => ("github_repository_url_invalid", false),
             GitHubAnalysisError::VersionConflict => ("github_analysis_version_conflict", false),
             GitHubAnalysisError::Source(crate::ports::GitHubProjectSourceError::NotFound) => {
                 ("github_analysis_not_found", false)

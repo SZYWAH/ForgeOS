@@ -26,8 +26,9 @@ pub use context::{
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection};
 pub use github::{
     GitHubAnalysisPage, GitHubAnalysisRepository, GitHubAnalysisRepositoryMetadata, GitHubClient,
-    GitHubClientError, GitHubHead, GitHubProjectSource, GitHubProjectSourceError, GitHubRateLimit,
-    GitHubSupplementalSources, GitHubTextSource, GitHubTree, GitHubTreeEntry,
+    GitHubClientError, GitHubCommitMetadata, GitHubHead, GitHubProjectSource,
+    GitHubProjectSourceError, GitHubRateLimit, GitHubReleaseMetadata, GitHubSupplementalSources,
+    GitHubTextSource, GitHubTree, GitHubTreeEntry,
 };
 pub use repositories::{
     AchievementRepository, AiCandidateKernelRepository, AiCandidateRepository,

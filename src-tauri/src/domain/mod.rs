@@ -47,8 +47,9 @@ pub use github_analysis::{
     GitHubAnalysisReadiness, GitHubAnalysisReport, GitHubAnalysisRepositoryIdentity,
     GitHubAnalysisRun, GitHubAnalysisSource, GitHubAnalysisSourceType, GitHubAnalysisStage,
     GitHubAnalysisStatus, GitHubAnalysisWarning, GitHubArchitectureModule, GitHubDependencySummary,
-    GitHubEntrypoint, GitHubLicenseSummary, GitHubReproductionAssessment, ReproductionDifficulty,
-    SourcedConclusion,
+    GitHubEntrypoint, GitHubLicenseSummary, GitHubRecentActivity, GitHubRecentActivityKind,
+    GitHubRepositoryKind, GitHubReproductionAssessment, GitHubSectionAvailability,
+    ReproductionDifficulty, SourcedConclusion,
 };
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
 pub use project_memory::{RepositoryCommitObservation, RepositoryHistoryCursor};
