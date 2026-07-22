@@ -324,25 +324,40 @@ impl GitHubImportDraft {
 }
 
 pub fn parse_github_repository_url(value: &str) -> Result<(String, String), DomainError> {
-    let trimmed = value.trim().trim_end_matches('/');
-    let path = trimmed
+    let trimmed = value.trim();
+    let without_fragment = trimmed.split('#').next().unwrap_or_default();
+    let without_query = without_fragment.split('?').next().unwrap_or_default();
+    let path = without_query
+        .trim_end_matches('/')
         .strip_prefix("https://github.com/")
-        .or_else(|| trimmed.strip_prefix("http://github.com/"))
-        .or_else(|| trimmed.strip_prefix("github.com/"))
+        .or_else(|| {
+            without_query
+                .trim_end_matches('/')
+                .strip_prefix("http://github.com/")
+        })
+        .or_else(|| {
+            without_query
+                .trim_end_matches('/')
+                .strip_prefix("github.com/")
+        })
         .ok_or(DomainError::InvalidGitHubRepositoryUrl)?;
-    if path.contains(['?', '#']) {
-        return Err(DomainError::InvalidGitHubRepositoryUrl);
-    }
     let mut parts = path.split('/');
     let owner = parts.next().unwrap_or_default();
     let name = parts.next().unwrap_or_default().trim_end_matches(".git");
-    if owner.is_empty()
-        || name.is_empty()
-        || parts.next().is_some()
-        || !valid_segment(owner)
-        || !valid_segment(name)
-    {
+    if owner.is_empty() || name.is_empty() || !valid_segment(owner) || !valid_segment(name) {
         return Err(DomainError::InvalidGitHubRepositoryUrl);
+    }
+    let remainder = parts.collect::<Vec<_>>();
+    if let Some(section) = remainder.first().copied() {
+        let supported = match section {
+            "issues" => true,
+            "releases" => remainder.len() == 1 || remainder.get(1) == Some(&"tag"),
+            "tree" | "blob" => remainder.len() >= 3,
+            _ => false,
+        };
+        if !supported {
+            return Err(DomainError::InvalidGitHubRepositoryUrl);
+        }
     }
     Ok((owner.to_owned(), name.to_owned()))
 }
@@ -373,7 +388,20 @@ mod tests {
             parse_github_repository_url("https://github.com/SZYWAH/ForgeOS.git").unwrap(),
             ("SZYWAH".into(), "ForgeOS".into())
         );
-        assert!(parse_github_repository_url("https://github.com/SZYWAH/ForgeOS/issues").is_err());
+        for value in [
+            "https://github.com/SZYWAH/ForgeOS/issues",
+            "https://github.com/SZYWAH/ForgeOS/releases/tag/v0.2.0",
+            "https://github.com/SZYWAH/ForgeOS/tree/master/src-tauri",
+            "https://github.com/SZYWAH/ForgeOS/blob/master/README.md?plain=1#readme",
+        ] {
+            assert_eq!(
+                parse_github_repository_url(value).unwrap(),
+                ("SZYWAH".into(), "ForgeOS".into())
+            );
+        }
         assert!(parse_github_repository_url("https://example.com/a/b").is_err());
+        assert!(parse_github_repository_url("https://github.com/SZYWAH").is_err());
+        assert!(parse_github_repository_url("https://github.com/SZYWAH/ForgeOS/actions").is_err());
+        assert!(parse_github_repository_url("https://github.com/SZYWAH/ForgeOS/tree").is_err());
     }
 }
