@@ -193,13 +193,15 @@ async fn verify_core_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
     let ai_provider_columns: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pragma_table_info('ai_providers') \
-         WHERE name IN ('id', 'name', 'base_url', 'model', 'enabled', 'created_at', \
-         'updated_at', 'version')",
+         WHERE name IN ('id', 'name', 'base_url', 'model', 'protocol', 'auth_scheme', \
+         'secret_source', 'secret_required', 'environment_variable', \
+         'custom_auth_header', 'api_version', 'enabled', 'created_at', 'updated_at', \
+         'version')",
     )
     .fetch_one(pool)
     .await?;
 
-    if ai_provider_columns != 8 {
+    if ai_provider_columns != 15 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS AI Provider schema is incomplete".to_owned(),
         ));
@@ -435,6 +437,65 @@ pub enum DatabaseInitError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn ai_provider_compatibility_migration_preserves_existing_providers() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite should connect");
+        for migration in [
+            include_str!("../../../database/migrations/0001_create_workspaces_and_projects.sql"),
+            include_str!("../../../database/migrations/0002_project_identity_kernel.sql"),
+            include_str!("../../../database/migrations/0003_current_snapshot.sql"),
+            include_str!("../../../database/migrations/0004_development_session.sql"),
+            include_str!("../../../database/migrations/0005_evidence_kernel.sql"),
+            include_str!("../../../database/migrations/0006_ai_provider_foundation.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO ai_providers (id, name, base_url, model, enabled, created_at, updated_at, version) VALUES ('remote', 'Remote', 'https://api.example.test/v1', 'model', 1, '2026-07-23T00:00:00Z', '2026-07-23T00:00:00Z', 4), ('local', 'Local', 'http://localhost:11434/v1', 'local-model', 0, '2026-07-23T00:00:00Z', '2026-07-23T00:00:00Z', 2)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../database/migrations/0020_ai_provider_compatibility.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("compatibility migration should upgrade existing Providers");
+
+        let remote: (String, String, String, i64, i64) = sqlx::query_as(
+            "SELECT protocol, auth_scheme, secret_source, secret_required, version FROM ai_providers WHERE id = 'remote'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            remote,
+            (
+                "openai_chat_completions".into(),
+                "bearer".into(),
+                "credential_manager".into(),
+                1,
+                4,
+            )
+        );
+        let local: (String, String, i64, i64) = sqlx::query_as(
+            "SELECT auth_scheme, secret_source, secret_required, version FROM ai_providers WHERE id = 'local'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(local, ("none".into(), "none".into(), 0, 2));
+        let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(integrity, "ok");
+    }
 
     #[tokio::test]
     async fn pulse_quality_migration_preserves_legacy_pulse_and_source_links() {

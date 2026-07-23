@@ -241,6 +241,18 @@ pub enum DomainError {
     #[error("AI Provider base URL must be an HTTP or HTTPS URL without whitespace")]
     InvalidAiProviderBaseUrl,
 
+    #[error("AI Provider protocol is invalid")]
+    InvalidAiProviderProtocol,
+
+    #[error("AI Provider authentication configuration is invalid")]
+    InvalidAiProviderAuthentication,
+
+    #[error("AI Provider environment variable name is invalid")]
+    InvalidAiProviderEnvironmentVariable,
+
+    #[error("AI Provider custom authentication header is invalid")]
+    InvalidAiProviderAuthHeader,
+
     #[error("AI Provider version must be at least 1")]
     InvalidAiProviderVersion,
 

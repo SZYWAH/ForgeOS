@@ -27,7 +27,9 @@ pub use achievement::{
     AchievementSourceType, AchievementStatus, ProjectAchievement,
 };
 pub use ai_candidate::{AiCandidate, AiCandidateStatus, AiCandidateType};
-pub use ai_provider::{AiProvider, AiProviderDetails};
+pub use ai_provider::{
+    AiAuthScheme, AiProvider, AiProviderDetails, AiProviderProtocol, AiSecretSource,
+};
 pub use codex_execution::{CodexExecutionRecord, CodexExecutionStatus};
 pub use codex_task_proposal::{
     CodexTaskProposal, CodexTaskProposalDetails, CodexTaskProposalStatus,

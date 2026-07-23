@@ -501,6 +501,13 @@ struct AiProviderRow {
     name: String,
     base_url: String,
     model: String,
+    protocol: String,
+    auth_scheme: String,
+    secret_source: String,
+    secret_required: i64,
+    environment_variable: Option<String>,
+    custom_auth_header: Option<String>,
+    api_version: Option<String>,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -524,6 +531,21 @@ impl AiProviderRow {
                 name: self.name,
                 base_url: self.base_url,
                 model: self.model,
+                protocol: self.protocol.parse().map_err(corrupt)?,
+                auth_scheme: self.auth_scheme.parse().map_err(corrupt)?,
+                secret_source: self.secret_source.parse().map_err(corrupt)?,
+                secret_required: match self.secret_required {
+                    0 => false,
+                    1 => true,
+                    value => {
+                        return Err(RepositoryError::CorruptData(format!(
+                            "ai_providers.secret_required contains {value}"
+                        )))
+                    }
+                },
+                environment_variable: self.environment_variable,
+                custom_auth_header: self.custom_auth_header,
+                api_version: self.api_version,
             },
             enabled,
             parse_timestamp("ai_providers.created_at", &self.created_at)?,
@@ -534,8 +556,7 @@ impl AiProviderRow {
     }
 }
 
-const AI_PROVIDER_COLUMNS: &str =
-    "id, name, base_url, model, enabled, created_at, updated_at, version";
+const AI_PROVIDER_COLUMNS: &str = "id, name, base_url, model, protocol, auth_scheme, secret_source, secret_required, environment_variable, custom_auth_header, api_version, enabled, created_at, updated_at, version";
 
 #[derive(FromRow)]
 struct ContextExportRow {
@@ -1322,13 +1343,20 @@ impl AiProviderRepository for SqliteProjectRepository {
     async fn insert_ai_provider(&self, provider: &AiProvider) -> Result<(), RepositoryError> {
         sqlx::query(
             "INSERT INTO ai_providers \
-             (id, name, base_url, model, enabled, created_at, updated_at, version) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (id, name, base_url, model, protocol, auth_scheme, secret_source, secret_required, environment_variable, custom_auth_header, api_version, enabled, created_at, updated_at, version) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(provider.id())
         .bind(provider.name())
         .bind(provider.base_url())
         .bind(provider.model())
+        .bind(provider.protocol().as_str())
+        .bind(provider.auth_scheme().as_str())
+        .bind(provider.secret_source().as_str())
+        .bind(i64::from(provider.secret_required()))
+        .bind(provider.environment_variable())
+        .bind(provider.custom_auth_header())
+        .bind(provider.api_version())
         .bind(i64::from(provider.enabled()))
         .bind(timestamp(provider.created_at()))
         .bind(timestamp(provider.updated_at()))
@@ -1370,12 +1398,18 @@ impl AiProviderRepository for SqliteProjectRepository {
         expected_version: i64,
     ) -> Result<(), RepositoryError> {
         let result = sqlx::query(
-            "UPDATE ai_providers SET name = ?, base_url = ?, model = ?, enabled = ?, \
-             updated_at = ?, version = ? WHERE id = ? AND version = ?",
+            "UPDATE ai_providers SET name = ?, base_url = ?, model = ?, protocol = ?, auth_scheme = ?, secret_source = ?, secret_required = ?, environment_variable = ?, custom_auth_header = ?, api_version = ?, enabled = ?, updated_at = ?, version = ? WHERE id = ? AND version = ?",
         )
         .bind(provider.name())
         .bind(provider.base_url())
         .bind(provider.model())
+        .bind(provider.protocol().as_str())
+        .bind(provider.auth_scheme().as_str())
+        .bind(provider.secret_source().as_str())
+        .bind(i64::from(provider.secret_required()))
+        .bind(provider.environment_variable())
+        .bind(provider.custom_auth_header())
+        .bind(provider.api_version())
         .bind(i64::from(provider.enabled()))
         .bind(timestamp(provider.updated_at()))
         .bind(provider.version())
