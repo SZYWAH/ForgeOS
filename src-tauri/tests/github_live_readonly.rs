@@ -94,6 +94,7 @@ async fn analyzes_public_repository_with_rules_v2() {
             focus_type: "overview".into(),
             custom_prompt: None,
             analysis_mode: "rules".into(),
+            ai_provider_id: None,
         })
         .await
         .expect("analysis should start");
