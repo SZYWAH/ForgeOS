@@ -144,14 +144,30 @@ impl From<AiProviderError> for IpcError {
             AiProviderError::Validation(DomainError::AiProviderDisabled) => {
                 ("ai_provider_disabled", false)
             }
+            AiProviderError::Validation(DomainError::InvalidAiProviderProtocol) => {
+                ("ai_provider_protocol_unsupported", false)
+            }
+            AiProviderError::Validation(DomainError::InvalidAiProviderEnvironmentVariable) => {
+                ("ai_provider_environment_variable_invalid", false)
+            }
+            AiProviderError::Validation(DomainError::InvalidAiProviderBaseUrl) => {
+                ("ai_provider_endpoint_insecure", false)
+            }
+            AiProviderError::Validation(
+                DomainError::InvalidAiProviderAuthentication
+                | DomainError::InvalidAiProviderAuthHeader,
+            ) => ("ai_provider_auth_invalid", false),
             AiProviderError::Validation(_) => ("validation_error", false),
             AiProviderError::NotFound => ("ai_provider_not_found", false),
             AiProviderError::NameConflict => ("ai_provider_name_conflict", false),
             AiProviderError::VersionConflict { .. } => ("ai_provider_version_conflict", false),
             AiProviderError::ApiKeyTooLong => ("api_key_too_long", false),
+            AiProviderError::SecretMissing => ("ai_provider_secret_missing", false),
+            AiProviderError::SecretSourceMismatch => ("ai_provider_auth_invalid", false),
             AiProviderError::InvalidMessages => ("invalid_ai_messages", false),
             AiProviderError::SecretStore(_) => ("credential_store_error", true),
             AiProviderError::Invocation(_) => ("ai_provider_invocation_error", true),
+            AiProviderError::ConnectionTest(_) => ("ai_provider_connection_test_failed", true),
             AiProviderError::CorruptData(_) => ("corrupt_data", false),
             AiProviderError::Storage(_) => ("storage_error", true),
         };

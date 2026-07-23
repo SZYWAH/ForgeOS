@@ -405,6 +405,13 @@ pub struct CreateAiProviderRequest {
     pub name: String,
     pub base_url: String,
     pub model: String,
+    pub protocol: String,
+    pub auth_scheme: String,
+    pub secret_source: String,
+    pub secret_required: bool,
+    pub environment_variable: Option<String>,
+    pub custom_auth_header: Option<String>,
+    pub api_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -413,6 +420,13 @@ pub struct UpdateAiProviderRequest {
     pub name: String,
     pub base_url: String,
     pub model: String,
+    pub protocol: String,
+    pub auth_scheme: String,
+    pub secret_source: String,
+    pub secret_required: bool,
+    pub environment_variable: Option<String>,
+    pub custom_auth_header: Option<String>,
+    pub api_version: Option<String>,
     pub expected_version: i64,
 }
 
@@ -449,8 +463,16 @@ pub struct AiProviderDto {
     pub name: String,
     pub base_url: String,
     pub model: String,
+    pub protocol: String,
+    pub auth_scheme: String,
+    pub secret_source: String,
+    pub secret_required: bool,
+    pub environment_variable: Option<String>,
+    pub custom_auth_header: Option<String>,
+    pub api_version: Option<String>,
     pub enabled: bool,
     pub api_key_configured: bool,
+    pub secret_available: bool,
     pub created_at: String,
     pub updated_at: String,
     pub version: i64,
@@ -463,13 +485,31 @@ impl From<AiProviderView> for AiProviderDto {
             name: view.provider.name().to_owned(),
             base_url: view.provider.base_url().to_owned(),
             model: view.provider.model().to_owned(),
+            protocol: view.provider.protocol().as_str().into(),
+            auth_scheme: view.provider.auth_scheme().as_str().into(),
+            secret_source: view.provider.secret_source().as_str().into(),
+            secret_required: view.provider.secret_required(),
+            environment_variable: view.provider.environment_variable().map(str::to_owned),
+            custom_auth_header: view.provider.custom_auth_header().map(str::to_owned),
+            api_version: view.provider.api_version().map(str::to_owned),
             enabled: view.provider.enabled(),
             api_key_configured: view.api_key_configured,
+            secret_available: view.secret_available,
             created_at: timestamp(view.provider.created_at()),
             updated_at: timestamp(view.provider.updated_at()),
             version: view.provider.version(),
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProviderConnectionTestDto {
+    pub provider_id: String,
+    pub protocol: String,
+    pub model: String,
+    pub latency_ms: u128,
+    pub warning_codes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

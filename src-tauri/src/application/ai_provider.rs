@@ -1,11 +1,14 @@
-use std::{str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::Instant};
 
 use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    domain::{AiProvider, AiProviderDetails, DomainError},
+    domain::{
+        AiAuthScheme, AiProvider, AiProviderDetails, AiProviderProtocol, AiSecretSource,
+        DomainError,
+    },
     ports::{
         AiCompletion, AiMessage, AiMessageRole, AiProviderClient, AiProviderRepository,
         ApiKeyStore, RepositoryError,
@@ -41,8 +44,17 @@ pub enum AiProviderError {
     #[error("credential store is unavailable: {0}")]
     SecretStore(String),
 
+    #[error("AI Provider credential is missing")]
+    SecretMissing,
+
+    #[error("AI Provider credential source does not accept a stored API key")]
+    SecretSourceMismatch,
+
     #[error("AI Provider invocation failed: {0}")]
     Invocation(String),
+
+    #[error("AI Provider connection test failed: {0}")]
+    ConnectionTest(String),
 
     #[error("stored AI Provider data is invalid: {0}")]
     CorruptData(String),
@@ -56,6 +68,13 @@ pub struct CreateAiProviderInput {
     pub name: String,
     pub base_url: String,
     pub model: String,
+    pub protocol: String,
+    pub auth_scheme: String,
+    pub secret_source: String,
+    pub secret_required: bool,
+    pub environment_variable: Option<String>,
+    pub custom_auth_header: Option<String>,
+    pub api_version: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +82,13 @@ pub struct UpdateAiProviderInput {
     pub name: String,
     pub base_url: String,
     pub model: String,
+    pub protocol: String,
+    pub auth_scheme: String,
+    pub secret_source: String,
+    pub secret_required: bool,
+    pub environment_variable: Option<String>,
+    pub custom_auth_header: Option<String>,
+    pub api_version: Option<String>,
     pub expected_version: i64,
 }
 
@@ -87,6 +113,7 @@ pub struct AiMessageInput {
 pub struct AiProviderView {
     pub provider: AiProvider,
     pub api_key_configured: bool,
+    pub secret_available: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +121,15 @@ pub struct AiInvocationResult {
     pub provider_id: String,
     pub provider_name: String,
     pub completion: AiCompletion,
+}
+
+#[derive(Clone, Debug)]
+pub struct AiProviderConnectionTest {
+    pub provider_id: String,
+    pub protocol: String,
+    pub model: String,
+    pub latency_ms: u128,
+    pub warning_codes: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -122,7 +158,7 @@ impl AiProviderKernel {
     ) -> Result<AiProviderView, AiProviderError> {
         let provider = AiProvider::create(
             Uuid::now_v7().to_string(),
-            details(input.name, input.base_url, input.model),
+            details_from_create(input)?,
             Utc::now(),
         )?;
         match self.repository.insert_ai_provider(&provider).await {
@@ -156,7 +192,7 @@ impl AiProviderKernel {
     ) -> Result<AiProviderView, AiProviderError> {
         let mut provider = self.require_provider(provider_id).await?;
         ensure_version(input.expected_version, provider.version())?;
-        provider.update(details(input.name, input.base_url, input.model), Utc::now())?;
+        provider.update(details_from_update(&input)?, Utc::now())?;
         self.persist(&provider, input.expected_version).await?;
         self.view(provider).await
     }
@@ -182,6 +218,9 @@ impl AiProviderKernel {
         api_key: String,
     ) -> Result<AiProviderView, AiProviderError> {
         let provider = self.require_provider(provider_id).await?;
+        if provider.secret_source() != AiSecretSource::CredentialManager {
+            return Err(AiProviderError::SecretSourceMismatch);
+        }
         let api_key = api_key.trim();
         if api_key.chars().count() > MAX_API_KEY_LENGTH {
             return Err(AiProviderError::ApiKeyTooLong);
@@ -220,11 +259,7 @@ impl AiProviderKernel {
         let provider = self.require_provider(provider_id).await?;
         provider.ensure_enabled()?;
         let messages = validate_messages(input.messages)?;
-        let api_key = self
-            .api_key_store
-            .get(provider.id())
-            .await
-            .map_err(|error| AiProviderError::SecretStore(error.to_string()))?;
+        let api_key = self.resolve_secret(&provider).await?;
         let completion = self
             .client
             .complete(&provider, api_key, &messages)
@@ -234,6 +269,33 @@ impl AiProviderKernel {
             provider_id: provider.id().to_owned(),
             provider_name: provider.name().to_owned(),
             completion,
+        })
+    }
+
+    pub async fn test_connection(
+        &self,
+        provider_id: &str,
+    ) -> Result<AiProviderConnectionTest, AiProviderError> {
+        let provider = self.require_provider(provider_id).await?;
+        let secret = self.resolve_secret(&provider).await?;
+        let started = Instant::now();
+        self.client
+            .complete(
+                &provider,
+                secret,
+                &[AiMessage {
+                    role: AiMessageRole::User,
+                    content: "Reply with OK only.".into(),
+                }],
+            )
+            .await
+            .map_err(|error| AiProviderError::ConnectionTest(error.to_string()))?;
+        Ok(AiProviderConnectionTest {
+            provider_id: provider.id().to_owned(),
+            protocol: provider.protocol().as_str().into(),
+            model: provider.model().into(),
+            latency_ms: started.elapsed().as_millis(),
+            warning_codes: Vec::new(),
         })
     }
 
@@ -251,10 +313,41 @@ impl AiProviderKernel {
             .has(provider.id())
             .await
             .map_err(|error| AiProviderError::SecretStore(error.to_string()))?;
+        let secret_available = match provider.secret_source() {
+            AiSecretSource::CredentialManager => api_key_configured,
+            AiSecretSource::Environment => provider.environment_variable().is_some_and(|name| {
+                std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
+            }),
+            AiSecretSource::None => true,
+        };
         Ok(AiProviderView {
             provider,
             api_key_configured,
+            secret_available,
         })
+    }
+
+    async fn resolve_secret(
+        &self,
+        provider: &AiProvider,
+    ) -> Result<Option<String>, AiProviderError> {
+        let secret = match provider.secret_source() {
+            AiSecretSource::CredentialManager => self
+                .api_key_store
+                .get(provider.id())
+                .await
+                .map_err(|error| AiProviderError::SecretStore(error.to_string()))?,
+            AiSecretSource::Environment => provider
+                .environment_variable()
+                .and_then(|name| std::env::var(name).ok())
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty()),
+            AiSecretSource::None => None,
+        };
+        if provider.secret_required() && secret.is_none() {
+            return Err(AiProviderError::SecretMissing);
+        }
+        Ok(secret)
     }
 
     async fn persist(
@@ -281,12 +374,63 @@ impl AiProviderKernel {
     }
 }
 
-fn details(name: String, base_url: String, model: String) -> AiProviderDetails {
-    AiProviderDetails {
+fn details_from_create(input: CreateAiProviderInput) -> Result<AiProviderDetails, AiProviderError> {
+    details(
+        input.name,
+        input.base_url,
+        input.model,
+        input.protocol,
+        input.auth_scheme,
+        input.secret_source,
+        input.secret_required,
+        input.environment_variable,
+        input.custom_auth_header,
+        input.api_version,
+    )
+}
+
+fn details_from_update(
+    input: &UpdateAiProviderInput,
+) -> Result<AiProviderDetails, AiProviderError> {
+    details(
+        input.name.clone(),
+        input.base_url.clone(),
+        input.model.clone(),
+        input.protocol.clone(),
+        input.auth_scheme.clone(),
+        input.secret_source.clone(),
+        input.secret_required,
+        input.environment_variable.clone(),
+        input.custom_auth_header.clone(),
+        input.api_version.clone(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn details(
+    name: String,
+    base_url: String,
+    model: String,
+    protocol: String,
+    auth_scheme: String,
+    secret_source: String,
+    secret_required: bool,
+    environment_variable: Option<String>,
+    custom_auth_header: Option<String>,
+    api_version: Option<String>,
+) -> Result<AiProviderDetails, AiProviderError> {
+    Ok(AiProviderDetails {
         name,
         base_url,
         model,
-    }
+        protocol: AiProviderProtocol::from_str(&protocol)?,
+        auth_scheme: AiAuthScheme::from_str(&auth_scheme)?,
+        secret_source: AiSecretSource::from_str(&secret_source)?,
+        secret_required,
+        environment_variable,
+        custom_auth_header,
+        api_version,
+    })
 }
 
 fn ensure_version(expected: i64, actual: i64) -> Result<(), AiProviderError> {
