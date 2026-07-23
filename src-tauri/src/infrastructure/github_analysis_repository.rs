@@ -15,7 +15,7 @@ use crate::{
 
 use super::repositories::SqliteProjectRepository;
 
-const RUN_COLUMNS: &str = "id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version";
+const RUN_COLUMNS: &str = "id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version";
 
 #[derive(FromRow)]
 struct RunRow {
@@ -32,6 +32,8 @@ struct RunRow {
     status: String,
     stage: Option<String>,
     analysis_mode: String,
+    ai_provider_id: Option<String>,
+    ai_model: Option<String>,
     readiness: String,
     analyzer_revision: String,
     request_hash: String,
@@ -74,6 +76,8 @@ impl RunRow {
                 .map(|value| GitHubAnalysisStage::from_str(&value).map_err(corrupt))
                 .transpose()?,
             analysis_mode: GitHubAnalysisMode::from_str(&self.analysis_mode).map_err(corrupt)?,
+            ai_provider_id: self.ai_provider_id,
+            ai_model: self.ai_model,
             readiness: GitHubAnalysisReadiness::from_str(&self.readiness).map_err(corrupt)?,
             analyzer_revision: self.analyzer_revision,
             request_hash: self.request_hash,
@@ -145,13 +149,13 @@ impl GitHubAnalysisRepository for SqliteProjectRepository {
     }
 
     async fn insert_analysis_run(&self, run: &GitHubAnalysisRun) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO github_analysis_runs (id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO github_analysis_runs (id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(&run.id).bind(&run.workspace_id).bind(&run.github_repository_id)
             .bind(&run.owner).bind(&run.name).bind(&run.repository_url)
             .bind(&run.default_branch).bind(&run.source_commit_sha)
             .bind(run.focus_type.as_str()).bind(&run.custom_prompt)
             .bind(run.status.as_str()).bind(run.stage.map(|value| value.as_str()))
-            .bind(run.analysis_mode.as_str()).bind(run.readiness.as_str())
+            .bind(run.analysis_mode.as_str()).bind(&run.ai_provider_id).bind(&run.ai_model).bind(run.readiness.as_str())
             .bind(&run.analyzer_revision).bind(&run.request_hash)
             .bind(&run.report_json).bind(&run.report_markdown).bind(&run.content_hash)
             .bind(run.tree_entries_seen).bind(run.files_read).bind(run.files_skipped)
@@ -189,6 +193,30 @@ impl GitHubAnalysisRepository for SqliteProjectRepository {
         sqlx::query_as::<_, RunRow>(&format!("SELECT {RUN_COLUMNS} FROM github_analysis_runs WHERE workspace_id = ? AND request_hash = ?"))
             .bind(workspace_id).bind(request_hash).fetch_optional(&self.pool).await.map_err(storage)?
             .map(RunRow::into_domain).transpose()
+    }
+
+    async fn find_reusable_rules_run(
+        &self,
+        workspace_id: &str,
+        repository_id: &str,
+        head_sha: &str,
+        focus_type: &str,
+        custom_prompt: Option<&str>,
+    ) -> Result<Option<GitHubAnalysisRun>, RepositoryError> {
+        sqlx::query_as::<_, RunRow>(&format!(
+            "SELECT {RUN_COLUMNS} FROM github_analysis_runs WHERE workspace_id = ? AND github_repository_id = ? AND source_commit_sha = ? AND focus_type = ? AND ((custom_prompt IS NULL AND ? IS NULL) OR custom_prompt = ?) AND analysis_mode = 'rules' AND analyzer_revision = 'github-rules-v2' AND status IN ('ready', 'partial') AND readiness <> 'blocked' ORDER BY completed_at DESC, created_at DESC, id DESC LIMIT 1"
+        ))
+        .bind(workspace_id)
+        .bind(repository_id)
+        .bind(head_sha)
+        .bind(focus_type)
+        .bind(custom_prompt)
+        .bind(custom_prompt)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(RunRow::into_domain)
+        .transpose()
     }
 
     async fn list_analysis_runs(

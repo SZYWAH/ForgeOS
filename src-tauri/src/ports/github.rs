@@ -186,6 +186,14 @@ pub trait GitHubAnalysisRepository: Send + Sync {
         workspace_id: &str,
         request_hash: &str,
     ) -> Result<Option<GitHubAnalysisRun>, super::RepositoryError>;
+    async fn find_reusable_rules_run(
+        &self,
+        workspace_id: &str,
+        repository_id: &str,
+        head_sha: &str,
+        focus_type: &str,
+        custom_prompt: Option<&str>,
+    ) -> Result<Option<GitHubAnalysisRun>, super::RepositoryError>;
     async fn list_analysis_runs(
         &self,
         workspace_id: &str,

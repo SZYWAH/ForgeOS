@@ -38,6 +38,12 @@ impl From<GitHubAnalysisError> for IpcError {
             GitHubAnalysisError::InvalidPrompt => ("github_analysis_prompt_rejected", false),
             GitHubAnalysisError::InvalidRepositoryUrl => ("github_repository_url_invalid", false),
             GitHubAnalysisError::VersionConflict => ("github_analysis_version_conflict", false),
+            GitHubAnalysisError::AiProviderRequired => {
+                ("github_analysis_ai_provider_required", false)
+            }
+            GitHubAnalysisError::AiProviderUnavailable(_) => {
+                ("github_analysis_ai_provider_unavailable", true)
+            }
             GitHubAnalysisError::Source(crate::ports::GitHubProjectSourceError::NotFound) => {
                 ("github_analysis_not_found", false)
             }

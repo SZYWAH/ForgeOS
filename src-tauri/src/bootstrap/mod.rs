@@ -91,7 +91,8 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         github_token_store.clone(),
     );
     let github_analysis_kernel =
-        GitHubAnalysisKernel::new(repository.clone(), github_client, github_token_store);
+        GitHubAnalysisKernel::new(repository.clone(), github_client, github_token_store)
+            .with_ai_provider(Arc::new(ai_provider_kernel.clone()));
     tauri::async_runtime::block_on(github_analysis_kernel.recover_interrupted_runs())
         .map_err(|error| BootstrapError::GitHubClient(error.to_string()))?;
     let project_pulse_kernel = ProjectPulseKernel::new(

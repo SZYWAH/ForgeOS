@@ -120,6 +120,10 @@ string_enum!(GitHubAnalysisWarning {
     NoAnalyzableText => "no_analyzable_text",
     PromptSanitized => "prompt_sanitized",
     AiUnavailable => "github_analysis_ai_unavailable",
+    AiFallback => "github_analysis_ai_fallback",
+    AiInvalidResponse => "github_analysis_ai_invalid_response",
+    AiSourceInvalid => "github_analysis_ai_source_invalid",
+    AiProviderUnavailable => "github_analysis_ai_provider_unavailable",
 });
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,6 +291,8 @@ pub struct GitHubAnalysisRun {
     pub status: GitHubAnalysisStatus,
     pub stage: Option<GitHubAnalysisStage>,
     pub analysis_mode: GitHubAnalysisMode,
+    pub ai_provider_id: Option<String>,
+    pub ai_model: Option<String>,
     pub readiness: GitHubAnalysisReadiness,
     pub analyzer_revision: String,
     pub request_hash: String,
@@ -324,6 +330,8 @@ impl GitHubAnalysisRun {
         focus_type: GitHubAnalysisFocus,
         custom_prompt: Option<String>,
         analysis_mode: GitHubAnalysisMode,
+        ai_provider_id: Option<String>,
+        ai_model: Option<String>,
         analyzer_revision: String,
         request_hash: String,
         now: DateTime<Utc>,
@@ -339,6 +347,11 @@ impl GitHubAnalysisRun {
             || custom_prompt
                 .as_ref()
                 .is_some_and(|value| value.chars().count() > 2_000)
+            || (analysis_mode == GitHubAnalysisMode::Ai
+                && (ai_provider_id.as_deref().is_none_or(str::is_empty)
+                    || ai_model.as_deref().is_none_or(str::is_empty)))
+            || (analysis_mode == GitHubAnalysisMode::Rules
+                && (ai_provider_id.is_some() || ai_model.is_some()))
         {
             return Err(DomainError::InvalidGitHubAnalysis(
                 "invalid analysis request".into(),
@@ -358,6 +371,8 @@ impl GitHubAnalysisRun {
             status: GitHubAnalysisStatus::Queued,
             stage: Some(GitHubAnalysisStage::Resolving),
             analysis_mode,
+            ai_provider_id,
+            ai_model,
             readiness: GitHubAnalysisReadiness::Incomplete,
             analyzer_revision,
             request_hash,
@@ -506,6 +521,8 @@ mod tests {
             GitHubAnalysisFocus::Overview,
             None,
             GitHubAnalysisMode::Rules,
+            None,
+            None,
             "github-rules-v1".into(),
             "a".repeat(64),
             Utc::now(),
@@ -539,6 +556,43 @@ mod tests {
         );
         run.archive(now).expect("terminal run can be archived");
         assert_eq!(run.status, GitHubAnalysisStatus::Archived);
+    }
+
+    #[test]
+    fn ai_analysis_requires_provider_and_model_while_rules_forbid_them() {
+        let create = |mode, provider, model| {
+            GitHubAnalysisRun::create(
+                "run-ai".into(),
+                "workspace".into(),
+                "repository".into(),
+                "owner".into(),
+                "sample".into(),
+                "https://github.com/owner/sample".into(),
+                "main".into(),
+                "0123456789abcdef".into(),
+                GitHubAnalysisFocus::Overview,
+                None,
+                mode,
+                provider,
+                model,
+                "revision".into(),
+                "b".repeat(64),
+                Utc::now(),
+            )
+        };
+        assert!(create(GitHubAnalysisMode::Ai, None, None).is_err());
+        assert!(create(
+            GitHubAnalysisMode::Ai,
+            Some("provider-1".into()),
+            Some("model-1".into())
+        )
+        .is_ok());
+        assert!(create(
+            GitHubAnalysisMode::Rules,
+            Some("provider-1".into()),
+            Some("model-1".into())
+        )
+        .is_err());
     }
 
     #[test]

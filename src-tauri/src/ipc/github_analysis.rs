@@ -19,6 +19,7 @@ pub struct StartRequest {
     pub focus_type: String,
     pub custom_prompt: Option<String>,
     pub analysis_mode: String,
+    pub ai_provider_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -60,6 +61,12 @@ pub struct StatusDto {
     pub name: String,
     pub repository_url: String,
     pub focus_type: String,
+    pub custom_prompt: Option<String>,
+    pub analysis_mode: String,
+    pub ai_provider_id: Option<String>,
+    pub ai_model: Option<String>,
+    pub analysis_method: String,
+    pub ai_fallback_used: bool,
     pub status: String,
     pub readiness: String,
     pub stage: Option<String>,
@@ -86,12 +93,34 @@ pub struct StatusDto {
 impl From<GitHubAnalysisStatusView> for StatusDto {
     fn from(value: GitHubAnalysisStatusView) -> Self {
         let run = value.run;
+        let ai_fallback_used = run
+            .report_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<GitHubAnalysisReport>(value).ok())
+            .is_some_and(|report| {
+                report
+                    .quality_warnings
+                    .contains(&crate::domain::GitHubAnalysisWarning::AiFallback)
+            });
+        let analysis_method = if run.analysis_mode.as_str() == "rules" {
+            "local_rules"
+        } else if ai_fallback_used {
+            "rules_fallback"
+        } else {
+            "ai_enhanced"
+        };
         Self {
             analysis_run_id: run.id,
             owner: run.owner,
             name: run.name,
             repository_url: run.repository_url,
             focus_type: run.focus_type.as_str().into(),
+            custom_prompt: run.custom_prompt,
+            analysis_mode: run.analysis_mode.as_str().into(),
+            ai_provider_id: run.ai_provider_id,
+            ai_model: run.ai_model,
+            analysis_method: analysis_method.into(),
+            ai_fallback_used,
             status: run.status.as_str().into(),
             readiness: run.readiness.as_str().into(),
             stage: run.stage.map(|value| value.as_str().into()),
@@ -190,6 +219,7 @@ pub async fn start_github_analysis(
             focus_type: input.focus_type,
             custom_prompt: input.custom_prompt,
             analysis_mode: input.analysis_mode,
+            ai_provider_id: input.ai_provider_id,
         })
         .await?;
     if !result.reused_existing_run {

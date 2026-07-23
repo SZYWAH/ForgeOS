@@ -14,7 +14,7 @@ use crate::{
 
 const MAX_API_KEY_LENGTH: usize = 16_384;
 const MAX_MESSAGES: usize = 50;
-const MAX_MESSAGE_LENGTH: usize = 50_000;
+const MAX_MESSAGE_LENGTH: usize = 65_000;
 
 #[derive(Debug, Error)]
 pub enum AiProviderError {
