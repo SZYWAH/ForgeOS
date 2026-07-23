@@ -1,9 +1,9 @@
 # ForgeOS GitHub Analysis Contract
 
-- 状态：D9.1.1 rules-v2 质量强化已实现
-- 适用范围：D9.1 GitHub Project Intelligence
+- 状态：D9.2 用户主动 AI 增强已实现
+- 适用范围：D9.1–D9.2 GitHub Project Intelligence
 
-实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；D9.1.1 增加仓库性质识别、产品技术栈与维护工具拆分、最近活动和章节可用性。AI 增强和导入衔接仍属于后续阶段。
+实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；D9.1.1 冻结 rules-v2 质量；D9.2 增加用户主动、来源治理的 AI 增强和可靠规则回退。导入衔接仍属于后续阶段。
 
 ## 1. 术语与生命周期边界
 
@@ -98,8 +98,9 @@ interface StartGitHubAnalysisResult {
 - 规范化后的自定义 Prompt Hash。
 - `analysis_mode`。
 - `analyzer_revision`。
+- AI 模式下的 Provider ID、Provider Version、Model 和 AI Prompt Revision。
 
-相同请求返回已有 Run，不重复消耗 GitHub 或 AI 预算。HEAD 变化会形成新 Run，旧 Run 保留并标记为 stale。
+相同请求返回已有 Run，不重复消耗 GitHub 或 AI 预算。Rules Hash 保持 D9.1.1 兼容；AI 配置或模型变化会形成新 Run。HEAD 变化会形成新 Run，旧 Run 保留并标记为 stale。
 
 ## 4. 数据存储合同
 
@@ -217,6 +218,7 @@ interface GitHubAnalysisReport {
 - 每个非空结论必须至少引用一个属于当前 Run 的真实 `sourceId`。
 - 引用不存在、跨 Run 或被安全策略阻断时，结论必须被拒绝。
 - AI 可以改写和组织已选来源，但不能制造无来源结论。
+- AI 只能增强简介、功能、架构职责、风险、阅读顺序、静态复现说明、二开切入点和用户问题回答；其他字段保持 rules-v2。
 - 规则报告和 AI 报告使用同一 Schema、同一引用验证器和同一 Markdown Renderer。
 - 构建、运行、测试、License 和复现难度都只能表述为“静态分析判断”，不得宣称已经实际执行或验证。
 
@@ -299,6 +301,8 @@ GitHub 对公开数据的未认证主限额为每小时 60 次；个人访问令
 
 缓存键为 Repository ID + HEAD SHA + Request Hash。缓存命中时不得重新调用 GitHub 或 AI。
 
+D9.2 AI Run 优先复用同 HEAD、重点和自定义问题的已完成 rules-v2 安全来源。复用时为 AI Run 重建 Source ID；旧规则报告及其 Hash 永不改写。AI 输入最多 60,000 字符，首次非法 JSON 只允许一次格式修复，仍失败则保存规则回退报告。
+
 遇到限流时：
 
 - 当前 Run 标记 `partial` 或 `failed`。
@@ -330,8 +334,10 @@ type GitHubAnalysisErrorCode =
   | "github_analysis_budget_exceeded"
   | "github_analysis_source_unavailable"
   | "github_analysis_prompt_rejected"
-  | "github_analysis_ai_unavailable"
-  | "github_analysis_ai_invalid"
+  | "github_analysis_ai_provider_required"
+  | "github_analysis_ai_provider_unavailable"
+  | "github_analysis_ai_invalid_response"
+  | "github_analysis_ai_source_invalid"
   | "github_analysis_stale"
   | "github_analysis_version_conflict"
   | "github_analysis_storage_error"
@@ -346,6 +352,11 @@ interface GitHubAnalysisStatusDto {
   analysisRunId: string;
   status: "queued" | "collecting" | "analyzing" | "ready" | "partial" | "failed" | "archived";
   readiness: "ready" | "warning" | "incomplete" | "blocked";
+  analysisMode: "rules" | "ai";
+  aiProviderId: string | null;
+  aiModel: string | null;
+  analysisMethod: "local_rules" | "ai_enhanced" | "rules_fallback";
+  aiFallbackUsed: boolean;
   stage: "resolving" | "collecting_tree" | "reading_sources" | "rules_analysis" | "ai_analysis" | "persisting" | null;
   defaultBranch: string;
   sourceCommitSha: string;
@@ -439,8 +450,10 @@ interface GitHubAnalysisProgressEvent {
 | `github_analysis_budget_exceeded` | 超出 ForgeOS 文件或文本预算。 | 停止继续采集，标记 partial。 |
 | `github_analysis_source_unavailable` | 关键来源读取失败。 | 可降级则 partial，否则 failed。 |
 | `github_analysis_prompt_rejected` | 自定义问题超长或触发安全策略。 | 不调用 AI。 |
-| `github_analysis_ai_unavailable` | AI 未配置、禁用或调用失败。 | 回退规则报告。 |
-| `github_analysis_ai_invalid` | AI 输出或来源引用无效。 | 丢弃 AI 结果，回退规则报告。 |
+| `github_analysis_ai_provider_required` | AI 模式没有选择 Provider。 | 创建 Run 前拒绝。 |
+| `github_analysis_ai_provider_unavailable` | Provider 不存在、禁用、模型为空或运行时调用失败。 | 配置错误在创建前拒绝；运行时失败回退规则报告。 |
+| `github_analysis_ai_invalid_response` | AI 输出结构、长度或字段不符合合同。 | 修复一次后丢弃 AI 结果，回退规则报告。 |
+| `github_analysis_ai_source_invalid` | AI 引用了跨 Run、未发送或不适用来源。 | 丢弃整个 AI 结果，回退规则报告。 |
 | `github_analysis_stale` | 默认分支 HEAD 已变化。 | 保留旧报告，允许用户重新分析。 |
 | `github_analysis_version_conflict` | 报告状态已在其他窗口变化。 | 重新加载，不覆盖。 |
 | `github_analysis_storage_error` | 无法安全保存 Run 或来源。 | 整体回滚。 |
@@ -469,14 +482,14 @@ interface GitHubAnalysisProgressEvent {
 | 正在采集 | Tree、文件、跳过数和 API 预算。 | 无 |
 | 规则分析 | 正在生成带来源的确定性报告。 | 无 |
 | AI 增强 | 明确 AI 已由用户启用，失败会回退规则报告。 | 无 |
-| 完成 | 完整度、结构化章节和来源引用。 | 导入为 ForgeOS 项目 |
-| 部分完成 | 可用章节与缺失来源说明。 | 导入为 ForgeOS 项目 |
+| 完成 | 完整度、结构化章节和来源引用。 | 复制分析报告 |
+| 部分完成 | 可用章节与缺失来源说明。 | 复制分析报告 |
 | 限流 | 重置时间与已保存进度。 | 到时后重新分析 |
 | 仓库不存在 | 可操作的 URL/权限提示。 | 修改地址 |
 | 分析失败 | 阶段、错误原因和安全重试入口。 | 重新分析 |
 | 报告过期 | 原 HEAD、当前 HEAD 与差异说明。 | 重新分析 |
 
-报告页唯一主操作为“导入为 ForgeOS 项目”。重新分析、复制报告和归档为次级操作。任何页面都不得出现克隆、运行、复现执行、Fork、Push、PR 或自动二开按钮。
+报告页唯一主操作为“复制分析报告”。规则报告可以通过次级操作生成独立的 AI 增强报告，重新分析和归档也保持为次级操作。“导入为 ForgeOS 项目”延后到 D9.3。任何页面都不得出现克隆、运行、复现执行、Fork、Push、PR 或自动二开按钮。
 
 ### 本地化键合同
 
