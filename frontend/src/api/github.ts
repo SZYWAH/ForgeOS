@@ -14,7 +14,7 @@ export const githubApi = {
 };
 
 export const githubAnalysisApi = {
-  start: (input: { workspaceId: string; repositoryUrl: string; focusType: GitHubAnalysisFocus; customPrompt?: string; analysisMode: "rules" }) => invoke<StartGitHubAnalysisResult>("start_github_analysis", { input }),
+  start: (input: { workspaceId: string; repositoryUrl: string; focusType: GitHubAnalysisFocus; customPrompt?: string; analysisMode: "rules" | "ai"; aiProviderId?: string }) => invoke<StartGitHubAnalysisResult>("start_github_analysis", { input }),
   getStatus: (workspaceId: string, analysisRunId: string) => invoke<GitHubAnalysisStatusView>("get_github_analysis_status", { input: { workspaceId, analysisRunId } }),
   getReport: (workspaceId: string, analysisRunId: string) => invoke<GitHubAnalysisReportView>("get_github_analysis_report", { input: { workspaceId, analysisRunId } }),
   list: (workspaceId: string, cursor?: string, limit = 20) => invoke<GitHubAnalysisList>("list_github_analyses", { input: { workspaceId, cursor, limit } }),

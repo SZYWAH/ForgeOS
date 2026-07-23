@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { githubAnalysisApi } from "../api/github";
+import { aiProviderApi } from "../api/ai-provider";
 import { projectKernelApi } from "../api/project-kernel";
 import { EmptyState, PageIntro } from "../components/ui/PlainLanguage";
-import type { GitHubAnalysisFocus, GitHubAnalysisStatusView } from "../types/github";
+import type { AiProvider } from "../types/ai-provider";
+import type { GitHubAnalysisFocus, GitHubAnalysisMode, GitHubAnalysisStatusView } from "../types/github";
 import { formatUpdatedAt } from "../utils/format";
 import { localizeAppError } from "../utils/appError";
 
@@ -20,6 +22,9 @@ export function GitHubAnalysisPage() {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [focusType, setFocusType] = useState<GitHubAnalysisFocus>("overview");
   const [customPrompt, setCustomPrompt] = useState("");
+  const [analysisMode, setAnalysisMode] = useState<GitHubAnalysisMode>("rules");
+  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [aiProviderId, setAiProviderId] = useState("");
   const [runs, setRuns] = useState<GitHubAnalysisStatusView[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -43,7 +48,13 @@ export function GitHubAnalysisPage() {
         return;
       }
       setWorkspaceId(workspace.id);
-      const page = await githubAnalysisApi.list(workspace.id);
+      const [page, availableProviders] = await Promise.all([
+        githubAnalysisApi.list(workspace.id),
+        aiProviderApi.list().catch(() => [] as AiProvider[]),
+      ]);
+      const enabledProviders = availableProviders.filter((provider) => provider.enabled);
+      setProviders(enabledProviders);
+      if (enabledProviders.length === 1) setAiProviderId(enabledProviders[0].id);
       setRuns(page.items); setCursor(page.nextCursor);
     } catch (reason) { setError(errorText(reason)); }
   }
@@ -53,7 +64,7 @@ export function GitHubAnalysisPage() {
     if (!workspaceId) return;
     setBusy(true); setError(undefined);
     try {
-      const result = await githubAnalysisApi.start({ workspaceId, repositoryUrl: repositoryUrl.trim(), focusType, customPrompt: focusType === "custom" ? customPrompt.trim() : undefined, analysisMode: "rules" });
+      const result = await githubAnalysisApi.start({ workspaceId, repositoryUrl: repositoryUrl.trim(), focusType, customPrompt: focusType === "custom" ? customPrompt.trim() : undefined, analysisMode, aiProviderId: analysisMode === "ai" ? aiProviderId : undefined });
       navigate(`/github-import/analyses/${result.analysisRunId}`);
     } catch (reason) { setError(errorText(reason)); }
     finally { setBusy(false); }
@@ -69,12 +80,14 @@ export function GitHubAnalysisPage() {
     <PageIntro title={t("githubAnalysis.title")} description={t("githubAnalysis.description")} />
     <div className="github-mode-tabs" aria-label={t("githubAnalysis.modeLabel")}><span aria-current="page">{t("githubAnalysis.analysisMode")}</span><button type="button" onClick={() => navigate("/github-import?mode=import")}>{t("githubAnalysis.importMode")}</button></div>
     <section className="surface github-analysis-start">
-      <div><h2>{t("githubAnalysis.startTitle")}</h2><p>{t("githubAnalysis.rulesOnly")}</p></div>
+      <div><h2>{t("githubAnalysis.startTitle")}</h2><p>{t("githubAnalysis.analysisChoiceDescription")}</p></div>
       <form onSubmit={start}>
         <label>{t("githubAnalysis.repositoryUrl")}<input required type="url" value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" /></label>
         <label>{t("githubAnalysis.focus")}<select value={focusType} onChange={(event) => setFocusType(event.target.value as GitHubAnalysisFocus)}>{FOCUS_VALUES.map((value) => <option value={value} key={value}>{t(`githubAnalysis.focus_${value}`)}</option>)}</select></label>
         {focusType === "custom" ? <label className="span-2">{t("githubAnalysis.customQuestion")}<textarea required maxLength={2000} rows={3} value={customPrompt} onChange={(event) => setCustomPrompt(event.target.value)} /></label> : null}
-        <div className="span-2 form-actions"><button className="primary-button" disabled={busy || !workspaceId} type="submit">{busy ? t("githubAnalysis.resolving") : t("githubAnalysis.start")}</button></div>
+        <fieldset className="span-2 analysis-mode-options"><legend>{t("githubAnalysis.analysisMethod")}</legend><label><input type="radio" name="analysis-mode" checked={analysisMode === "rules"} onChange={() => setAnalysisMode("rules")} /><span><strong>{t("githubAnalysis.localRules")}</strong><small>{t("githubAnalysis.localRulesDescription")}</small></span></label><label><input type="radio" name="analysis-mode" checked={analysisMode === "ai"} onChange={() => setAnalysisMode("ai")} /><span><strong>{t("githubAnalysis.aiEnhanced")}</strong><small>{t("githubAnalysis.aiEnhancedDescription")}</small></span></label></fieldset>
+        {analysisMode === "ai" ? <div className="span-2 ai-provider-choice">{providers.length ? <label>{t("githubAnalysis.aiProvider")}<select required value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}><option value="">{t("githubAnalysis.selectAiProvider")}</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>)}</select></label> : <div className="notice notice--warning"><strong>{t("githubAnalysis.noAiProvider")}</strong><p>{t("githubAnalysis.noAiProviderDescription")}</p><button className="secondary-button" type="button" onClick={() => navigate("/settings/ai-providers")}>{t("githubAnalysis.configureAiProvider")}</button></div>}</div> : null}
+        <div className="span-2 form-actions"><button className="primary-button" disabled={busy || !workspaceId || (analysisMode === "ai" && !aiProviderId)} type="submit">{busy ? t("githubAnalysis.resolving") : t("githubAnalysis.start")}</button></div>
       </form>
     </section>
     {error ? <div className="error-banner">{error}</div> : null}

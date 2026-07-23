@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { githubAnalysisApi } from "../api/github";
+import { aiProviderApi } from "../api/ai-provider";
 import { projectKernelApi } from "../api/project-kernel";
 import { CompactIdentifier } from "../components/content/ContentGovernance";
 import { PageIntro } from "../components/ui/PlainLanguage";
@@ -14,6 +15,7 @@ import type {
   GitHubSectionAvailability,
   SourcedConclusion,
 } from "../types/github";
+import type { AiProvider } from "../types/ai-provider";
 import { localizeAppError } from "../utils/appError";
 
 const RUNNING = new Set(["queued", "collecting", "analyzing"]);
@@ -27,6 +29,8 @@ export function GitHubAnalysisReportPage() {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [aiProviderId, setAiProviderId] = useState("");
 
   const errorText = (reason: unknown) => {
     const value = localizeAppError(reason, t);
@@ -59,7 +63,14 @@ export function GitHubAnalysisReportPage() {
         return;
       }
       setWorkspaceId(workspace.id);
-      setView(await githubAnalysisApi.getReport(workspace.id, analysisId));
+      const [report, availableProviders] = await Promise.all([
+        githubAnalysisApi.getReport(workspace.id, analysisId),
+        aiProviderApi.list().catch(() => [] as AiProvider[]),
+      ]);
+      const enabledProviders = availableProviders.filter((provider) => provider.enabled);
+      setProviders(enabledProviders);
+      if (enabledProviders.length === 1) setAiProviderId(enabledProviders[0].id);
+      setView(report);
     } catch (reason) {
       setError(errorText(reason));
     }
@@ -101,6 +112,27 @@ export function GitHubAnalysisReportPage() {
     }
   }
 
+  async function enhanceWithAi() {
+    if (!workspaceId || !view || !aiProviderId) return;
+    setBusy(true); setError(undefined);
+    try {
+      const status = view.status;
+      const result = await githubAnalysisApi.start({
+        workspaceId,
+        repositoryUrl: status.repositoryUrl,
+        focusType: status.focusType,
+        customPrompt: status.customPrompt,
+        analysisMode: "ai",
+        aiProviderId,
+      });
+      navigate(`/github-import/analyses/${result.analysisRunId}`);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copy() {
     if (!view?.contentMarkdown || view.status.readiness === "blocked") return;
     await navigator.clipboard.writeText(view.contentMarkdown);
@@ -125,6 +157,7 @@ export function GitHubAnalysisReportPage() {
     {error ? <div className="error-banner">{error}</div> : null}
     {legacy ? <div className="notice notice--warning"><strong>{t("githubAnalysis.legacyReport")}</strong><p>{t("githubAnalysis.legacyReportDescription")}</p></div> : null}
     <AnalysisStatus view={view} />
+    {!running && status.analysisMode === "rules" && status.readiness !== "blocked" ? <section className="surface github-ai-enhance"><div><h2>{t("githubAnalysis.enhanceReport")}</h2><p>{t("githubAnalysis.enhanceReportDescription")}</p></div>{providers.length ? <div className="github-ai-enhance__actions"><label>{t("githubAnalysis.aiProvider")}<select value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}><option value="">{t("githubAnalysis.selectAiProvider")}</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>)}</select></label><button className="secondary-button" disabled={busy || !aiProviderId} type="button" onClick={() => void enhanceWithAi()}>{t("githubAnalysis.enhanceAction")}</button></div> : <div className="notice notice--warning"><p>{t("githubAnalysis.noAiProviderDescription")}</p><button className="secondary-button" type="button" onClick={() => navigate("/settings/ai-providers")}>{t("githubAnalysis.configureAiProvider")}</button></div>}</section> : null}
     {view.report ? <ReportDocument view={view} /> : null}
     {!running && status.status !== "archived" ? <div className="github-analysis-actions"><button className="secondary-button" disabled={busy} onClick={() => void reanalyze()} type="button">{t("githubAnalysis.reanalyze")}</button><button className="text-button" disabled={busy} onClick={() => void archive()} type="button">{t("githubAnalysis.archive")}</button></div> : null}
     <details className="technical-details"><summary>{t("common.technicalDetails")}</summary><dl><dt>HEAD</dt><dd><CompactIdentifier value={status.sourceCommitSha} copyable /></dd><dt>Analyzer</dt><dd>{status.analyzerRevision}</dd><dt>SHA-256</dt><dd><CompactIdentifier value={view.contentHash ?? "-"} copyable={Boolean(view.contentHash)} /></dd></dl></details>
@@ -136,7 +169,7 @@ function AnalysisStatus({ view }: { view: GitHubAnalysisReportView }) {
   const status = view.status;
   const warning = status.status === "partial" || status.readiness === "blocked" || status.readiness === "warning";
   return <section className={`notice ${status.status === "failed" ? "notice--danger" : warning ? "notice--warning" : "notice--info"}`}>
-    <div><strong>{t(`githubAnalysis.status_${status.status}`)}</strong><p>{status.stage ? t(`githubAnalysis.stage_${status.stage}`) : t(`githubAnalysis.readiness_${status.readiness}`)}</p></div>
+    <div><strong>{t(`githubAnalysis.status_${status.status}`)} · {t(`githubAnalysis.method_${status.analysisMethod}`)}</strong><p>{status.stage ? t(`githubAnalysis.stage_${status.stage}`) : t(`githubAnalysis.readiness_${status.readiness}`)}</p>{status.analysisMode === "ai" && status.aiModel ? <small>{t("githubAnalysis.aiModel", { model: status.aiModel })}</small> : null}</div>
     <div className="analysis-progress-metrics"><span>{t("githubAnalysis.treeCount", { count: status.treeEntriesSeen })}</span><span>{t("githubAnalysis.readCount", { count: status.filesRead })}</span><span>{t("githubAnalysis.skippedCount", { count: status.filesSkipped })}</span><span>{t("githubAnalysis.rateRemaining", { count: status.apiRequestsRemaining ?? t("common.unknown") })}</span></div>
     {status.errorSummary ? <p>{status.errorSummary}</p> : null}
     {status.stale ? <p>{t("githubAnalysis.stale")}</p> : null}

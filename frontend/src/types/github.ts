@@ -61,6 +61,8 @@ export type GitHubAnalysisFocus = "overview" | "architecture" | "learning" | "re
 export type GitHubAnalysisStatus = "queued" | "collecting" | "analyzing" | "ready" | "partial" | "failed" | "archived";
 export type GitHubAnalysisReadiness = "ready" | "warning" | "incomplete" | "blocked";
 export type GitHubAnalysisStage = "resolving" | "collecting_tree" | "reading_sources" | "rules_analysis" | "ai_analysis" | "persisting";
+export type GitHubAnalysisMode = "rules" | "ai";
+export type GitHubAnalysisMethod = "local_rules" | "ai_enhanced" | "rules_fallback";
 export type GitHubAnalysisConfidence = "high" | "medium" | "low";
 export type GitHubRepositoryKind = "source_application" | "library" | "monorepo" | "release_registry" | "documentation" | "template" | "unknown";
 export type GitHubSectionAvailability = "available" | "source_not_present" | "not_applicable" | "budget_limited" | "static_analysis_insufficient";
@@ -70,7 +72,9 @@ export type SourcedConclusion<T> = { value: T; confidence: GitHubAnalysisConfide
 
 export type GitHubAnalysisStatusView = {
   analysisRunId: string; owner: string; name: string; repositoryUrl: string;
-  focusType: GitHubAnalysisFocus; status: GitHubAnalysisStatus;
+  focusType: GitHubAnalysisFocus; customPrompt?: string; status: GitHubAnalysisStatus;
+  analysisMode: GitHubAnalysisMode; aiProviderId?: string; aiModel?: string;
+  analysisMethod: GitHubAnalysisMethod; aiFallbackUsed: boolean;
   readiness: GitHubAnalysisReadiness; stage?: GitHubAnalysisStage;
   defaultBranch: string; sourceCommitSha: string; analyzerRevision: string; stale: boolean;
   treeEntriesSeen: number; filesRead: number; filesSkipped: number; sourceBytes: number;
