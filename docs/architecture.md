@@ -612,24 +612,27 @@ flowchart TD
     APP --> PORT1["GitHubProjectSource Port"]
     APP --> PORT2["GitHubAnalysisRepository Port"]
     APP --> RULES["Deterministic Analyzer"]
+    APP --> AI["Source-governed AI Enhancer"]
     APP --> SAFE["Source Selection and Redaction"]
     PORT1 --> GH["GitHub Read-only REST Adapter"]
     PORT2 --> DB["SQLite Analysis Runs and Sources"]
     SAFE --> RULES
     RULES --> REPORT["Sourced Analysis Report"]
-    REPORT -.->|"D9.2 计划"| IMPORT["Existing GitHub Import Draft"]
+    RULES -->|"用户主动选择 Provider"| AI
+    AI --> REPORT
+    REPORT -.->|"D9.3 计划"| IMPORT["Existing GitHub Import Draft"]
     IMPORT -->|"人工确认"| PROJECT["Project Kernel"]
 ```
 
 ### 模块职责
 
 - `GitHubProjectSource`：解析公开 Repository 身份，读取 metadata、默认分支 HEAD、Tree 和受限来源。只暴露读取方法。
-- `GitHubAnalysisKernel`：编排幂等请求、采集预算、状态机、规则分析、报告验证和归档。D9.1 对 AI 请求明确回退规则报告，不调用 Provider。
+- `GitHubAnalysisKernel`：编排幂等请求、采集预算、状态机、规则分析、用户主动 AI 增强、报告验证和归档。
 - `SourceSelectionPolicy`：按固定优先级选择最多 64 个文本文件，并执行大小、类型、路径和总量预算。
 - `GitHubAnalysisContentPolicy`：把 Repository 内容视为不可信数据，执行 Secret、绝对路径和提示词脱敏。
 - `GitHubAnalysisRenderer`：从通过引用校验的结构化报告确定性生成 Markdown 和 `content_hash`。
 - `GitHubAnalysisRepository`：保存 Analysis Run 与受限 Source 摘要，不直接访问 Project 正式事实表。
-- 现有 `AIProviderPort`：D9.1 不调用；后续增强也只能接收脱敏后的 Working Set，且不获得 Tool Calling、Shell 或 Credential。
+- 现有 `AiProviderKernel`：D9.2 只在用户选择已启用 Provider 后调用；只接收规则报告和脱敏来源，不获得 Tool Calling、Shell、Credential 或 GitHub 写权限。
 
 ### 数据链路
 
@@ -641,6 +644,7 @@ Public Repository URL
   -> sanitize and persist bounded source summaries
   -> deterministic rules report
   -> D9.1.1 deterministic rules-v2 analysis
+  -> optional github-ai-v1 explanatory enhancement
   -> validate sourceIds and confidence
   -> persist JSON + stable Markdown + content hash
   -> history, report, reanalysis and archive
@@ -663,7 +667,9 @@ Public Repository URL
 - Tree 截断、预算耗尽、关键来源读取失败或没有足够可分析文本生成 `partial + incomplete`。
 - 无 License、无 SBOM，以及存在其他可靠来源时的无 README 只生成 `ready + warning`；缺失 SBOM 时回退 Manifest，不冒充完整依赖图。
 - 无法安全脱敏或报告引用不属于当前 Run 时生成 `blocked`，禁止复制或导出。
-- D9.1 不调用 AI Provider；传入 AI 模式时返回 `github_analysis_ai_unavailable` 并复用规则报告。
-- 导入接口保留合同但不注册 Command；Project 仍与 Analysis Run 隔离。
+- D9.2 的 AI Run 优先复用同 HEAD、重点和问题的安全 rules-v2 来源；新 Run 重建来源 ID，旧报告不变。
+- AI 只能改写简介、功能、架构职责、风险、阅读顺序、静态复现说明、二开切入点和用户问题回答。确定性字段始终来自规则报告。
+- AI 结构或来源校验失败时保存规则报告并标记 `rules_fallback`；安全阻断报告不调用 AI。
+- 导入接口保留合同但不注册 Command；Project 仍与 Analysis Run 隔离，导入衔接延后到 D9.3。
 
-完整接口、状态、来源预算和错误码以 `docs/github-analysis-contract.md` 为唯一实施合同。D9.1 已实现 rules-only 纵向切片；AI 增强和导入衔接延后。
+完整接口、状态、来源预算和错误码以 `docs/github-analysis-contract.md` 为唯一实施合同。D9.2 已实现用户主动、来源治理的 AI 增强；导入衔接延后。

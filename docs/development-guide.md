@@ -265,7 +265,7 @@ D9.1 及后续实现必须先阅读：
 2. GitHub 集成必须是只读 Port。允许的方法必须显式列入白名单；不得提供 Clone、Fork、Issue/PR/Release 写入或通用请求逃生口。
 3. 采集器必须在发出文件请求前应用 Tree、文件数、单文件大小和总文本预算；不得先下载全部内容再截断。
 4. Repository 内容一律按不可信输入处理。提示词、Secret、Credential、绝对路径和危险文件必须在持久化及 AI 调用前处理。
-5. 规则分析是必备基线。D9.1 禁止调用 AI Provider；收到 AI 模式请求时返回可见警告并复用规则报告。后续 AI 仍必须由用户主动启用，且不能改变运行权限。
+5. 规则分析是必备基线。D9.2 只有在用户显式选择已启用 Provider 时才允许 AI 增强；安全阻断时禁止调用，失败时必须保存完整规则回退报告。
 6. 每个报告结论必须使用共享的 `SourcedConclusion` 结构；引用必须属于当前 Run，空引用结论不得进入报告。
 7. JSON 报告是唯一语义来源；Markdown 由共享 Renderer 确定性生成，禁止页面、MCP 或 IPC 各自拼接另一份报告。
 8. 所有日期、状态、错误码和前端翻译键必须使用合同中冻结的枚举。中文和英文资源的键集合必须一致。
@@ -277,6 +277,9 @@ D9.1 及后续实现必须先阅读：
 14. 产品技术栈与仓库维护工具必须分别推断。Workflow、Formatter、Release Script 不能作为产品语言或框架证据。
 15. `license_missing`、`sbom_missing` 是提示型警告；只有覆盖预算、关键来源或安全完整性问题才能把报告降级为 Partial 或 Blocked。
 16. Commit、Release 与 SBOM 摘要必须保持确定性，不保存作者邮箱、Commit Body、Diff、完整 SPDX 文档或 GitHub 原始响应。
+17. AI 只能改变合同列出的解释性字段。Repository 身份、类型、技术栈、入口、命令、依赖、License、最近活动、章节可用性和采集统计必须保持 rules-v2 结果。
+18. AI 输入不得超过 60,000 个 Unicode 字符；每个 AI 结论的 Source ID 必须属于当前 Run、实际发送给 Provider，并符合章节来源类型白名单。
+19. AI 响应只允许一次 JSON 修复；不得保存原始响应、完整 Prompt 或推理过程，也不得因失败覆盖规则报告。
 
 ### 文档与代码一致性检查
 

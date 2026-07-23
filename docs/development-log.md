@@ -1085,3 +1085,38 @@ D9.1.1 规则报告质量冻结。本阶段不增加 Migration、AI、Clone、Sh
 ## 下一步计划
 
 完成 `obsidianmd/obsidian-releases`、`SZYWAH/ForgeOS` 与 `tauri-apps/tauri` 的只读实机验收后，冻结 D9 规则分析层，再单独规划用户主动触发的 AI 增强。AI 不能扩张 GitHub、Shell、Codex 或 MCP 权限。
+
+# 2026-07-22 — ForgeOS D9.2 GitHub AI Enhanced Analysis
+
+## 当前阶段
+
+D9.2 用户主动 AI 增强分析完成。本阶段复用 Migration 0019 的预留字段，不新增 Migration，不实现导入为 Project、Clone、Shell、GitHub 写入或自动分析。
+
+## 完成内容
+
+- GitHub 分析请求支持 `rules / ai`；AI 模式必须显式选择已启用且配置 Model 的 AI 服务，本地 Ollama、LM Studio 等服务允许不保存 API Key。
+- `github-ai-v1` 始终先生成 `github-rules-v2` 基线。安全阻断报告不会调用 AI；运行时 Provider、HTTP、结构或来源校验失败时保存完整规则报告并标记规则回退。
+- AI Request Hash 纳入 Provider ID、Provider Version、Model 和 AI Prompt Revision；rules-v2 的既有 Hash 计算保持兼容。
+- AI Run 优先复用相同 Repository、HEAD、重点和问题的安全规则来源，并为新 Run 重建独立 Source ID；没有可复用来源时才重新采集 GitHub。
+- AI 输入限制为 60,000 个 Unicode 字符，只包含规则报告、脱敏来源摘要和脱敏问题。系统消息明确 Repository 内容不可信，且模型没有 Tool、Shell、Credential、本地文件或 GitHub 写权限。
+- AI 只允许增强简介、功能、架构职责、风险、阅读顺序、静态复现说明、二开切入点和用户问题回答。仓库身份、类型、技术栈、入口、命令、依赖、License、Commit、Release、章节可用性和采集统计保持规则结果。
+- 每个非空 AI 结论必须引用当前 Run、实际进入 AI 输入且符合章节白名单的 Source ID；非法 JSON 只修复一次，仍失败则丢弃全部 AI 输出。
+- 分析入口增加本地规则/AI 增强选择和 Provider 选择；规则报告可通过次级操作生成独立 AI 报告。页面显示分析方式、Model 和回退状态，不展示 API Key、原始 Prompt 或原始 AI Response。
+
+## 安全边界
+
+- 不保存 API Key、完整 Prompt、原始 AI Response 或推理过程。
+- AI 不修改规则事实，不创建 Project、Import Draft、Snapshot、Evidence 或其他正式领域对象。
+- 不增加 MCP 工具，不执行 GitHub 写请求、Clone、Repository 命令或 Codex 任务。
+
+## 验证结果
+
+- 前端 `npm run typecheck`、59 项 Vitest 测试与生产构建通过；Vite 仅保留既有的单包体积提示。
+- 主程序 `cargo fmt --check`、`cargo check` 与全量 `cargo test` 通过：98 项单元测试通过、1 项需要本机 Codex 历史的 Smoke Test 按设计忽略；全部常规数据库和领域集成测试通过，2 项真实 GitHub 网络测试按设计忽略。
+- `forgeos-mcp` 格式检查与全量测试通过：五工具只读白名单、诊断模式和 STDIO 项目隔离测试共 3 项通过。
+- `git diff --check` 通过；D9.2 未新增 Migration。真实桌面 SQLite 数据库以只读模式验证：`integrity_check = ok`、`foreign_key_check = 0`、Migration 数量为 19。
+- 本轮未调用用户的真实 AI 服务，因此 Provider 断开回退与来源治理由 Fake Provider/规则测试覆盖，真实 Provider 端到端仍需桌面实机验收。
+
+## 下一步计划
+
+D9.3 才实现 `Analysis Report → GitHub Import Draft → 用户确认 → ForgeOS Project`，并继续保持 Analysis、Draft 与 Project 生命周期隔离。

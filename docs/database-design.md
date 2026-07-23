@@ -812,6 +812,9 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - `status TEXT NOT NULL CHECK (status IN ('queued', 'collecting', 'analyzing', 'ready', 'partial', 'failed', 'archived'))`
 - `stage TEXT NULL CHECK (stage IN ('resolving', 'collecting_tree', 'reading_sources', 'rules_analysis', 'ai_analysis', 'persisting'))`
 - `analysis_mode TEXT NOT NULL CHECK (analysis_mode IN ('rules', 'ai'))`
+- `ai_provider_id TEXT NULL REFERENCES ai_providers(id) ON DELETE RESTRICT`
+- `ai_model TEXT NULL`
+- `ai_invoked INTEGER NOT NULL DEFAULT 0 CHECK (ai_invoked IN (0, 1))`
 - `readiness TEXT NOT NULL CHECK (readiness IN ('ready', 'warning', 'incomplete', 'blocked'))`
 - `analyzer_revision TEXT NOT NULL`
 - `request_hash TEXT NOT NULL`
@@ -830,13 +833,14 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 
 约束与索引：
 
-- `UNIQUE(workspace_id, request_hash)`，其中 Hash 覆盖 Repository ID、HEAD SHA、分析重点、Prompt Hash、模式和分析器版本。
+- `UNIQUE(workspace_id, request_hash)`。Rules Hash 保持 D9.1.1 兼容；AI Hash 额外覆盖 Provider ID、Provider Version、Model 和 AI Prompt Revision。
 - `(workspace_id, created_at DESC)` 用于分析历史。
 - `(github_repository_id, source_commit_sha)` 用于 HEAD 历史与过期判断。
 - Partial Unique Index 保证同一 Workspace 同时最多一个 `queued / collecting / analyzing` Run。
 - 应用启动时把遗留运行中 Run 恢复为 `failed / github_analysis_interrupted`。
 - `imported_project_id` 必须属于同一 Workspace；由触发器验证。
 - `repository_url` 必须是去除 Credential 的规范化 GitHub HTTPS URL。
+- AI Run 必须保存启动时的 Provider ID 与 Model 快照；API Key、完整 Prompt 和原始 AI Response 永不进入该表。
 
 ### `github_analysis_sources`
 
