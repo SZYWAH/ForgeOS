@@ -10,8 +10,9 @@ use crate::application::{
 
 use super::{
     dto::{
-        AiInvocationResultDto, AiProviderDto, CreateAiProviderRequest, InvokeAiProviderRequest,
-        SetAiProviderApiKeyRequest, SetAiProviderEnabledRequest, UpdateAiProviderRequest,
+        AiInvocationResultDto, AiProviderConnectionTestDto, AiProviderDto, CreateAiProviderRequest,
+        InvokeAiProviderRequest, SetAiProviderApiKeyRequest, SetAiProviderEnabledRequest,
+        UpdateAiProviderRequest,
     },
     IpcError,
 };
@@ -26,6 +27,13 @@ pub async fn create_ai_provider(
             name: input.name,
             base_url: input.base_url,
             model: input.model,
+            protocol: input.protocol,
+            auth_scheme: input.auth_scheme,
+            secret_source: input.secret_source,
+            secret_required: input.secret_required,
+            environment_variable: input.environment_variable,
+            custom_auth_header: input.custom_auth_header,
+            api_version: input.api_version,
         })
         .await
         .map(Into::into)
@@ -68,11 +76,36 @@ pub async fn update_ai_provider(
                 name: input.name,
                 base_url: input.base_url,
                 model: input.model,
+                protocol: input.protocol,
+                auth_scheme: input.auth_scheme,
+                secret_source: input.secret_source,
+                secret_required: input.secret_required,
+                environment_variable: input.environment_variable,
+                custom_auth_header: input.custom_auth_header,
+                api_version: input.api_version,
                 expected_version: input.expected_version,
             },
         )
         .await
         .map(Into::into)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn test_ai_provider_connection(
+    kernel: State<'_, AiProviderKernel>,
+    provider_id: String,
+) -> Result<AiProviderConnectionTestDto, IpcError> {
+    kernel
+        .test_connection(&provider_id)
+        .await
+        .map(|result| AiProviderConnectionTestDto {
+            provider_id: result.provider_id,
+            protocol: result.protocol,
+            model: result.model,
+            latency_ms: result.latency_ms,
+            warning_codes: result.warning_codes,
+        })
         .map_err(Into::into)
 }
 

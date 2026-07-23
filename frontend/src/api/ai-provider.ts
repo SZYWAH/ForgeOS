@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AiInvocationResult,
+  AiProviderConnectionTest,
   AiMessage,
   AiProvider,
   AiProviderConfigInput,
@@ -39,4 +40,7 @@ export const aiProviderApi = {
       providerId,
       input: { messages },
     }),
+
+  testConnection: (providerId: string) =>
+    invoke<AiProviderConnectionTest>("test_ai_provider_connection", { providerId }),
 };

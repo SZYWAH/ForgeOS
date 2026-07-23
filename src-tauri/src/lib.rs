@@ -92,6 +92,7 @@ pub fn run() {
             ipc::ai_providers::set_ai_provider_api_key,
             ipc::ai_providers::clear_ai_provider_api_key,
             ipc::ai_providers::invoke_ai_provider,
+            ipc::ai_providers::test_ai_provider_connection,
             ipc::context_packs::generate_context_pack,
             ipc::context_packs::list_context_exports,
             ipc::context_packs::get_context_export,
