@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   setApiKey: vi.fn(),
   setEnabled: vi.fn(),
+  testConnection: vi.fn(),
   update: vi.fn(),
 }));
 
@@ -46,8 +47,16 @@ const provider = {
   name: "OpenAI",
   baseUrl: "https://api.openai.com/v1",
   model: "gpt-test",
+  protocol: "openai_chat_completions",
+  authScheme: "bearer",
+  secretSource: "credential_manager",
+  secretRequired: true,
+  environmentVariable: null,
+  customAuthHeader: null,
+  apiVersion: null,
   enabled: true,
   apiKeyConfigured: true,
+  secretAvailable: true,
   createdAt: "2026-07-16T00:00:00Z",
   updatedAt: "2026-07-16T00:00:00Z",
   version: 1,
@@ -109,5 +118,41 @@ describe("AiProvidersPage visual composition", () => {
     expect(container.querySelector(".provider-workbench")).toBeInTheDocument();
     expect(container.querySelector(".provider-list-panel")).toBeInTheDocument();
     expect(container.querySelector(".provider-empty-surface")).not.toBeInTheDocument();
+  });
+
+  it("uses an environment variable for the DeepSeek preset and no secret for local presets", async () => {
+    const { container } = renderPage();
+    await waitFor(() => expect(container.querySelector(".provider-empty-surface")).toBeInTheDocument());
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".page-intro__actions .app-button")!);
+
+    const preset = container.querySelector<HTMLSelectElement>(".provider-preset-row select")!;
+    fireEvent.change(preset, { target: { value: "DeepSeek" } });
+    let selects = container.querySelectorAll<HTMLSelectElement>(".provider-create-form select");
+    expect(selects[3].value).toBe("environment");
+    expect(container.querySelector<HTMLInputElement>('input[placeholder="DEEPSEEK_API_KEY"]')?.value).toBe("DEEPSEEK_API_KEY");
+    expect(container.querySelector('.provider-key-field input[type="password"]')).not.toBeInTheDocument();
+
+    fireEvent.change(preset, { target: { value: "Ollama" } });
+    selects = container.querySelectorAll<HTMLSelectElement>(".provider-create-form select");
+    expect(selects[2].value).toBe("none");
+    expect(selects[3].value).toBe("none");
+    expect(container.querySelector('.provider-key-field input[type="password"]')).not.toBeInTheDocument();
+  });
+
+  it("runs connection diagnostics only after an explicit click", async () => {
+    mocks.list.mockResolvedValue([provider]);
+    mocks.testConnection.mockResolvedValue({
+      providerId: provider.id,
+      protocol: provider.protocol,
+      model: provider.model,
+      latencyMs: 42,
+      warningCodes: [],
+    });
+    const { getByRole, getByText } = renderPage();
+    const button = await waitFor(() => getByRole("button", { name: "测试连接" }));
+    expect(mocks.testConnection).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.testConnection).toHaveBeenCalledWith(provider.id));
+    expect(getByText(/42 ms/)).toBeInTheDocument();
   });
 });

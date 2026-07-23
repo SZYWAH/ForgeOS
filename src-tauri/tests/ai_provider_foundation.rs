@@ -88,8 +88,15 @@ impl AiProviderClient for FakeAiClient {
 fn provider_input() -> CreateAiProviderInput {
     CreateAiProviderInput {
         name: "Local Test Provider".into(),
-        base_url: "http://localhost:11434/v1".into(),
+        base_url: "https://provider.example.test/v1".into(),
         model: "qwen3:8b".into(),
+        protocol: "openai_chat_completions".into(),
+        auth_scheme: "bearer".into(),
+        secret_source: "credential_manager".into(),
+        secret_required: true,
+        environment_variable: None,
+        custom_auth_header: None,
+        api_version: None,
     }
 }
 
@@ -111,6 +118,7 @@ async fn provider_management_explicit_invocation_and_persistence() {
         .expect("Provider should be created");
     assert!(!created.provider.enabled());
     assert!(!created.api_key_configured);
+    assert!(!created.secret_available);
     assert_eq!(created.provider.version(), 1);
 
     assert!(matches!(
@@ -123,6 +131,7 @@ async fn provider_management_explicit_invocation_and_persistence() {
         .await
         .expect("API key should be configured");
     assert!(with_key.api_key_configured);
+    assert!(with_key.secret_available);
 
     let messages = InvokeAiProviderInput {
         messages: vec![AiMessageInput {
@@ -161,6 +170,13 @@ async fn provider_management_explicit_invocation_and_persistence() {
                     name: "Stale".into(),
                     base_url: "http://localhost:1234/v1".into(),
                     model: "stale-model".into(),
+                    protocol: "openai_compatible".into(),
+                    auth_scheme: "none".into(),
+                    secret_source: "none".into(),
+                    secret_required: false,
+                    environment_variable: None,
+                    custom_auth_header: None,
+                    api_version: None,
                     expected_version: 1,
                 },
             )
@@ -200,6 +216,13 @@ async fn provider_management_explicit_invocation_and_persistence() {
                 name: "LM Studio".into(),
                 base_url: "http://localhost:1234/v1/".into(),
                 model: "local-model".into(),
+                protocol: "openai_compatible".into(),
+                auth_scheme: "none".into(),
+                secret_source: "none".into(),
+                secret_required: false,
+                environment_variable: None,
+                custom_auth_header: None,
+                api_version: None,
                 expected_version: enabled.provider.version(),
             },
         )
@@ -219,7 +242,18 @@ async fn provider_management_explicit_invocation_and_persistence() {
             .fetch_all(&database.pool)
             .await
             .expect("provider schema should be readable");
-    assert!(!columns.iter().any(|column| column.contains("key")));
+    assert!(!columns.iter().any(|column| column == "api_key"));
+    for expected in [
+        "protocol",
+        "auth_scheme",
+        "secret_source",
+        "secret_required",
+        "environment_variable",
+        "custom_auth_header",
+        "api_version",
+    ] {
+        assert!(columns.iter().any(|column| column == expected));
+    }
     let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects")
         .fetch_one(&database.pool)
         .await
@@ -267,4 +301,80 @@ async fn provider_management_explicit_invocation_and_persistence() {
     assert_eq!(persisted.provider.version(), 3);
     assert!(!persisted.api_key_configured);
     reopened.pool.close().await;
+}
+
+#[tokio::test]
+async fn environment_credentials_are_resolved_explicitly_without_sqlite_values() {
+    const ENVIRONMENT_NAME: &str = "FORGEOS_TEST_AI_PROVIDER_SECRET";
+    const SECRET: &str = "runtime-only-test-secret";
+    // SAFETY: this test uses a process-unique variable name and removes it before returning.
+    unsafe { std::env::set_var(ENVIRONMENT_NAME, SECRET) };
+
+    let directory = TempDir::new().expect("temporary directory should be created");
+    let database = database::connect(&directory.path().join("environment-provider.db"))
+        .await
+        .expect("database should initialize");
+    let client = Arc::new(FakeAiClient::default());
+    let kernel = AiProviderKernel::new(
+        Arc::new(SqliteProjectRepository::new(database.pool.clone())),
+        Arc::new(MemoryApiKeyStore::default()),
+        client.clone(),
+    );
+    let created = kernel
+        .create_provider(CreateAiProviderInput {
+            name: "Environment Provider".into(),
+            base_url: "https://api.example.test/v1".into(),
+            model: "model".into(),
+            protocol: "openai_compatible".into(),
+            auth_scheme: "bearer".into(),
+            secret_source: "environment".into(),
+            secret_required: true,
+            environment_variable: Some(ENVIRONMENT_NAME.into()),
+            custom_auth_header: None,
+            api_version: None,
+        })
+        .await
+        .expect("environment Provider should be created");
+    assert!(created.secret_available);
+    assert!(!created.api_key_configured);
+    let enabled = kernel
+        .set_provider_enabled(
+            created.provider.id(),
+            SetAiProviderEnabledInput {
+                enabled: true,
+                expected_version: created.provider.version(),
+            },
+        )
+        .await
+        .expect("environment Provider should enable");
+    kernel
+        .invoke_provider(
+            enabled.provider.id(),
+            InvokeAiProviderInput {
+                messages: vec![AiMessageInput {
+                    role: "user".into(),
+                    content: "ping".into(),
+                }],
+            },
+        )
+        .await
+        .expect("environment credential should be resolved at invocation");
+    assert_eq!(
+        client
+            .last_key
+            .lock()
+            .expect("key lock should work")
+            .as_deref(),
+        Some(SECRET)
+    );
+    let serialized_rows: Vec<String> = sqlx::query_scalar(
+        "SELECT name || '|' || base_url || '|' || model || '|' || COALESCE(environment_variable, '') FROM ai_providers",
+    )
+    .fetch_all(&database.pool)
+    .await
+    .expect("Provider rows should be readable");
+    assert!(serialized_rows.iter().all(|row| !row.contains(SECRET)));
+
+    unsafe { std::env::remove_var(ENVIRONMENT_NAME) };
+    database.pool.close().await;
 }

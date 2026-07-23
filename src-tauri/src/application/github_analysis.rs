@@ -42,6 +42,7 @@ const MAX_FILES: usize = 64;
 const MAX_SOURCE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SOURCE_CHARS: usize = 8_000;
 const MAX_AI_INPUT_CHARS: usize = 60_000;
+const MAX_AI_REPAIR_CHARS: usize = 64_000;
 
 #[derive(Debug, Error)]
 pub enum GitHubAnalysisError {
@@ -888,10 +889,13 @@ impl GitHubAnalysisKernel {
             Ok(report) => Ok(report),
             Err(first_error) => {
                 let response = truncate_unicode(&first.completion.content, 20_000);
-                let repair = invoke(format!(
-                    "上一次响应未通过结构或来源校验。错误：{}。只修复 JSON 格式和引用，不得添加新事实。原响应：\n{}",
-                    first_error, response
-                ))
+                let repair = invoke(build_ai_repair_input(
+                    &first_error,
+                    &response,
+                    rules,
+                    sources,
+                    &allowed_source_ids,
+                )?)
                 .await
                 .map_err(map_ai_invocation)?;
                 parse_ai_patch(
@@ -1094,6 +1098,54 @@ fn build_ai_input(
         ));
     }
     Ok((input, allowed))
+}
+
+fn build_ai_repair_input(
+    error: &GitHubAiEnhancementError,
+    response: &str,
+    rules: &GitHubAnalysisReport,
+    sources: &[GitHubAnalysisSource],
+    allowed_source_ids: &HashSet<String>,
+) -> Result<String, GitHubAiEnhancementError> {
+    let allowed_sources = sources
+        .iter()
+        .filter(|source| allowed_source_ids.contains(&source.id))
+        .map(|source| {
+            serde_json::json!({
+                "id": source.id,
+                "sourceType": source.source_type.as_str(),
+                "sourcePath": source.source_path,
+            })
+        })
+        .collect::<Vec<_>>();
+    let architecture_names = rules
+        .architecture
+        .iter()
+        .map(|item| item.value.name.as_str())
+        .collect::<Vec<_>>();
+    let contract = serde_json::json!({
+        "error": error.to_string(),
+        "instruction": "只修复 JSON 结构、章节完整度和来源引用，不得添加新事实。sourceIds 必须逐字复制 allowedSources.id，并使用该章节允许的 sourceType。",
+        "architectureNames": architecture_names,
+        "sectionSourceTypes": {
+            "overview": ["readme", "documentation", "metadata", "manifest"],
+            "capabilities": ["readme", "documentation", "metadata", "manifest", "tree"],
+            "architecture": ["tree", "documentation", "manifest", "entrypoint"],
+            "risks": ["manifest", "workflow", "documentation", "tree", "commit"],
+            "recommendedReadingOrder": ["tree", "entrypoint", "documentation", "readme", "manifest"],
+            "reproductionAssessment": ["build_config", "test_config", "manifest", "documentation", "readme", "workflow"],
+            "extensionPoints": ["tree", "entrypoint", "documentation", "manifest"]
+        },
+        "allowedSources": allowed_sources,
+        "previousResponse": response,
+    })
+    .to_string();
+    if contract.chars().count() > MAX_AI_REPAIR_CHARS {
+        return Err(GitHubAiEnhancementError::InvalidResponse(
+            "AI repair input exceeds the message budget".into(),
+        ));
+    }
+    Ok(contract)
 }
 
 fn collect_report_source_ids(
@@ -3545,6 +3597,22 @@ mod tests {
         let (input, allowed) = build_ai_input(&ai_run, &report, &sources).expect("AI input");
         assert!(input.chars().count() <= MAX_AI_INPUT_CHARS);
         assert_eq!(allowed.len(), sources.len());
+
+        let repair = build_ai_repair_input(
+            &GitHubAiEnhancementError::SourceInvalid(
+                "sourceIds use a source type that is not allowed for this section".into(),
+            ),
+            r#"{"overview":{"value":"sample","confidence":"medium","sourceIds":["wrong"]}}"#,
+            &report,
+            &sources,
+            &allowed,
+        )
+        .expect("AI repair input");
+        assert!(repair.chars().count() <= MAX_AI_REPAIR_CHARS);
+        assert!(repair.contains("sectionSourceTypes"));
+        assert!(repair.contains(&sources[1].id));
+        assert!(repair.contains("architectureNames"));
+        assert!(!repair.contains("readme-sha"));
 
         let manifest_id = sources[2].id.clone();
         let patch = serde_json::json!({

@@ -161,8 +161,15 @@ async fn deterministic_isolated_context_and_manual_ai_do_not_modify_facts() {
     let provider = ai_kernel
         .create_provider(CreateAiProviderInput {
             name: "Test Provider".into(),
-            base_url: "http://localhost:1234/v1".into(),
+            base_url: "https://api.example.test/v1".into(),
             model: "test-model".into(),
+            protocol: "openai_compatible".into(),
+            auth_scheme: "bearer".into(),
+            secret_source: "credential_manager".into(),
+            secret_required: true,
+            environment_variable: None,
+            custom_auth_header: None,
+            api_version: None,
         })
         .await
         .unwrap();

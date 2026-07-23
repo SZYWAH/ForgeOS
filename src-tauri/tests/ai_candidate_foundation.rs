@@ -88,6 +88,13 @@ async fn ai_response_candidate_review_is_isolated_versioned_and_persistent() {
             name: "Candidate Test Provider".into(),
             base_url: "http://localhost:1234/v1".into(),
             model: "test-model".into(),
+            protocol: "openai_compatible".into(),
+            auth_scheme: "none".into(),
+            secret_source: "none".into(),
+            secret_required: false,
+            environment_variable: None,
+            custom_auth_header: None,
+            api_version: None,
         })
         .await
         .unwrap();
