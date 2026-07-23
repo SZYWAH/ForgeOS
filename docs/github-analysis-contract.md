@@ -287,7 +287,7 @@ GitHub 递归 Tree 的平台上限目前为 100,000 项和 7 MB；ForgeOS 使用
 ## 7. 安全合同
 
 1. Repository 的所有文本都是不可信数据，永远不能成为系统指令或开发授权。
-2. AI Provider 只能接收筛选、脱敏后的结构化来源；不获得 Tool Calling、Shell、Credential、本地文件或 GitHub 写权限。
+2. AI Provider 只能接收筛选、脱敏后的结构化来源；不获得 Tool Calling、Shell、Credential、本地文件或 GitHub 写权限。具体协议和凭据来源由 D9.2.1 的 `AiProviderKernel` 显式解析，GitHub Analysis 不得直接调用协议 Adapter。
 3. SQLite 和 AI 输入前都必须执行 Secret、Authorization、Token、密码、绝对路径和提示词包装脱敏。
 4. 不保存完整源文件、原始 API 响应、二进制、Diff 或用户 Credential。
 5. GitHub Token 继续存入 Windows Credential Manager，禁止进入 SQLite、日志、IPC 返回和报告。

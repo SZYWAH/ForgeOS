@@ -1120,3 +1120,30 @@ D9.2 用户主动 AI 增强分析完成。本阶段复用 Migration 0019 的预�
 ## 下一步计划
 
 D9.3 才实现 `Analysis Report → GitHub Import Draft → 用户确认 → ForgeOS Project`，并继续保持 Analysis、Draft 与 Project 生命周期隔离。
+
+# 2026-07-23 — ForgeOS D9.2.1 AI Provider Compatibility
+
+## 当前阶段
+
+D9.2.1 主流 AI Provider 兼容层。本阶段不改变 D9.2 的来源治理、规则回退和人工触发边界，不进入导入 Project、Agent、Tool Calling、流式聊天或后台调用。
+
+## 完成内容
+
+- 新增 Migration 0020，将既有 Provider 前向扩展为显式协议、鉴权方式和凭据来源；远程 Provider 保持 Credential Manager，回环本地服务迁移为无鉴权。
+- 支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages、Azure OpenAI v1 和 OpenAI-compatible Chat Completions。
+- 支持 Windows Credential Manager、环境变量引用和无需密钥三种互斥来源。SQLite 与 IPC 永不保存或返回密钥值。
+- 远程服务强制 HTTPS，本地回环允许 HTTP；HTTP 客户端不跟随重定向，响应上限为 2 MiB，错误正文截断并脱敏。
+- AI 服务页面增加 OpenAI、DeepSeek、Anthropic、Azure、Gemini、Mistral、Ollama、LM Studio 与自定义预设，以及用户主动连接测试。
+- D9.2 GitHub AI 分析继续只依赖统一 `AiProviderKernel`，协议差异不会扩张 GitHub、Shell、MCP 或正式事实权限。
+
+## 验证结果
+
+- Frontend 类型检查、生产构建和 11 个测试文件共 61 项测试通过；AI 服务预设、凭据来源互斥与连接测试交互均有覆盖。
+- Desktop Rust 全量测试通过：103 个库测试通过、1 个依赖本机 Codex 历史的测试按设计忽略；全部 Kernel 集成测试通过。HTTP Mock 覆盖 OpenAI Chat、OpenAI Responses、Anthropic、Azure、重定向拒绝和错误脱敏。
+- `forgeos-mcp` 格式检查与三项只读测试通过；本轮未扩大 MCP 工具面或写权限。
+- 0020 兼容升级测试、SQLite `integrity_check = ok` 与 `foreign_key_check = 0` 通过；差异扫描确认没有数据库、`.env`、API Key 或环境变量值进入 Git。
+- 使用当前进程的 `DEEPSEEK_API_KEY` 完成真实连接测试和一次公开 GitHub 仓库 AI 增强报告，严格来源校验通过且规则报告保持可用；测试未输出或保存密钥、原始 Prompt 和原始 Response。
+
+## 下一步计划
+
+D9.3 实现 `GitHub Analysis Report → 用户审核 → GitHub Import Draft → 人工创建 ForgeOS Project`。

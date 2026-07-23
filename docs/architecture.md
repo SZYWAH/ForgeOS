@@ -220,15 +220,21 @@ React Provider Settings
 → Typed Tauri IPC
 → AiProviderKernel
 ├─ AiProviderRepository → SQLite（非敏感配置）
-├─ ApiKeyStore → Windows Credential Manager（API Key）
-└─ AiProviderClient → OpenAI-compatible HTTP endpoint
+├─ AiCredentialResolver → Credential Manager / 环境变量 / 无密钥
+└─ AiProtocolGateway
+   ├─ OpenAI Chat / Responses
+   ├─ Anthropic Messages
+   ├─ Azure OpenAI v1
+   └─ OpenAI-compatible Chat
 ```
 
 固定规则：
 
 - Provider 新建后默认 Disabled，只有用户显式启用且显式点击 Invoke 才能发起网络请求。
-- SQLite 不保存 API Key；IPC DTO 只返回 `apiKeyConfigured`，不提供明文回读接口。
-- HTTP Adapter 只实现最小 Chat Completions `model + messages` 契约，不提供 tools、Agent、自动重试任务或后台调用。
+- SQLite 不保存 API Key 或环境变量值；IPC DTO 只返回通用凭据存在状态，不提供明文回读接口。
+- 协议和凭据来源必须显式配置，不在 Credential Manager、环境变量和无密钥模式之间自动回退。
+- 远程 Endpoint 必须使用 HTTPS；本地回环地址允许 HTTP。HTTP Adapter 不跨域跟随重定向，响应限制为 2 MiB。
+- Gateway 只实现固定文本消息契约，不提供任意请求模板、tools、Agent、自动重试任务或后台调用。
 - 调用结果停留在当前 UI 内存，不自动写入 Project、Snapshot、Development Session、Evidence 或其他正式事实。
 - AI Provider 不依赖 Project 领域，也不能获得任何 Repository 写入能力。
 - 未来 AI 建议若需要进入正式事实，必须通过独立用例、用户确认与现有版本规则；本阶段不实现。

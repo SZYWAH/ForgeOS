@@ -281,6 +281,18 @@ D9.1 及后续实现必须先阅读：
 18. AI 输入不得超过 60,000 个 Unicode 字符；每个 AI 结论的 Source ID 必须属于当前 Run、实际发送给 Provider，并符合章节来源类型白名单。
 19. AI 响应只允许一次 JSON 修复；不得保存原始响应、完整 Prompt 或推理过程，也不得因失败覆盖规则报告。
 
+## AI Provider Compatibility Contract
+
+- 页面和用例必须显式传递 `protocol`、`auth_scheme` 与 `secret_source`；禁止根据 Provider 名称或 Base URL 猜测。
+- 密钥来源只能是 Credential Manager、环境变量或无密钥之一，运行时不得隐式回退。
+- 环境变量模式只持久化合法变量名；IPC、日志、错误和测试输出都不能返回变量值。
+- 远程 HTTP Endpoint 必须在 Domain 校验阶段拒绝；本地 HTTP 仅允许 localhost、127.0.0.1 和 `[::1]`。
+- 自定义鉴权只允许一个经过白名单校验的 Header 名称，禁止 Host、Cookie、Content-Length 等危险 Header。
+- 所有协议 Adapter 必须禁用重定向、限制响应大小，并对错误正文截断和密钥脱敏。
+- 连接测试必须由用户主动点击，使用最小消息，不保存 Prompt 或 Response，并明确提示可能产生少量费用。
+- 新增 Provider 预设时只能填写建议配置，不能锁死模型，也不能绕过默认停用和用户显式启用规则。
+- D9.2 GitHub AI 分析只能调用 `AiProviderKernel`，不得直接依赖某个协议 Adapter。
+
 ### 文档与代码一致性检查
 
 - 数据库 CHECK 值、Rust 枚举、IPC DTO、前端状态和语言资源必须逐项对应。

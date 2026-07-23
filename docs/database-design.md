@@ -345,7 +345,7 @@ EvidenceLink 使用统一关联模型连接 Evidence 与 Project、Snapshot 或 
 
 ## `ai_providers`
 
-`ai_providers` 保存用户配置的 OpenAI-compatible 连接元数据。它不是 Project 研发事实，
+`ai_providers` 保存用户配置的 AI 接口连接元数据。它不是 Project 研发事实，
 不归属于某个 Project，也不保存 Prompt、Response 或调用历史。
 
 | 字段 | 类型 | 约束 | 说明 |
@@ -354,6 +354,13 @@ EvidenceLink 使用统一关联模型连接 Evidence 与 Project、Snapshot 或 
 | `name` | TEXT | NOT NULL, CHECK, UNIQUE NOCASE | 用户可读名称 |
 | `base_url` | TEXT | NOT NULL, CHECK | HTTP/HTTPS API 根路径或完整 Chat Completions 地址 |
 | `model` | TEXT | NOT NULL, CHECK | 请求使用的 Model ID 或部署名称 |
+| `protocol` | TEXT | NOT NULL, CHECK | 五种受支持的固定协议之一 |
+| `auth_scheme` | TEXT | NOT NULL, CHECK | Bearer、api-key、x-api-key、自定义单 Header 或无鉴权 |
+| `secret_source` | TEXT | NOT NULL, CHECK | Credential Manager、环境变量或无密钥 |
+| `secret_required` | INTEGER | NOT NULL, CHECK | 当前配置是否要求密钥 |
+| `environment_variable` | TEXT | NULL, CHECK | 只保存环境变量名称，不保存变量值 |
+| `custom_auth_header` | TEXT | NULL, CHECK | 自定义鉴权的单一安全 Header 名称 |
+| `api_version` | TEXT | NULL, CHECK | Anthropic 等协议的可选 API 版本 |
 | `enabled` | INTEGER | NOT NULL, CHECK | `0` Disabled、`1` Enabled |
 | `created_at` | TEXT | NOT NULL | 创建 UTC 时间 |
 | `updated_at` | TEXT | NOT NULL | 最近配置或启停变化 UTC 时间 |
@@ -363,8 +370,9 @@ EvidenceLink 使用统一关联模型连接 Evidence 与 Project、Snapshot 或 
 
 - 新 Provider 固定从 Disabled 与 `version = 1` 开始，避免创建后被其他能力自动使用。
 - `name` 在本地不区分大小写唯一；多个 Provider 可以共享 Base URL，但使用不同模型。
-- Base URL 去除尾部 `/` 后保存，必须以 `http://` 或 `https://` 开始；允许 localhost，支持 Ollama、LM Studio 等本地兼容服务。
-- API Key 不属于 SQLite schema。运行时以 Provider ID 定位 Windows Credential Manager 中的凭据，前端只读取 `api_key_configured` 布尔投影，永远不能回读已有明文。
+- Base URL 去除尾部 `/` 后保存。远程服务必须使用 HTTPS；HTTP 只允许 localhost、127.0.0.1 和 `[::1]`。
+- 密钥不属于 SQLite schema。运行时按显式来源读取 Windows Credential Manager 或指定环境变量；前端只读取存在/缺失投影，永远不能回读明文。
+- `none` 鉴权只能搭配 `none` 凭据来源；环境变量名和自定义 Header 必须通过固定安全校验。
 - Provider 配置更新与启停都使用 `expected_version`，陈旧页面不能覆盖较新设置。
 - Provider 调用不会更新 `ai_providers.updated_at`，也不会写入任何 Project、Snapshot、Session、Evidence 或通用日志表。
 - `(enabled, updated_at DESC, name COLLATE NOCASE)` 支持先展示可用 Provider，并保留稳定配置列表顺序。
@@ -536,6 +544,16 @@ AI Provider Foundation 通过新的向前 Migration：
 5. 不修改 `0001` 至 `0005`，不连接 Project 领域表，也不实现 MCP、Codex 或自动 AI 工作流。
 
 ### `0007_context_pack.sql`
+
+### `0020_ai_provider_compatibility.sql`
+
+D9.2.1 通过前向 Migration 扩展既有 `ai_providers`：
+
+1. 增加协议、鉴权方式、显式凭据来源、密钥要求、环境变量名称、自定义鉴权 Header 和 API 版本字段。
+2. 既有远程 Provider 映射为 OpenAI Chat Completions、Bearer 与 Credential Manager，并保持原启停状态和业务版本；既有本地回环 Provider 映射为无鉴权和无密钥。
+3. 不迁移、不读取也不删除 Windows Credential Manager 中的既有密钥。
+4. SQLite 只保存环境变量名称，不保存变量值；所有枚举、布尔值和可选字段长度由 CHECK 保护。
+5. 不创建 Prompt、Response、调用历史、Tool Call、Agent 或后台任务表。
 
 D1.5 通过新的向前 Migration：
 
