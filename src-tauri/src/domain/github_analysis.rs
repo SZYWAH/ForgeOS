@@ -293,6 +293,7 @@ pub struct GitHubAnalysisRun {
     pub analysis_mode: GitHubAnalysisMode,
     pub ai_provider_id: Option<String>,
     pub ai_model: Option<String>,
+    pub imported_project_id: Option<String>,
     pub readiness: GitHubAnalysisReadiness,
     pub analyzer_revision: String,
     pub request_hash: String,
@@ -373,6 +374,7 @@ impl GitHubAnalysisRun {
             analysis_mode,
             ai_provider_id,
             ai_model,
+            imported_project_id: None,
             readiness: GitHubAnalysisReadiness::Incomplete,
             analyzer_revision,
             request_hash,
@@ -494,6 +496,34 @@ impl GitHubAnalysisRun {
         }
         self.status = GitHubAnalysisStatus::Archived;
         self.stage = None;
+        self.bump(now);
+        Ok(())
+    }
+
+    pub fn mark_imported(
+        &mut self,
+        project_id: String,
+        now: DateTime<Utc>,
+    ) -> Result<(), DomainError> {
+        if !matches!(
+            self.status,
+            GitHubAnalysisStatus::Ready | GitHubAnalysisStatus::Partial
+        ) || self.readiness == GitHubAnalysisReadiness::Blocked
+            || project_id.trim().is_empty()
+        {
+            return Err(DomainError::InvalidGitHubAnalysis(
+                "analysis cannot be imported".into(),
+            ));
+        }
+        if self.imported_project_id.as_deref() == Some(project_id.as_str()) {
+            return Ok(());
+        }
+        if self.imported_project_id.is_some() {
+            return Err(DomainError::InvalidGitHubAnalysis(
+                "analysis is already linked to another Project".into(),
+            ));
+        }
+        self.imported_project_id = Some(project_id);
         self.bump(now);
         Ok(())
     }

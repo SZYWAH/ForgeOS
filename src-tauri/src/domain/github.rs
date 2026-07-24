@@ -261,6 +261,23 @@ impl GitHubImportDraft {
         Ok(())
     }
 
+    pub fn return_to_draft(&mut self, now: DateTime<Utc>) -> Result<(), DomainError> {
+        if !matches!(
+            self.status,
+            GitHubImportStatus::Reviewed | GitHubImportStatus::Rejected
+        ) {
+            return Err(DomainError::InvalidGitHubImportTransition {
+                from: self.status.to_string(),
+                to: "draft".into(),
+            });
+        }
+        self.status = GitHubImportStatus::Draft;
+        self.imported_project_id = None;
+        self.updated_at = now.max(self.updated_at);
+        self.version += 1;
+        Ok(())
+    }
+
     pub fn mark_imported(
         &mut self,
         project_id: String,

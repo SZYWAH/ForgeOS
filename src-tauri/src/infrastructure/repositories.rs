@@ -10,18 +10,18 @@ use crate::{
         CodexExecutionRecord, CodexExecutionStatus, CodexTaskProposal, CodexTaskProposalDetails,
         CodexTaskProposalStatus, ContextExport, ContextExportStatus, ContextTemplateType,
         DevelopmentSession, DiffSummary, Evidence, EvidenceDetails, EvidenceLink,
-        EvidenceRelationType, EvidenceSourceType, EvidenceTargetType, EvidenceType, GitHubAuthType,
-        GitHubCommitFact, GitHubConnector, GitHubImportDraft, GitHubImportStatus,
-        GitHubReleaseFact, GitHubRepositoryFacts, LifecycleStage, Project, ProjectDetails,
-        ProjectSnapshot, ProjectStatus, Repository, SessionStatus, SnapshotDetails,
-        VerificationStatus, WorkingCopy, Workspace,
+        EvidenceRelationType, EvidenceSourceType, EvidenceTargetType, EvidenceType,
+        GitHubAnalysisImportProposal, GitHubAuthType, GitHubCommitFact, GitHubConnector,
+        GitHubImportDraft, GitHubImportStatus, GitHubReleaseFact, GitHubRepositoryFacts,
+        LifecycleStage, Project, ProjectDetails, ProjectSnapshot, ProjectStatus, Repository,
+        SessionStatus, SnapshotDetails, VerificationStatus, WorkingCopy, Workspace,
     },
     ports::{
         AiCandidateRepository, AiProviderRepository, CodexExecutionRepository,
         CodexTaskProposalRepository, ContextExportRepository, EvidenceRepository,
-        GitHubImportRepository, McpGitEvidenceRecord, McpQueryRepository, ProjectRepository,
-        RepositoryError, RepositoryStore, SessionRepository, SnapshotRepository,
-        WorkspaceRepository,
+        GitHubAnalysisImportRepository, GitHubAnalysisImportWrite, GitHubImportRepository,
+        McpGitEvidenceRecord, McpQueryRepository, ProjectRepository, RepositoryError,
+        RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
     },
 };
 
@@ -125,6 +125,71 @@ impl GitHubImportDraftRow {
 }
 
 const GITHUB_DRAFT_COLUMNS: &str = "id, connector_id, github_repository_id, owner, name, url, description, homepage, default_branch, language, languages, topics, readme_summary, recent_commits, latest_release, status, imported_project_id, created_at, updated_at, version";
+
+const GITHUB_ANALYSIS_IMPORT_COLUMNS: &str = "draft_id, workspace_id, analysis_run_id, source_commit_sha, source_content_hash, project_name, project_slug, description, vision, target_user, scope, non_goals, tech_stack, project_status, lifecycle_stage, priority, partial_acknowledged, stale_acknowledged, created_at, updated_at, version";
+
+#[derive(FromRow)]
+struct GitHubAnalysisImportProposalRow {
+    draft_id: String,
+    workspace_id: String,
+    analysis_run_id: String,
+    source_commit_sha: String,
+    source_content_hash: String,
+    project_name: String,
+    project_slug: String,
+    description: String,
+    vision: String,
+    target_user: String,
+    scope: String,
+    non_goals: String,
+    tech_stack: String,
+    project_status: String,
+    lifecycle_stage: String,
+    priority: i32,
+    partial_acknowledged: i64,
+    stale_acknowledged: i64,
+    created_at: String,
+    updated_at: String,
+    version: i64,
+}
+
+impl GitHubAnalysisImportProposalRow {
+    fn into_domain(self) -> Result<GitHubAnalysisImportProposal, RepositoryError> {
+        GitHubAnalysisImportProposal::restore(
+            self.draft_id,
+            self.workspace_id,
+            self.analysis_run_id,
+            self.source_commit_sha,
+            self.source_content_hash,
+            ProjectDetails {
+                slug: self.project_slug,
+                name: self.project_name,
+                description: self.description,
+                vision: self.vision,
+                target_user: self.target_user,
+                scope: self.scope,
+                non_goals: self.non_goals,
+                tech_stack: self.tech_stack,
+                status: ProjectStatus::from_str(&self.project_status).map_err(corrupt)?,
+                lifecycle_stage: LifecycleStage::from_str(&self.lifecycle_stage)
+                    .map_err(corrupt)?,
+                priority: self.priority,
+            },
+            self.partial_acknowledged != 0,
+            self.stale_acknowledged != 0,
+            parse_timestamp(
+                "github_analysis_import_proposals.created_at",
+                &self.created_at,
+            )?,
+            parse_timestamp(
+                "github_analysis_import_proposals.updated_at",
+                &self.updated_at,
+            )?,
+            self.version,
+        )
+        .map_err(corrupt)
+    }
+}
 
 #[derive(Clone)]
 pub struct SqliteProjectRepository {
@@ -1919,6 +1984,280 @@ impl GitHubImportRepository for SqliteProjectRepository {
             .map(GitHubImportDraftRow::into_domain)
             .transpose()
     }
+}
+
+#[async_trait]
+impl GitHubAnalysisImportRepository for SqliteProjectRepository {
+    async fn get_import_draft_by_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, RepositoryError> {
+        let query = format!(
+            "SELECT {GITHUB_DRAFT_COLUMNS} FROM github_import_drafts \
+             WHERE github_repository_id = ? LIMIT 1"
+        );
+        sqlx::query_as::<_, GitHubImportDraftRow>(&query)
+            .bind(repository_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(GitHubImportDraftRow::into_domain)
+            .transpose()
+    }
+
+    async fn get_project_id_by_github_repository(
+        &self,
+        workspace_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        sqlx::query_scalar(
+            "SELECT project.id FROM github_evidence_links link \
+             JOIN projects project ON project.id = link.project_id \
+             WHERE project.workspace_id = ? AND link.github_object_type = 'repository' \
+             AND link.github_object_id = ? LIMIT 1",
+        )
+        .bind(workspace_id)
+        .bind(repository_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)
+    }
+
+    async fn get_analysis_import_proposal_by_draft(
+        &self,
+        draft_id: &str,
+    ) -> Result<Option<GitHubAnalysisImportProposal>, RepositoryError> {
+        let query = format!(
+            "SELECT {GITHUB_ANALYSIS_IMPORT_COLUMNS} \
+             FROM github_analysis_import_proposals WHERE draft_id = ?"
+        );
+        sqlx::query_as::<_, GitHubAnalysisImportProposalRow>(&query)
+            .bind(draft_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(GitHubAnalysisImportProposalRow::into_domain)
+            .transpose()
+    }
+
+    async fn get_analysis_import_proposal_by_run(
+        &self,
+        analysis_run_id: &str,
+    ) -> Result<Option<GitHubAnalysisImportProposal>, RepositoryError> {
+        let query = format!(
+            "SELECT {GITHUB_ANALYSIS_IMPORT_COLUMNS} \
+             FROM github_analysis_import_proposals WHERE analysis_run_id = ?"
+        );
+        sqlx::query_as::<_, GitHubAnalysisImportProposalRow>(&query)
+            .bind(analysis_run_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(GitHubAnalysisImportProposalRow::into_domain)
+            .transpose()
+    }
+
+    async fn insert_analysis_import(
+        &self,
+        draft: &GitHubImportDraft,
+        proposal: &GitHubAnalysisImportProposal,
+        draft_is_new: bool,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        if draft_is_new {
+            let facts = draft.facts();
+            let languages = facts
+                .languages
+                .iter()
+                .cloned()
+                .collect::<std::collections::BTreeMap<_, _>>();
+            sqlx::query("INSERT INTO github_import_drafts (id, connector_id, github_repository_id, owner, name, url, description, homepage, default_branch, language, languages, topics, readme_summary, recent_commits, latest_release, status, imported_project_id, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(draft.id()).bind(draft.connector_id()).bind(&facts.repository_id).bind(&facts.owner).bind(&facts.name)
+                .bind(&facts.url).bind(&facts.description).bind(&facts.homepage).bind(&facts.default_branch).bind(&facts.language)
+                .bind(serde_json::to_string(&languages).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+                .bind(serde_json::to_string(&facts.topics).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+                .bind(&facts.readme_summary)
+                .bind(serde_json::to_string(&facts.recent_commits).map_err(|error| RepositoryError::Storage(error.to_string()))?)
+                .bind(facts.latest_release.as_ref().map(serde_json::to_string).transpose().map_err(|error| RepositoryError::Storage(error.to_string()))?)
+                .bind(draft.status().as_str()).bind(draft.imported_project_id()).bind(timestamp(draft.created_at())).bind(timestamp(draft.updated_at())).bind(draft.version())
+                .execute(&mut *transaction).await.map_err(map_write_error)?;
+        }
+        insert_analysis_import_proposal(&mut transaction, proposal).await?;
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn update_analysis_import(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_draft_version: i64,
+        proposal: &GitHubAnalysisImportProposal,
+        expected_proposal_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let draft_updated = sqlx::query(
+            "UPDATE github_import_drafts SET status = ?, imported_project_id = ?, \
+             updated_at = ?, version = ? WHERE id = ? AND version = ?",
+        )
+        .bind(draft.status().as_str())
+        .bind(draft.imported_project_id())
+        .bind(timestamp(draft.updated_at()))
+        .bind(draft.version())
+        .bind(draft.id())
+        .bind(expected_draft_version)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if draft_updated.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        let proposal_updated = sqlx::query(
+            "UPDATE github_analysis_import_proposals SET analysis_run_id = ?, \
+             source_commit_sha = ?, source_content_hash = ?, project_name = ?, \
+             project_slug = ?, description = ?, vision = ?, target_user = ?, scope = ?, \
+             non_goals = ?, tech_stack = ?, project_status = ?, lifecycle_stage = ?, \
+             priority = ?, partial_acknowledged = ?, stale_acknowledged = ?, \
+             updated_at = ?, version = ? WHERE draft_id = ? AND version = ?",
+        )
+        .bind(&proposal.analysis_run_id)
+        .bind(&proposal.source_commit_sha)
+        .bind(&proposal.source_content_hash)
+        .bind(&proposal.project.name)
+        .bind(&proposal.project.slug)
+        .bind(&proposal.project.description)
+        .bind(&proposal.project.vision)
+        .bind(&proposal.project.target_user)
+        .bind(&proposal.project.scope)
+        .bind(&proposal.project.non_goals)
+        .bind(&proposal.project.tech_stack)
+        .bind(proposal.project.status.as_str())
+        .bind(proposal.project.lifecycle_stage.as_str())
+        .bind(proposal.project.priority)
+        .bind(i64::from(proposal.partial_acknowledged))
+        .bind(i64::from(proposal.stale_acknowledged))
+        .bind(timestamp(proposal.updated_at))
+        .bind(proposal.version)
+        .bind(&proposal.draft_id)
+        .bind(expected_proposal_version)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if proposal_updated.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+        transaction.commit().await.map_err(storage)
+    }
+
+    async fn import_analysis_proposal(
+        &self,
+        write: GitHubAnalysisImportWrite,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let project = &write.project;
+        sqlx::query("INSERT INTO projects (id, workspace_id, slug, name, description, vision, target_user, scope, non_goals, tech_stack, status, lifecycle_stage, priority, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(&project.id).bind(&project.workspace_id).bind(&project.slug).bind(&project.name).bind(&project.description).bind(&project.vision)
+            .bind(&project.target_user).bind(&project.scope).bind(&project.non_goals).bind(&project.tech_stack).bind(project.status.as_str())
+            .bind(project.lifecycle_stage.as_str()).bind(project.priority).bind(timestamp(project.created_at)).bind(timestamp(project.updated_at)).bind(project.version)
+            .execute(&mut *transaction).await.map_err(map_write_error)?;
+
+        let draft_updated = sqlx::query(
+            "UPDATE github_import_drafts SET status = 'imported', imported_project_id = ?, \
+             updated_at = ?, version = ? WHERE id = ? AND status = 'reviewed' AND version = ?",
+        )
+        .bind(&project.id)
+        .bind(timestamp(write.draft.updated_at()))
+        .bind(write.draft.version())
+        .bind(write.draft.id())
+        .bind(write.expected_draft_version)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if draft_updated.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+
+        let proposal_current = sqlx::query(
+            "UPDATE github_analysis_import_proposals SET updated_at = updated_at \
+             WHERE draft_id = ? AND version = ?",
+        )
+        .bind(&write.proposal.draft_id)
+        .bind(write.expected_proposal_version)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if proposal_current.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+
+        let analysis_updated = sqlx::query(
+            "UPDATE github_analysis_runs SET imported_project_id = ?, updated_at = ?, \
+             version = ? WHERE id = ? AND workspace_id = ? AND version = ? \
+             AND status IN ('ready', 'partial') AND readiness <> 'blocked' \
+             AND imported_project_id IS NULL",
+        )
+        .bind(&project.id)
+        .bind(timestamp(write.analysis.updated_at))
+        .bind(write.analysis.version)
+        .bind(&write.analysis.id)
+        .bind(&write.analysis.workspace_id)
+        .bind(write.expected_analysis_version)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_write_error)?;
+        if analysis_updated.rows_affected() != 1 {
+            return Err(RepositoryError::OptimisticConflict);
+        }
+
+        for (evidence, object_type, object_id) in &write.evidences {
+            sqlx::query("INSERT INTO evidences (id, project_id, title, description, type, source_type, source_uri, verification_status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(evidence.id()).bind(evidence.project_id()).bind(evidence.title()).bind(evidence.description()).bind(evidence.evidence_type().as_str())
+                .bind(evidence.source_type().as_str()).bind(evidence.source_uri()).bind(evidence.verification_status().as_str())
+                .bind(timestamp(evidence.created_at())).bind(timestamp(evidence.updated_at())).bind(evidence.version())
+                .execute(&mut *transaction).await.map_err(map_write_error)?;
+            sqlx::query("INSERT INTO github_evidence_links (evidence_id, draft_id, project_id, github_object_type, github_object_id, captured_at) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(evidence.id()).bind(write.draft.id()).bind(&project.id).bind(object_type).bind(object_id).bind(timestamp(evidence.created_at()))
+                .execute(&mut *transaction).await.map_err(map_write_error)?;
+        }
+        transaction.commit().await.map_err(storage)
+    }
+}
+
+async fn insert_analysis_import_proposal(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    proposal: &GitHubAnalysisImportProposal,
+) -> Result<(), RepositoryError> {
+    sqlx::query(
+        "INSERT INTO github_analysis_import_proposals \
+         (draft_id, workspace_id, analysis_run_id, source_commit_sha, source_content_hash, \
+          project_name, project_slug, description, vision, target_user, scope, non_goals, \
+          tech_stack, project_status, lifecycle_stage, priority, partial_acknowledged, \
+          stale_acknowledged, created_at, updated_at, version) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&proposal.draft_id)
+    .bind(&proposal.workspace_id)
+    .bind(&proposal.analysis_run_id)
+    .bind(&proposal.source_commit_sha)
+    .bind(&proposal.source_content_hash)
+    .bind(&proposal.project.name)
+    .bind(&proposal.project.slug)
+    .bind(&proposal.project.description)
+    .bind(&proposal.project.vision)
+    .bind(&proposal.project.target_user)
+    .bind(&proposal.project.scope)
+    .bind(&proposal.project.non_goals)
+    .bind(&proposal.project.tech_stack)
+    .bind(proposal.project.status.as_str())
+    .bind(proposal.project.lifecycle_stage.as_str())
+    .bind(proposal.project.priority)
+    .bind(i64::from(proposal.partial_acknowledged))
+    .bind(i64::from(proposal.stale_acknowledged))
+    .bind(timestamp(proposal.created_at))
+    .bind(timestamp(proposal.updated_at))
+    .bind(proposal.version)
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_write_error)?;
+    Ok(())
 }
 
 #[async_trait]

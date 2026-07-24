@@ -540,6 +540,24 @@ impl<T> GitHubImportKernelRepository for T where
 {
 }
 
+pub trait GitHubAnalysisImportKernelRepository:
+    WorkspaceRepository
+    + ProjectRepository
+    + GitHubImportRepository
+    + super::GitHubAnalysisRepository
+    + super::GitHubAnalysisImportRepository
+{
+}
+
+impl<T> GitHubAnalysisImportKernelRepository for T where
+    T: WorkspaceRepository
+        + ProjectRepository
+        + GitHubImportRepository
+        + super::GitHubAnalysisRepository
+        + super::GitHubAnalysisImportRepository
+{
+}
+
 pub trait RepositoryKernelStore: WorkspaceRepository + ProjectRepository + RepositoryStore {}
 
 impl<T> RepositoryKernelStore for T where

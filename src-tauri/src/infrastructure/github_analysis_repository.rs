@@ -15,7 +15,7 @@ use crate::{
 
 use super::repositories::SqliteProjectRepository;
 
-const RUN_COLUMNS: &str = "id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version";
+const RUN_COLUMNS: &str = "id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, imported_project_id, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version";
 
 #[derive(FromRow)]
 struct RunRow {
@@ -34,6 +34,7 @@ struct RunRow {
     analysis_mode: String,
     ai_provider_id: Option<String>,
     ai_model: Option<String>,
+    imported_project_id: Option<String>,
     readiness: String,
     analyzer_revision: String,
     request_hash: String,
@@ -78,6 +79,7 @@ impl RunRow {
             analysis_mode: GitHubAnalysisMode::from_str(&self.analysis_mode).map_err(corrupt)?,
             ai_provider_id: self.ai_provider_id,
             ai_model: self.ai_model,
+            imported_project_id: self.imported_project_id,
             readiness: GitHubAnalysisReadiness::from_str(&self.readiness).map_err(corrupt)?,
             analyzer_revision: self.analyzer_revision,
             request_hash: self.request_hash,
@@ -149,13 +151,13 @@ impl GitHubAnalysisRepository for SqliteProjectRepository {
     }
 
     async fn insert_analysis_run(&self, run: &GitHubAnalysisRun) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO github_analysis_runs (id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO github_analysis_runs (id, workspace_id, github_repository_id, owner, name, repository_url, default_branch, source_commit_sha, focus_type, custom_prompt, status, stage, analysis_mode, ai_provider_id, ai_model, imported_project_id, readiness, analyzer_revision, request_hash, report_json, report_markdown, content_hash, tree_entries_seen, files_read, files_skipped, source_bytes, api_requests_used, api_requests_remaining, api_rate_limit_reset_at, ai_invoked, error_code, error_summary, started_at, completed_at, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(&run.id).bind(&run.workspace_id).bind(&run.github_repository_id)
             .bind(&run.owner).bind(&run.name).bind(&run.repository_url)
             .bind(&run.default_branch).bind(&run.source_commit_sha)
             .bind(run.focus_type.as_str()).bind(&run.custom_prompt)
             .bind(run.status.as_str()).bind(run.stage.map(|value| value.as_str()))
-            .bind(run.analysis_mode.as_str()).bind(&run.ai_provider_id).bind(&run.ai_model).bind(run.readiness.as_str())
+            .bind(run.analysis_mode.as_str()).bind(&run.ai_provider_id).bind(&run.ai_model).bind(&run.imported_project_id).bind(run.readiness.as_str())
             .bind(&run.analyzer_revision).bind(&run.request_hash)
             .bind(&run.report_json).bind(&run.report_markdown).bind(&run.content_hash)
             .bind(run.tree_entries_seen).bind(run.files_read).bind(run.files_skipped)
@@ -255,9 +257,9 @@ impl GitHubAnalysisRepository for SqliteProjectRepository {
         run: &GitHubAnalysisRun,
         expected_version: i64,
     ) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE github_analysis_runs SET status = ?, stage = ?, readiness = ?, report_json = ?, report_markdown = ?, content_hash = ?, tree_entries_seen = ?, files_read = ?, files_skipped = ?, source_bytes = ?, api_requests_used = ?, api_requests_remaining = ?, api_rate_limit_reset_at = ?, ai_invoked = ?, error_code = ?, error_summary = ?, started_at = ?, completed_at = ?, updated_at = ?, version = ? WHERE id = ? AND workspace_id = ? AND version = ?")
+        let result = sqlx::query("UPDATE github_analysis_runs SET status = ?, stage = ?, readiness = ?, imported_project_id = ?, report_json = ?, report_markdown = ?, content_hash = ?, tree_entries_seen = ?, files_read = ?, files_skipped = ?, source_bytes = ?, api_requests_used = ?, api_requests_remaining = ?, api_rate_limit_reset_at = ?, ai_invoked = ?, error_code = ?, error_summary = ?, started_at = ?, completed_at = ?, updated_at = ?, version = ? WHERE id = ? AND workspace_id = ? AND version = ?")
             .bind(run.status.as_str()).bind(run.stage.map(|value| value.as_str())).bind(run.readiness.as_str())
-            .bind(&run.report_json).bind(&run.report_markdown).bind(&run.content_hash)
+            .bind(&run.imported_project_id).bind(&run.report_json).bind(&run.report_markdown).bind(&run.content_hash)
             .bind(run.tree_entries_seen).bind(run.files_read).bind(run.files_skipped).bind(run.source_bytes)
             .bind(run.api_requests_used).bind(run.api_requests_remaining).bind(run.api_rate_limit_reset_at.map(timestamp))
             .bind(i64::from(run.ai_invoked)).bind(&run.error_code).bind(&run.error_summary)

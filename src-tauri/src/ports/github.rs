@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::{GitHubAnalysisRun, GitHubAnalysisSource, GitHubRepositoryFacts, Workspace};
+use crate::domain::{
+    Evidence, GitHubAnalysisImportProposal, GitHubAnalysisRun, GitHubAnalysisSource,
+    GitHubImportDraft, GitHubRepositoryFacts, Project, Workspace,
+};
 
 #[derive(Debug, Error)]
 pub enum GitHubClientError {
@@ -225,4 +228,54 @@ pub trait GitHubAnalysisRepository: Send + Sync {
         head_sha: &str,
         created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<bool, super::RepositoryError>;
+}
+
+#[derive(Clone, Debug)]
+pub struct GitHubAnalysisImportWrite {
+    pub draft: GitHubImportDraft,
+    pub expected_draft_version: i64,
+    pub proposal: GitHubAnalysisImportProposal,
+    pub expected_proposal_version: i64,
+    pub analysis: GitHubAnalysisRun,
+    pub expected_analysis_version: i64,
+    pub project: Project,
+    pub evidences: Vec<(Evidence, String, String)>,
+}
+
+#[async_trait]
+pub trait GitHubAnalysisImportRepository: Send + Sync {
+    async fn get_import_draft_by_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<GitHubImportDraft>, super::RepositoryError>;
+    async fn get_project_id_by_github_repository(
+        &self,
+        workspace_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<String>, super::RepositoryError>;
+    async fn get_analysis_import_proposal_by_draft(
+        &self,
+        draft_id: &str,
+    ) -> Result<Option<GitHubAnalysisImportProposal>, super::RepositoryError>;
+    async fn get_analysis_import_proposal_by_run(
+        &self,
+        analysis_run_id: &str,
+    ) -> Result<Option<GitHubAnalysisImportProposal>, super::RepositoryError>;
+    async fn insert_analysis_import(
+        &self,
+        draft: &GitHubImportDraft,
+        proposal: &GitHubAnalysisImportProposal,
+        draft_is_new: bool,
+    ) -> Result<(), super::RepositoryError>;
+    async fn update_analysis_import(
+        &self,
+        draft: &GitHubImportDraft,
+        expected_draft_version: i64,
+        proposal: &GitHubAnalysisImportProposal,
+        expected_proposal_version: i64,
+    ) -> Result<(), super::RepositoryError>;
+    async fn import_analysis_proposal(
+        &self,
+        write: GitHubAnalysisImportWrite,
+    ) -> Result<(), super::RepositoryError>;
 }

@@ -14,6 +14,7 @@ mod error;
 mod evidence;
 mod github;
 mod github_analysis;
+mod github_analysis_import;
 mod project;
 mod project_memory;
 mod project_pulse;
@@ -53,6 +54,7 @@ pub use github_analysis::{
     GitHubRepositoryKind, GitHubReproductionAssessment, GitHubSectionAvailability,
     ReproductionDifficulty, SourcedConclusion,
 };
+pub use github_analysis_import::GitHubAnalysisImportProposal;
 pub use project::{LifecycleStage, Project, ProjectDetails, ProjectStatus, ProjectUpdate};
 pub use project_memory::{RepositoryCommitObservation, RepositoryHistoryCursor};
 pub use project_pulse::{

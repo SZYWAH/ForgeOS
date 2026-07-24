@@ -403,11 +403,12 @@ async fn verify_core_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 async fn verify_desktop_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let table_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('github_analysis_runs', 'github_analysis_sources')",
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
+         ('github_analysis_runs', 'github_analysis_sources', 'github_analysis_import_proposals')",
     )
     .fetch_one(pool)
     .await?;
-    if table_count != 2 {
+    if table_count != 3 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS desktop analysis schema is incomplete".to_owned(),
         ));
@@ -420,6 +421,20 @@ async fn verify_desktop_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     if run_columns != 8 {
         return Err(sqlx::Error::Protocol(
             "ForgeOS GitHub analysis run schema is incomplete".to_owned(),
+        ));
+    }
+    let import_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('github_analysis_import_proposals') \
+         WHERE name IN ('draft_id', 'workspace_id', 'analysis_run_id', \
+         'source_commit_sha', 'source_content_hash', 'project_name', 'project_slug', \
+         'project_status', 'lifecycle_stage', 'partial_acknowledged', \
+         'stale_acknowledged', 'version')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if import_columns != 12 {
+        return Err(sqlx::Error::Protocol(
+            "ForgeOS GitHub analysis import schema is incomplete".to_owned(),
         ));
     }
     Ok(())

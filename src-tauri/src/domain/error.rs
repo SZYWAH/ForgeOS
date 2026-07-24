@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
+    #[error("invalid GitHub analysis import proposal")]
+    InvalidGitHubAnalysisImportProposal,
     #[error("invalid GitHub analysis: {0}")]
     InvalidGitHubAnalysis(String),
     #[error("unsupported achievement category: {0}")]

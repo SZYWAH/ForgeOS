@@ -25,21 +25,22 @@ pub use context::{
 };
 pub use git::{GitAdapter, GitAdapterError, GitCommit, GitCommitHistory, GitInspection};
 pub use github::{
-    GitHubAnalysisPage, GitHubAnalysisRepository, GitHubAnalysisRepositoryMetadata, GitHubClient,
-    GitHubClientError, GitHubCommitMetadata, GitHubHead, GitHubProjectSource,
-    GitHubProjectSourceError, GitHubRateLimit, GitHubReleaseMetadata, GitHubSupplementalSources,
-    GitHubTextSource, GitHubTree, GitHubTreeEntry,
+    GitHubAnalysisImportRepository, GitHubAnalysisImportWrite, GitHubAnalysisPage,
+    GitHubAnalysisRepository, GitHubAnalysisRepositoryMetadata, GitHubClient, GitHubClientError,
+    GitHubCommitMetadata, GitHubHead, GitHubProjectSource, GitHubProjectSourceError,
+    GitHubRateLimit, GitHubReleaseMetadata, GitHubSupplementalSources, GitHubTextSource,
+    GitHubTree, GitHubTreeEntry,
 };
 pub use repositories::{
     AchievementRepository, AiCandidateKernelRepository, AiCandidateRepository,
     AiProviderRepository, CodexExecutionKernelRepository, CodexExecutionRepository,
     CodexSyncCursor, CodexTaskProposalKernelRepository, CodexTaskProposalRepository,
     ContextExportRepository, ContextPackRepository, EvidenceRepository,
-    GitHubImportKernelRepository, GitHubImportRepository, McpGitEvidenceRecord, McpQueryRepository,
-    ProjectActivityRepository, ProjectKernelRepository, ProjectMemoryKernelRepository,
-    ProjectMemoryRepository, ProjectPulseKernelRepository, ProjectRepository,
-    PulseConfirmationWrite, RepositoryError, RepositoryKernelStore, RepositoryStore,
-    SessionRepository, SnapshotRepository, WorkspaceRepository,
+    GitHubAnalysisImportKernelRepository, GitHubImportKernelRepository, GitHubImportRepository,
+    McpGitEvidenceRecord, McpQueryRepository, ProjectActivityRepository, ProjectKernelRepository,
+    ProjectMemoryKernelRepository, ProjectMemoryRepository, ProjectPulseKernelRepository,
+    ProjectRepository, PulseConfirmationWrite, RepositoryError, RepositoryKernelStore,
+    RepositoryStore, SessionRepository, SnapshotRepository, WorkspaceRepository,
 };
 mod app_preferences;
 pub use app_preferences::AppPreferencesRepository;
