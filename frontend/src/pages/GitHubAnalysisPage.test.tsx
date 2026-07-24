@@ -15,8 +15,9 @@ const analysisApi = vi.hoisted(() => ({
 }));
 const projectApi = vi.hoisted(() => ({ getCurrentWorkspace: vi.fn() }));
 const aiProviderApi = vi.hoisted(() => ({ list: vi.fn() }));
+const analysisImportApi = vi.hoisted(() => ({ get: vi.fn(), prepare: vi.fn() }));
 
-vi.mock("../api/github", () => ({ githubAnalysisApi: analysisApi }));
+vi.mock("../api/github", () => ({ githubAnalysisApi: analysisApi, githubAnalysisImportApi: analysisImportApi }));
 vi.mock("../api/project-kernel", () => ({ projectKernelApi: projectApi }));
 vi.mock("../api/ai-provider", () => ({ aiProviderApi }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
@@ -56,6 +57,9 @@ describe("GitHub project analysis workbench", () => {
     projectApi.getCurrentWorkspace.mockResolvedValue({ id: "workspace-1" });
     aiProviderApi.list.mockReset();
     aiProviderApi.list.mockResolvedValue([]);
+    analysisImportApi.get.mockReset();
+    analysisImportApi.get.mockResolvedValue(undefined);
+    analysisImportApi.prepare.mockReset();
     analysisApi.list.mockResolvedValue({ items: [], nextCursor: undefined });
   });
 
