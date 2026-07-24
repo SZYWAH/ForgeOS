@@ -265,3 +265,101 @@
   .github-analysis-activity-list li { grid-template-columns: 1fr; gap: var(--space-1); }
   .analysis-run-list > button { align-items: flex-start; }
 }
+.github-analysis-import-page {
+  max-width: 1120px;
+}
+
+.github-analysis-import-source {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: var(--space-4);
+}
+
+.github-analysis-import-source > div {
+  min-width: 0;
+  padding: 0 var(--space-4);
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.github-analysis-import-source > div:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.github-analysis-import-source span,
+.github-analysis-import-source strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.github-analysis-import-source span {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption);
+}
+
+.github-analysis-import-form,
+.github-analysis-import-preview {
+  padding: var(--space-6);
+}
+
+.github-analysis-import-form .form-grid {
+  margin-top: var(--space-6);
+}
+
+.github-analysis-import-acknowledgements {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-6) 0 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+}
+
+.github-analysis-import-acknowledgements label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.github-analysis-import-preview__columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.github-analysis-import-preview h2,
+.github-analysis-import-preview h3 {
+  margin-top: 0;
+}
+
+.github-analysis-import-preview ul {
+  margin-bottom: 0;
+  padding-inline-start: var(--space-6);
+}
+
+.github-analysis-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@media (max-width: 900px) {
+  .github-analysis-import-source,
+  .github-analysis-import-preview__columns {
+    grid-template-columns: 1fr;
+  }
+
+  .github-analysis-import-source > div {
+    padding: var(--space-3) 0;
+    border-inline-start: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .github-analysis-import-source > div:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+}

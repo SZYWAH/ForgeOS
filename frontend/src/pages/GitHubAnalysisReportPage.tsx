@@ -3,13 +3,14 @@ import { listen } from "@tauri-apps/api/event";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { githubAnalysisApi } from "../api/github";
+import { githubAnalysisApi, githubAnalysisImportApi } from "../api/github";
 import { aiProviderApi } from "../api/ai-provider";
 import { projectKernelApi } from "../api/project-kernel";
 import { CompactIdentifier } from "../components/content/ContentGovernance";
 import { PageIntro } from "../components/ui/PlainLanguage";
 import type {
   GitHubAnalysisReport,
+  GitHubAnalysisImportView,
   GitHubAnalysisReportView,
   GitHubAnalysisSource,
   GitHubSectionAvailability,
@@ -30,6 +31,7 @@ export function GitHubAnalysisReportPage() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [importView, setImportView] = useState<GitHubAnalysisImportView>();
   const [aiProviderId, setAiProviderId] = useState("");
 
   const errorText = (reason: unknown) => {
@@ -63,14 +65,16 @@ export function GitHubAnalysisReportPage() {
         return;
       }
       setWorkspaceId(workspace.id);
-      const [report, availableProviders] = await Promise.all([
+      const [report, availableProviders, existingImport] = await Promise.all([
         githubAnalysisApi.getReport(workspace.id, analysisId),
         aiProviderApi.list().catch(() => [] as AiProvider[]),
+        githubAnalysisImportApi.get(workspace.id, analysisId).catch(() => undefined),
       ]);
       const enabledProviders = availableProviders.filter((provider) => provider.enabled);
       setProviders(enabledProviders);
       if (enabledProviders.length === 1) setAiProviderId(enabledProviders[0].id);
       setView(report);
+      setImportView(existingImport);
     } catch (reason) {
       setError(errorText(reason));
     }
@@ -139,6 +143,26 @@ export function GitHubAnalysisReportPage() {
     setCopied(true);
   }
 
+  async function openImport() {
+    if (!workspaceId) return;
+    if (view?.status.importedProjectId) {
+      navigate(`/projects/${view.status.importedProjectId}`);
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const prepared = await githubAnalysisImportApi.prepare(workspaceId, analysisId);
+      setImportView(prepared);
+      if (prepared.existingProjectId) navigate(`/projects/${prepared.existingProjectId}`);
+      else navigate(`/github-import/analyses/${analysisId}/import`);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!view) {
     return <div className="page-stack"><PageIntro title={t("githubAnalysis.reportTitle")} description={t("common.loading")} />{error ? <div className="error-banner">{error}</div> : null}</div>;
   }
@@ -146,15 +170,21 @@ export function GitHubAnalysisReportPage() {
   const status = view.status;
   const running = RUNNING.has(status.status);
   const legacy = status.analyzerRevision === "github-rules-v1";
+  const importEligible = !running
+    && (status.status === "ready" || status.status === "partial")
+    && status.readiness !== "blocked";
 
   return <div className="page-stack github-analysis-report-page">
     <PageIntro
       title={`${status.owner}/${status.name}`}
       description={t("githubAnalysis.reportDescription")}
-      primaryAction={!running && view.contentMarkdown ? <button className="primary-button" disabled={status.readiness === "blocked"} onClick={() => void copy()} type="button">{copied ? t("common.copied") : t("githubAnalysis.copyReport")}</button> : undefined}
-      secondaryActions={<button className="secondary-button" type="button" onClick={() => navigate("/github-import?mode=analysis")}>{t("githubAnalysis.backToAnalyses")}</button>}
+      primaryAction={(status.importedProjectId || importView?.existingProjectId)
+        ? <button className="primary-button" type="button" onClick={() => navigate(`/projects/${status.importedProjectId ?? importView?.existingProjectId}`)}>{t("githubAnalysisImport.openProject")}</button>
+        : <button className="primary-button" disabled={busy || !importEligible} onClick={() => void openImport()} type="button">{importView?.draft ? t("githubAnalysisImport.continueImport") : t("githubAnalysisImport.importProject")}</button>}
+      secondaryActions={<><button className="secondary-button" disabled={!view.contentMarkdown || status.readiness === "blocked"} onClick={() => void copy()} type="button">{copied ? t("common.copied") : t("githubAnalysis.copyReport")}</button><button className="secondary-button" type="button" onClick={() => navigate("/github-import?mode=analysis")}>{t("githubAnalysis.backToAnalyses")}</button></>}
     />
     {error ? <div className="error-banner">{error}</div> : null}
+    {!importEligible && !status.importedProjectId && !importView?.existingProjectId ? <div className="notice notice--warning"><p>{t("githubAnalysisImport.notEligible")}</p></div> : null}
     {legacy ? <div className="notice notice--warning"><strong>{t("githubAnalysis.legacyReport")}</strong><p>{t("githubAnalysis.legacyReportDescription")}</p></div> : null}
     <AnalysisStatus view={view} />
     {!running && status.analysisMode === "rules" && status.readiness !== "blocked" ? <section className="surface github-ai-enhance"><div><h2>{t("githubAnalysis.enhanceReport")}</h2><p>{t("githubAnalysis.enhanceReportDescription")}</p></div>{providers.length ? <div className="github-ai-enhance__actions"><label>{t("githubAnalysis.aiProvider")}<select value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}><option value="">{t("githubAnalysis.selectAiProvider")}</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>)}</select></label><button className="secondary-button" disabled={busy || !aiProviderId} type="button" onClick={() => void enhanceWithAi()}>{t("githubAnalysis.enhanceAction")}</button></div> : <div className="notice notice--warning"><p>{t("githubAnalysis.noAiProviderDescription")}</p><button className="secondary-button" type="button" onClick={() => navigate("/settings/ai-providers")}>{t("githubAnalysis.configureAiProvider")}</button></div>}</section> : null}

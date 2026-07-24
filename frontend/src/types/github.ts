@@ -1,5 +1,5 @@
 import type { Evidence } from "./evidence";
-import type { Project } from "./project";
+import type { LifecycleStage, Project, ProjectStatus } from "./project";
 
 export type GitHubConnector = {
   id: string;
@@ -74,6 +74,7 @@ export type GitHubAnalysisStatusView = {
   analysisRunId: string; owner: string; name: string; repositoryUrl: string;
   focusType: GitHubAnalysisFocus; customPrompt?: string; status: GitHubAnalysisStatus;
   analysisMode: GitHubAnalysisMode; aiProviderId?: string; aiModel?: string;
+  importedProjectId?: string;
   analysisMethod: GitHubAnalysisMethod; aiFallbackUsed: boolean;
   readiness: GitHubAnalysisReadiness; stage?: GitHubAnalysisStage;
   defaultBranch: string; sourceCommitSha: string; analyzerRevision: string; stale: boolean;
@@ -114,3 +115,50 @@ export type GitHubAnalysisReport = {
 export type GitHubAnalysisReportView = { status: GitHubAnalysisStatusView; report?: GitHubAnalysisReport; contentMarkdown?: string; contentHash?: string; sources: GitHubAnalysisSource[] };
 export type GitHubAnalysisList = { items: GitHubAnalysisStatusView[]; nextCursor?: string };
 export type StartGitHubAnalysisResult = { analysisRunId: string; reusedExistingRun: boolean; warnings: string[] };
+
+export type GitHubAnalysisImportProjectFields = {
+  name: string;
+  slug: string;
+  description: string;
+  vision: string;
+  targetUser: string;
+  scope: string;
+  nonGoals: string;
+  techStack: string;
+  status: ProjectStatus;
+  lifecycleStage: LifecycleStage;
+  priority: number;
+};
+
+export type GitHubAnalysisImportProposal = {
+  draftId: string;
+  workspaceId: string;
+  analysisRunId: string;
+  sourceCommitSha: string;
+  sourceContentHash: string;
+  projectName: string;
+  projectSlug: string;
+  description: string;
+  vision: string;
+  targetUser: string;
+  scope: string;
+  nonGoals: string;
+  techStack: string;
+  projectStatus: ProjectStatus;
+  lifecycleStage: LifecycleStage;
+  priority: number;
+  partialAcknowledged: boolean;
+  staleAcknowledged: boolean;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+};
+
+export type GitHubAnalysisImportView = {
+  analysis: GitHubAnalysisStatusView;
+  draft?: GitHubImportDraft;
+  proposal?: GitHubAnalysisImportProposal;
+  existingProjectId?: string;
+  stale: boolean;
+  sourceChanged: boolean;
+};
