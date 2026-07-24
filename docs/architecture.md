@@ -679,3 +679,22 @@ Public Repository URL
 - 导入接口保留合同但不注册 Command；Project 仍与 Analysis Run 隔离，导入衔接延后到 D9.3。
 
 完整接口、状态、来源预算和错误码以 `docs/github-analysis-contract.md` 为唯一实施合同。D9.2 已实现用户主动、来源治理的 AI 增强；导入衔接延后。
+
+### D9.3 GitHub Analysis 人工导入链路
+
+```text
+Saved Analysis Run + Sources
+        ↓
+GitHubAnalysisImportKernel
+        ↓
+GitHub Import Draft + Editable Project Proposal
+        ↓
+Human Review
+        ↓
+Atomic Project + Repository/Release Evidence
+```
+
+- Mapping、可导入状态、Partial/Stale 确认和重复仓库处理位于 Application 层，不放入 IPC。
+- Repository 以单事务创建 Project、标记 Draft、关联 Analysis 和写入受限 Evidence。
+- 整条链路只读已保存 Analysis，不调用 GitHub、AI、Shell 或 Git。
+- Analysis 解释仓库；Project Identity 由用户确认；Snapshot 和 Session 必须在导入后通过研发记忆流程形成。

@@ -890,3 +890,33 @@ Commit 观察不保存作者邮箱、Commit Body、Diff、文件内容或绝对�
 - 相同请求复用现有 Run；HEAD、Prompt、模式或分析器版本变化时创建新 Run。
 - Archive 只改变状态，不物理删除报告或来源链。
 - 完整 Schema、报告引用规则和错误语义见 `docs/github-analysis-contract.md`。
+
+## Migration 0021：GitHub Analysis Project Import
+
+状态：D9.3 通过前向 Migration `0021_github_analysis_project_import.sql` 实现，不修改 `0001-0020`。
+
+### `github_analysis_import_proposals`
+
+用途：在既有 `github_import_drafts` 上保存可编辑的完整项目身份草稿，并把草稿绑定到用户选择的 Analysis Run、HEAD 和 Content Hash。
+
+核心字段：
+
+- `draft_id TEXT PRIMARY KEY REFERENCES github_import_drafts(id)`
+- `workspace_id TEXT NOT NULL REFERENCES workspaces(id)`
+- `analysis_run_id TEXT NOT NULL UNIQUE REFERENCES github_analysis_runs(id)`
+- `source_commit_sha / source_content_hash`
+- `project_name / project_slug / description / vision / target_user`
+- `scope / non_goals / tech_stack`
+- `project_status / lifecycle_stage / priority`
+- `partial_acknowledged / stale_acknowledged`
+- `created_at / updated_at / version`
+
+约束：
+
+- `(workspace_id, project_slug)` 唯一，最终 Project 的同 Workspace Slug 约束仍会再次验证。
+- Trigger 验证 Draft 和 Analysis 指向同一 GitHub Repository，Analysis 属于同一 Workspace，且 HEAD、Hash、状态和 Readiness 可导入。
+- Trigger 验证 `github_analysis_runs.imported_project_id` 属于 Analysis 的 Workspace。
+- Proposal 更新采用乐观版本；Reviewed 内容再次编辑后 Draft 回到 `draft`。
+- `partial` 和 Stale 确认只表达用户知情，不改变原 Analysis Report。
+
+最终导入在一个事务中创建 Project、更新 Draft 与 Analysis，并创建一条 GitHub Repository Evidence 和最多一条最新 Release Evidence。Snapshot、Session、Achievement、本地 Repository 和 Commit Evidence 不进入该事务。

@@ -292,6 +292,10 @@ D9.1 及后续实现必须先阅读：
 - 连接测试必须由用户主动点击，使用最小消息，不保存 Prompt 或 Response，并明确提示可能产生少量费用。
 - 新增 Provider 预设时只能填写建议配置，不能锁死模型，也不能绕过默认停用和用户显式启用规则。
 - D9.2 GitHub AI 分析只能调用 `AiProviderKernel`，不得直接依赖某个协议 Adapter。
+- D9.3 GitHub Analysis Import 只能读取已保存的 Run 与 Source，不得在准备、审核或最终导入时调用 GitHub 或 AI。
+- Analysis、Import Draft、Project Proposal 和 Project 必须分别校验 Workspace、Repository、HEAD、Content Hash 和乐观版本。
+- 最终导入必须是单事务；只允许创建 Project、Repository Evidence 和可选的最新 Release Evidence。
+- 静态分析不得自动创建 Snapshot、Session、Achievement、本地 Repository 或 Commit Evidence。
 
 ### 文档与代码一致性检查
 

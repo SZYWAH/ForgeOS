@@ -193,3 +193,16 @@ flowchart LR
 - Webhook、后台持续同步和 Agent。
 - 将外部项目报告自动写入正式 Project 事实。
 - AI 增强和“导入为 Project”衔接。
+# D9.3 GitHub 分析项目导入
+
+GitHub 分析报告详情页的主操作为“导入为 ForgeOS 项目”。操作不会立即创建项目，而是进入完整项目草稿审核页。
+
+审核页按以下顺序表达：
+
+1. 来源 Repository、Branch、HEAD、分析方式和报告时间。
+2. 可编辑的完整 Project Identity。
+3. Partial、Stale 和质量警告。
+4. 将创建与不会创建的数据边界。
+5. 保存草稿、确认导入内容、创建项目。
+
+同仓库已有草稿时继续人工内容；新报告只有在用户确认后才能覆盖草稿。已导入时直接打开原 Project。导入成功后的建议为检查身份、连接本地仓库、同步 Codex 与 Git。

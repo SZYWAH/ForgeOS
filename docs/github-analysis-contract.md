@@ -1,9 +1,9 @@
 # ForgeOS GitHub Analysis Contract
 
-- 状态：D9.2 用户主动 AI 增强已实现
-- 适用范围：D9.1–D9.2 GitHub Project Intelligence
+- 状态：D9.3 人工项目导入闭环已实现
+- 适用范围：D9.1–D9.3 GitHub Project Intelligence
 
-实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；D9.1.1 冻结 rules-v2 质量；D9.2 增加用户主动、来源治理的 AI 增强和可靠规则回退。导入衔接仍属于后续阶段。
+实现说明：D9.1 已实现公开 Repository 的受限采集、确定性规则报告、历史、重新分析与归档；D9.1.1 冻结 rules-v2 质量；D9.2 增加用户主动、来源治理的 AI 增强和可靠规则回退；D9.3 增加完整项目草稿、人工审核和原子 Project 导入。
 
 ## 1. 术语与生命周期边界
 
@@ -458,6 +458,12 @@ interface GitHubAnalysisProgressEvent {
 | `github_analysis_version_conflict` | 报告状态已在其他窗口变化。 | 重新加载，不覆盖。 |
 | `github_analysis_storage_error` | 无法安全保存 Run 或来源。 | 整体回滚。 |
 | `github_analysis_blocked` | 检测到无法安全输出的内容。 | 禁止复制、AI 增强和导入。 |
+| `github_analysis_import_not_eligible` | Run 尚未完成、已归档或状态不支持导入。 | 不创建 Draft 或 Project。 |
+| `github_analysis_import_blocked` | Report Readiness 为 Blocked。 | 禁止准备和最终导入。 |
+| `github_analysis_import_partial_ack_required` | Partial 报告未明确知情。 | 保留草稿，要求勾选确认。 |
+| `github_analysis_import_stale_ack_required` | 报告 HEAD 已过期且未明确知情。 | 保留草稿，要求勾选确认。 |
+| `github_analysis_import_version_conflict` | Draft 或 Proposal 已在其他位置改变。 | 重新加载，不覆盖人工修改。 |
+| `project_slug_conflict` | Workspace 中已有相同 Project Slug。 | 要求用户修改，不自动加随机后缀。 |
 
 中文和英文语言资源必须使用相同错误码键集合。内部 GitHub 错误正文放入技术详情，不直接作为主要用户提示。
 
@@ -489,7 +495,17 @@ interface GitHubAnalysisProgressEvent {
 | 分析失败 | 阶段、错误原因和安全重试入口。 | 重新分析 |
 | 报告过期 | 原 HEAD、当前 HEAD 与差异说明。 | 重新分析 |
 
-报告页唯一主操作为“复制分析报告”。规则报告可以通过次级操作生成独立的 AI 增强报告，重新分析和归档也保持为次级操作。“导入为 ForgeOS 项目”延后到 D9.3。任何页面都不得出现克隆、运行、复现执行、Fork、Push、PR 或自动二开按钮。
+报告页唯一主操作为“导入为 ForgeOS 项目”；已存在草稿时改为“继续完成导入”，已导入时改为“打开 ForgeOS 项目”。复制、AI 增强、重新分析和归档保持次级操作。任何页面都不得出现克隆、运行、复现执行、Fork、Push、PR 或自动二开按钮。
+
+### D9.3 导入状态合同
+
+- `ready` 可以生成草稿。
+- `partial` 可以生成草稿，但审核前必须确认内容不完整。
+- Stale 报告可以生成草稿，但审核前必须确认 HEAD 已过期。
+- `blocked / failed / archived / running` 禁止导入。
+- Proposal 绑定选定 Run、HEAD 和 Content Hash；新 Run 不覆盖现有人工草稿。
+- 同一 Repository 已导入时返回原 Project。
+- 最终导入只创建 Project、Repository Evidence 和最多一条 Release Evidence。
 
 ### 本地化键合同
 

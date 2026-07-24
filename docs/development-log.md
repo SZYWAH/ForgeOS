@@ -1147,3 +1147,30 @@ D9.2.1 主流 AI Provider 兼容层。本阶段不改变 D9.2 的来源治理、
 ## 下一步计划
 
 D9.3 实现 `GitHub Analysis Report → 用户审核 → GitHub Import Draft → 人工创建 ForgeOS Project`。
+
+# 2026-07-23 — ForgeOS D9.3 GitHub Analysis Human Import
+
+## 当前阶段
+
+D9.3 已把规则或 AI GitHub 分析报告连接到人工审核的 Project 导入流程。本阶段不重新请求 GitHub、不调用 AI，不实现 Clone、运行、Fork、Push、PR 或自动研发事实。
+
+## 完成内容
+
+- 新增 Migration 0021 和一对一 `github_analysis_import_proposals`，保存完整可编辑 Project 草稿及 Analysis Run、HEAD、Content Hash 来源。
+- 新增 `GitHubAnalysisImportKernel`，实现准备、读取、更新、审核、从当前报告重新生成和最终导入。
+- 同一 GitHub Repository 复用原 Draft/Project；新报告不会静默覆盖人工草稿，Rejected 需要明确重新开启。
+- Partial 与 Stale 必须分别确认；Blocked、Failed、Archived 和运行中报告禁止导入。
+- 最终事务只创建 Project、Repository Evidence 和可选最新 Release Evidence；Snapshot、Session、Achievement、本地 Repository 与 Commit Evidence 保持不变。
+- 报告页主操作接入导入状态；新增完整项目草稿审核页和中英文界面。
+- 新增 ADR-025，冻结外部仓库分析与个人研发事实之间的人工确认边界。
+
+## 验证结果
+
+- 新增 3 项导入集成测试，覆盖完整编辑与审核、Partial/Stale 明示确认、幂等导入、两类 Evidence 和 Snapshot/Session/Achievement/本地 Repository 隔离。
+- `npm run typecheck`、12 个 Vitest 文件共 63 项测试和 `npm run build` 全部通过；Vite 仅保留既有的单包体积提示。
+- 主程序 `cargo fmt --check`、`cargo check` 与全量 `cargo test` 通过：106 项库测试通过、1 项依赖本机 Codex 历史的 Smoke Test 按设计忽略；D9.3 数据库与事务集成测试全部通过。
+- `forgeos-mcp` 格式检查和 3 项只读测试通过；MCP 工具面、只读隔离和 STDIO 行为未改变。
+- `git diff --check` 通过。桌面开发版成功把真实 SQLite 数据库从 Migration 0019 前向升级到 0021；升级后 `integrity_check = ok`、`foreign_key_check = 0`。
+- 使用已有的 `obsidianmd/obsidian-releases` Partial 规则报告完成真实桌面闭环：生成草稿、编辑项目定位、确认分析不完整、审核并创建 Project；再次打开同一报告时直接进入原 Project，没有重复创建。
+- 实机只读审计确认导入仅创建 1 个 Project 和 1 条 `github_repository` 未验证资料；该旧版报告没有 Release 元数据，因此未创建 Release 资料。Snapshot、Session、Achievement 与本地 Repository 均为 0。验收中两次打开新项目 Overview 均因尚未连接本地仓库各产生 1 条失败 SyncRun，这是既有项目首页行为，不属于导入事务。
+- 当前真实数据库没有可用的 AI 增强报告，且桌面端没有已启用 AI Provider，因此本轮未进行 AI 报告的实机导入；该路径继续由 Application 与数据库集成测试覆盖。
