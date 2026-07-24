@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::application::GitHubImportKernel;
+use crate::application::{GitHubAnalysisImportKernel, GitHubImportKernel};
 
 use super::{
     dto::{
@@ -96,9 +96,25 @@ pub async fn reject_github_import(
 #[tauri::command]
 pub async fn import_github_project(
     kernel: State<'_, GitHubImportKernel>,
+    analysis_import_kernel: State<'_, GitHubAnalysisImportKernel>,
     draft_id: String,
     input: TransitionGitHubImportRequest,
 ) -> Result<GitHubImportResultDto, IpcError> {
+    if let (Some(workspace_id), Some(proposal_expected_version)) = (
+        input.workspace_id.as_deref(),
+        input.proposal_expected_version,
+    ) {
+        return analysis_import_kernel
+            .import_reviewed(
+                workspace_id,
+                &draft_id,
+                input.expected_version,
+                proposal_expected_version,
+            )
+            .await
+            .map(Into::into)
+            .map_err(Into::into);
+    }
     kernel
         .import_draft(&draft_id, input.expected_version)
         .await

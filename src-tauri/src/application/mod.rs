@@ -11,6 +11,7 @@ pub mod context_pack;
 mod error;
 pub mod evidence;
 pub mod github_analysis;
+pub mod github_analysis_import;
 pub mod github_import;
 mod kernel;
 pub mod mcp_query;
@@ -38,6 +39,10 @@ pub use github_analysis::{
     GitHubAnalysisError, GitHubAnalysisKernel, GitHubAnalysisListView, GitHubAnalysisProgress,
     GitHubAnalysisReportView, GitHubAnalysisStatusView, StartGitHubAnalysisInput,
     StartGitHubAnalysisResult,
+};
+pub use github_analysis_import::{
+    GitHubAnalysisImportError, GitHubAnalysisImportKernel, GitHubAnalysisImportView,
+    ReviewGitHubAnalysisImportInput, UpdateGitHubAnalysisImportInput,
 };
 pub use github_import::{GitHubImportError, GitHubImportKernel};
 pub use kernel::ProjectKernel;

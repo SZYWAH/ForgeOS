@@ -10,8 +10,9 @@ use crate::{
     application::{
         codex_mcp::resolve_expected_sidecar, AchievementKernel, AiCandidateKernel,
         AiProviderKernel, AppPreferencesKernel, CodexExecutionKernel, CodexMcpKernel,
-        CodexTaskProposalKernel, ContextPackKernel, GitHubAnalysisKernel, GitHubImportKernel,
-        ProjectKernel, ProjectMemoryQueryKernel, ProjectPulseKernel, RepositoryKernel,
+        CodexTaskProposalKernel, ContextPackKernel, GitHubAnalysisImportKernel,
+        GitHubAnalysisKernel, GitHubImportKernel, ProjectKernel, ProjectMemoryQueryKernel,
+        ProjectPulseKernel, RepositoryKernel,
     },
     infrastructure::{
         ai_client::OpenAiCompatibleClient,
@@ -43,6 +44,7 @@ pub struct BootstrapState {
     pub codex_execution_kernel: CodexExecutionKernel,
     pub github_import_kernel: GitHubImportKernel,
     pub github_analysis_kernel: GitHubAnalysisKernel,
+    pub github_analysis_import_kernel: GitHubAnalysisImportKernel,
     pub project_pulse_kernel: ProjectPulseKernel,
     pub project_memory_kernel: ProjectMemoryQueryKernel,
     pub achievement_kernel: AchievementKernel,
@@ -93,6 +95,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
     let github_analysis_kernel =
         GitHubAnalysisKernel::new(repository.clone(), github_client, github_token_store)
             .with_ai_provider(Arc::new(ai_provider_kernel.clone()));
+    let github_analysis_import_kernel = GitHubAnalysisImportKernel::new(repository.clone());
     tauri::async_runtime::block_on(github_analysis_kernel.recover_interrupted_runs())
         .map_err(|error| BootstrapError::GitHubClient(error.to_string()))?;
     let project_pulse_kernel = ProjectPulseKernel::new(
@@ -119,6 +122,7 @@ pub fn initialize(app: &AppHandle) -> Result<BootstrapState, BootstrapError> {
         codex_execution_kernel,
         github_import_kernel,
         github_analysis_kernel,
+        github_analysis_import_kernel,
         project_pulse_kernel,
         project_memory_kernel,
         achievement_kernel,

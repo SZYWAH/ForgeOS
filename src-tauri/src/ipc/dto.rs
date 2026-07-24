@@ -1012,6 +1012,10 @@ pub struct PreviewGitHubRepositoryRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TransitionGitHubImportRequest {
     pub expected_version: i64,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub proposal_expected_version: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

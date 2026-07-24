@@ -48,6 +48,7 @@ pub fn run() {
             app.manage(state.codex_execution_kernel);
             app.manage(state.github_import_kernel);
             app.manage(state.github_analysis_kernel);
+            app.manage(state.github_analysis_import_kernel);
             app.manage(state.project_pulse_kernel);
             app.manage(state.project_memory_kernel);
             app.manage(state.achievement_kernel);
@@ -125,6 +126,11 @@ pub fn run() {
             ipc::github_analysis::list_github_analyses,
             ipc::github_analysis::reanalyze_github_project,
             ipc::github_analysis::archive_github_analysis,
+            ipc::github_analysis_import::import_github_analysis,
+            ipc::github_analysis_import::get_github_analysis_import,
+            ipc::github_analysis_import::update_github_analysis_import,
+            ipc::github_analysis_import::review_github_analysis_import,
+            ipc::github_analysis_import::refresh_github_analysis_import_from_report,
             ipc::project_pulse::get_codex_connector_status,
             ipc::project_pulse::update_codex_connector_settings,
             ipc::project_pulse::get_project_activity_settings,

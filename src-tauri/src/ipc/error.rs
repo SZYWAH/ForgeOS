@@ -4,8 +4,8 @@ use crate::{
     application::{
         AchievementError, AiCandidateError, AiProviderError, AppPreferencesError, ApplicationError,
         CodexExecutionError, CodexMcpError, CodexTaskProposalError, ContextPackError,
-        GitHubAnalysisError, GitHubImportError, ProjectMemoryError, ProjectPulseError,
-        RepositoryKernelError,
+        GitHubAnalysisError, GitHubAnalysisImportError, GitHubImportError, ProjectMemoryError,
+        ProjectPulseError, RepositoryKernelError,
     },
     domain::DomainError,
 };
@@ -56,6 +56,50 @@ impl From<GitHubAnalysisError> for IpcError {
                 ("github_analysis_blocked", false)
             }
             GitHubAnalysisError::Storage(_) => ("github_analysis_storage_error", true),
+        };
+        Self {
+            code,
+            message: error.to_string(),
+            retryable,
+        }
+    }
+}
+
+impl From<GitHubAnalysisImportError> for IpcError {
+    fn from(error: GitHubAnalysisImportError) -> Self {
+        let (code, retryable) = match &error {
+            GitHubAnalysisImportError::Validation(_) => ("validation_error", false),
+            GitHubAnalysisImportError::WorkspaceNotFound => ("workspace_not_found", false),
+            GitHubAnalysisImportError::AnalysisNotFound => ("github_analysis_not_found", false),
+            GitHubAnalysisImportError::AnalysisNotEligible => {
+                ("github_analysis_import_not_eligible", false)
+            }
+            GitHubAnalysisImportError::AnalysisBlocked => ("github_analysis_import_blocked", false),
+            GitHubAnalysisImportError::DraftNotFound => ("github_import_not_found", false),
+            GitHubAnalysisImportError::ProposalNotFound => {
+                ("github_analysis_import_proposal_not_found", false)
+            }
+            GitHubAnalysisImportError::ExistingProject(_) => {
+                ("github_analysis_import_project_exists", false)
+            }
+            GitHubAnalysisImportError::DraftRejected => {
+                ("github_analysis_import_reopen_required", false)
+            }
+            GitHubAnalysisImportError::DraftImported => {
+                ("github_analysis_import_already_imported", false)
+            }
+            GitHubAnalysisImportError::PartialAcknowledgementRequired => {
+                ("github_analysis_import_partial_ack_required", false)
+            }
+            GitHubAnalysisImportError::StaleAcknowledgementRequired => {
+                ("github_analysis_import_stale_ack_required", false)
+            }
+            GitHubAnalysisImportError::VersionConflict => {
+                ("github_analysis_import_version_conflict", false)
+            }
+            GitHubAnalysisImportError::ProjectSlugConflict => ("project_slug_conflict", false),
+            GitHubAnalysisImportError::CorruptData(_) => ("corrupt_data", false),
+            GitHubAnalysisImportError::Storage(_) => ("storage_error", true),
         };
         Self {
             code,

@@ -2930,7 +2930,7 @@ fn summarize_sbom_excerpt(raw: &str) -> String {
     .to_string()
 }
 
-fn validate_report_sources(
+pub(crate) fn validate_report_sources(
     report: &GitHubAnalysisReport,
     sources: &[GitHubAnalysisSource],
 ) -> Result<(), GitHubAnalysisError> {

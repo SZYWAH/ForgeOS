@@ -10,6 +10,7 @@ mod error;
 pub mod evidences;
 pub mod github;
 pub mod github_analysis;
+pub mod github_analysis_import;
 pub mod health;
 pub mod project_memory;
 pub mod project_pulse;
