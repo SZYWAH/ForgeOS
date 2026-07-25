@@ -12,6 +12,7 @@ use forgeos_mcp::server::ForgeOsMcpServer;
 enum RunMode {
     Serve(Option<PathBuf>),
     CheckDatabase(Option<PathBuf>),
+    DatabaseVersion(Option<PathBuf>),
     Version,
 }
 
@@ -23,7 +24,9 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     let explicit = match &mode {
-        RunMode::Serve(path) | RunMode::CheckDatabase(path) => path.clone(),
+        RunMode::Serve(path) | RunMode::CheckDatabase(path) | RunMode::DatabaseVersion(path) => {
+            path.clone()
+        }
         RunMode::Version => unreachable!(),
     };
     let database_path = resolve_database_path(explicit)?;
@@ -42,6 +45,16 @@ async fn main() -> anyhow::Result<()> {
         println!("database ok");
         return Ok(());
     }
+    if matches!(mode, RunMode::DatabaseVersion(_)) {
+        let version: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations WHERE success = 1")
+                .fetch_one(&database.pool)
+                .await
+                .with_context(|| "unable to read the ForgeOS database migration version")?;
+        // Diagnostics must not disclose the user's absolute database path.
+        println!("{}", version.unwrap_or(0));
+        return Ok(());
+    }
     let repository = Arc::new(SqliteProjectRepository::new(database.pool));
     let kernel = Arc::new(ProjectMemoryQueryKernel::new(repository));
 
@@ -56,13 +69,19 @@ fn parse_mode(args: Vec<std::ffi::OsString>) -> anyhow::Result<RunMode> {
         [] => Ok(RunMode::Serve(None)),
         [flag] if flag == "--version" => Ok(RunMode::Version),
         [flag] if flag == "--check-database" => Ok(RunMode::CheckDatabase(None)),
+        [flag] if flag == "--database-version" => Ok(RunMode::DatabaseVersion(None)),
         [flag, path] if flag == "--database" => {
             Ok(RunMode::Serve(Some(PathBuf::from(path))))
         }
         [check, database, path] if check == "--check-database" && database == "--database" => {
             Ok(RunMode::CheckDatabase(Some(PathBuf::from(path))))
         }
-        _ => bail!("usage: forgeos-mcp [--version | --check-database [--database <path>] | --database <path>]")
+        [version, database, path]
+            if version == "--database-version" && database == "--database" =>
+        {
+            Ok(RunMode::DatabaseVersion(Some(PathBuf::from(path))))
+        }
+        _ => bail!("usage: forgeos-mcp [--version | --check-database [--database <path>] | --database-version [--database <path>] | --database <path>]")
     }
 }
 
@@ -94,6 +113,15 @@ mod tests {
         assert!(matches!(
             parse_mode(vec!["--check-database".into()]).unwrap(),
             RunMode::CheckDatabase(None)
+        ));
+        assert!(matches!(
+            parse_mode(vec![
+                "--database-version".into(),
+                "--database".into(),
+                "forgeos.db".into()
+            ])
+            .unwrap(),
+            RunMode::DatabaseVersion(Some(_))
         ));
         assert!(parse_mode(vec!["--unknown".into()]).is_err());
     }
