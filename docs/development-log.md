@@ -1174,3 +1174,40 @@ D9.3 已把规则或 AI GitHub 分析报告连接到人工审核的 Project 导�
 - 使用已有的 `obsidianmd/obsidian-releases` Partial 规则报告完成真实桌面闭环：生成草稿、编辑项目定位、确认分析不完整、审核并创建 Project；再次打开同一报告时直接进入原 Project，没有重复创建。
 - 实机只读审计确认导入仅创建 1 个 Project 和 1 条 `github_repository` 未验证资料；该旧版报告没有 Release 元数据，因此未创建 Release 资料。Snapshot、Session、Achievement 与本地 Repository 均为 0。验收中两次打开新项目 Overview 均因尚未连接本地仓库各产生 1 条失败 SyncRun，这是既有项目首页行为，不属于导入事务。
 - 当前真实数据库没有可用的 AI 增强报告，且桌面端没有已启用 AI Provider，因此本轮未进行 AI 报告的实机导入；该路径继续由 Application 与数据库集成测试覆盖。
+
+# 2026-07-25 — ForgeOS v0.2.0 Windows Preview Delivery
+
+## 当前阶段
+
+D9.4 把已经冻结的 GitHub Project Intelligence 与人工导入闭环交付为 Windows x64 预览版。本阶段没有新增业务功能或 Migration，没有扩大 MCP、Git 或 GitHub 权限。
+
+## 完成内容
+
+- 发布脚本统一校验根应用、前端、Tauri、Desktop Rust、MCP Rust 及其 Lockfile 版本均为 `0.2.0`。
+- Release 构建在打包前清理旧 NSIS 输出，并校验新构建 Sidecar 与 Tauri 暂存 Sidecar 的 SHA-256 完全一致。
+- `forgeos-mcp` 新增只读 `--database-version [--database <path>]` 诊断；默认无参数行为仍是 MCP STDIO Server。
+- 安装验收覆盖全新安装、相同版本重装、模拟版本替换、Codex MCP 连接保留和普通卸载清理。
+- 新增真实 `v0.1.0 → v0.2.0` 升级验收，使用隔离安装目录和隔离 `CODEX_HOME`，不修改用户真实 Codex 配置。
+- 升级验收只复制真实 SQLite 数据库及 WAL/SHM 到隔离目录，通过安装版验证数据库版本与完整性，不修改真实用户数据库。
+- 发布文档明确 Public-only GitHub 分析、不克隆、不运行、不写 GitHub、未签名、在线 WebView2 和无自动更新器等边界。
+
+## 验证结果
+
+- `npm run typecheck`、12 个 Vitest 文件共 63 项测试和 `npm run build` 通过；Vite 仅保留既有的单包体积提示。
+- Desktop `cargo fmt --check`、`cargo check` 和全量 `cargo test` 通过：106 项库测试通过、1 项本机 Codex 历史 Smoke Test 按设计忽略；全部数据库和领域集成测试通过。
+- MCP 格式检查和三项只读测试通过；五工具白名单、STDIO 项目隔离与安全投影保持。
+- 全新安装、同版本重装、模拟升级、真实 v0.1.0→v0.2.0 升级、MCP 保留和普通卸载全部通过。
+- 真实数据库隔离副本保持 Migration 21，`integrity_check = ok`、`foreign_key_check = 0`。
+- 当前真实数据库只读核验：1 个 Workspace、3 个 Project、1 个 Analysis Run、1 个 Analysis Import Proposal、3 个 GitHub Import Draft、14 条 Evidence、1 个 Snapshot、1 个 Development Session；测试未写入真实数据库。
+- 安装包为 `ForgeOS-0.2.0-windows-x64-setup.exe`，大小 8.52 MiB，`NotSigned`。
+- 安装包 SHA-256 为 `f1f67150981c21682fb18d862fc50da7a794c3b17f9402e5640277f0d02b95e6`。
+- `git diff --check` 通过，发布产物不进入 Git。
+
+## 发布边界
+
+- Windows x64 当前用户安装，NSIS + LZMA。
+- WebView2 使用在线 Bootstrapper；缺少 Runtime 的目标电脑安装时需要网络。
+- 安装包包含 `forgeos-mcp.exe`，不单独发布裸 MCP。
+- MCP 只读，不执行代码、不修改 Git、不写入 ForgeOS 或 GitHub。
+- 本版未签名，SmartScreen 可能显示“未知发布者”。
+- 卸载默认保留 ForgeOS 数据，不提供自动更新器。

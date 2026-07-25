@@ -1,8 +1,8 @@
 # ForgeOS
 
-## Windows v0.1.0 预览版
+## Windows v0.2.0 预览版
 
-ForgeOS 提供 Windows x64 当前用户安装包。安装包同时包含只读的 `forgeos-mcp.exe`，无需单独下载或手动启动。
+ForgeOS 提供 Windows x64 当前用户安装包。v0.2.0 新增公开 GitHub 项目的规则/AI 分析、主流 AI 服务兼容和人工审核导入；安装包同时包含只读的 `forgeos-mcp.exe`，无需单独下载或手动启动。
 
 安装完成后：
 
@@ -18,9 +18,9 @@ ForgeOS MCP 使用 STDIO 按需启动，只读取本机 ForgeOS 数据库；它�
 npm run release:windows
 ```
 
-产物位于 `dist-release/`。详细流程见 `docs/release-v0.1.0.md`。
+产物位于 `dist-release/`。详细流程见 `docs/release-v0.2.0.md`。
 
-> 当前阶段：D6 Codex Activity Intake + Project Pulse。ForgeOS 通过 Codex App Server 与只读 Git 观察生成待审核研发态势，用户确认后才写入正式 Snapshot / Session。
+> 当前阶段：D9 GitHub Project Intelligence。ForgeOS 可以只读分析公开 GitHub 仓库，并在用户审核完整项目草稿后创建相互隔离的个人研发项目。
 
 ForgeOS（Forge Operating System）是面向独立开发者的个人 AI 辅助软件研发操作系统。
 
@@ -42,7 +42,7 @@ ForgeOS 的长期方向是成为个人开发者的 AI Engineering Chief of Staff
 
 ## 当前阶段
 
-当前处于 **D6：Codex Activity Intake + Project Pulse**。
+当前处于 **D9：GitHub Project Intelligence + Human Import**。
 
 本阶段只负责：
 
