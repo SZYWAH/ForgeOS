@@ -1,16 +1,44 @@
 param(
-  [string]$InstallerPath
+  [string]$InstallerPath,
+  [string]$ExpectedVersion
 )
 
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
+function Get-Sha256([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  try {
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+      return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+      $algorithm.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+  $ExpectedVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $root "package.json") | ConvertFrom-Json).version
+}
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-  $InstallerPath = Join-Path $root "dist-release\ForgeOS-0.1.0-windows-x64-setup.exe"
+  $InstallerPath = Join-Path $root "dist-release\ForgeOS-$ExpectedVersion-windows-x64-setup.exe"
 }
 $InstallerPath = [IO.Path]::GetFullPath($InstallerPath)
 if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
   throw "installer not found: $InstallerPath"
+}
+
+$checksumPath = Join-Path (Split-Path -Parent $InstallerPath) "SHA256SUMS.txt"
+if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+  throw "checksum file not found: $checksumPath"
+}
+$expectedInstallerHash = ((Get-Content -LiteralPath $checksumPath -TotalCount 1) -split "\s+")[0].Trim()
+$actualInstallerHash = Get-Sha256 $InstallerPath
+if ($actualInstallerHash -ne $expectedInstallerHash.ToLowerInvariant()) {
+  throw "installer SHA-256 does not match SHA256SUMS.txt"
 }
 
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ForgeOS"
@@ -83,12 +111,12 @@ try {
   }
 
   $expectedMcp = Join-Path $root "src-tauri\binaries\forgeos-mcp-x86_64-pc-windows-msvc.exe"
-  $expectedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $expectedMcp).Hash
-  $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $mcp).Hash
+  $expectedHash = Get-Sha256 $expectedMcp
+  $installedHash = Get-Sha256 $mcp
   if ($expectedHash -ne $installedHash) { throw "installed Sidecar does not match the release build" }
 
   $version = & $mcp --version
-  if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne "forgeos-mcp 0.1.0") {
+  if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne "forgeos-mcp $ExpectedVersion") {
     throw "installed Sidecar version diagnostic failed: $version"
   }
 
@@ -107,6 +135,13 @@ try {
   $registration = (& $codex mcp get forgeos --json | ConvertFrom-Json)
   if ([IO.Path]::GetFullPath($registration.transport.command) -ne [IO.Path]::GetFullPath($mcp)) {
     throw "isolated Codex MCP registration points to an unexpected command"
+  }
+
+  Write-Host "Testing same-version reinstall preservation..."
+  Invoke-Installer $InstallerPath
+  $registrationAfterReinstall = (& $codex mcp get forgeos --json | ConvertFrom-Json)
+  if ([IO.Path]::GetFullPath($registrationAfterReinstall.transport.command) -ne [IO.Path]::GetFullPath($mcp)) {
+    throw "same-version reinstall did not preserve the owned Codex MCP registration"
   }
 
   # Force the existing install to look older so passive NSIS follows the real
