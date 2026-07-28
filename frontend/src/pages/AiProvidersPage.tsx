@@ -12,9 +12,16 @@ import { formatUpdatedAt } from "../utils/format";
 import { useTranslation } from "react-i18next";
 import { PageIntro } from "../components/ui/PlainLanguage";
 import {
+  CheckboxField,
+  FormField,
+  FormSection,
+  SelectField,
+} from "../components/ui/FormControls";
+import {
   AppButton,
   EmptyState,
   Notice,
+  StatusBadge,
   Surface,
 } from "../components/ui/VisualSystem";
 
@@ -43,6 +50,8 @@ const PRESETS = [
   { label: "LM Studio", config: { ...EMPTY_CONFIG, name: "LM Studio", baseUrl: "http://localhost:1234/v1", protocol: "openai_compatible" as const, authScheme: "none" as const, secretSource: "none" as const } },
 ] as const;
 
+type ProviderWorkbenchMode = "empty" | "detail" | "create";
+
 export function AiProvidersPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,7 +61,8 @@ export function AiProvidersPage() {
   const [createApiKey, setCreateApiKey] = useState("");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [preset, setPreset] = useState("Custom");
-  const [showCreate, setShowCreate] = useState(false);
+  const [editPreset, setEditPreset] = useState("Custom");
+  const [workbenchMode, setWorkbenchMode] = useState<ProviderWorkbenchMode>("empty");
   const [systemMessage, setSystemMessage] = useState("");
   const [userMessage, setUserMessage] = useState("");
   const [result, setResult] = useState<AiInvocationResult>();
@@ -107,7 +117,10 @@ export function AiProvidersPage() {
 
   useEffect(() => {
     if (selected) {
-      setDraft(configFrom(selected));
+      const selectedConfig = configFrom(selected);
+      setDraft(selectedConfig);
+      setEditPreset(findPresetName(selectedConfig));
+      setWorkbenchMode("detail");
     }
     setApiKeyDraft("");
     setResult(undefined);
@@ -130,14 +143,14 @@ export function AiProvidersPage() {
       setCreateDraft(EMPTY_CONFIG);
       setCreateApiKey("");
       setPreset("Custom");
-      setShowCreate(false);
+      setWorkbenchMode("detail");
       await load(created.id);
       setNotice(t("ai.serviceCreated"));
     } catch (saveError) {
       if (created) {
         setCreateDraft(EMPTY_CONFIG);
         setCreateApiKey("");
-        setShowCreate(false);
+        setWorkbenchMode("detail");
         await load(created.id);
       }
       setError(getErrorMessage(saveError));
@@ -260,6 +273,40 @@ export function AiProvidersPage() {
     }
   }
 
+  function beginCreate() {
+    setCreateDraft(EMPTY_CONFIG);
+    setCreateApiKey("");
+    setPreset("Custom");
+    setError(undefined);
+    setNotice(undefined);
+    setWorkbenchMode("create");
+  }
+
+  function cancelCreate() {
+    setCreateDraft(EMPTY_CONFIG);
+    setCreateApiKey("");
+    setPreset("Custom");
+    setWorkbenchMode(providers.length > 0 ? "detail" : "empty");
+  }
+
+  function applyCreatePreset(nextPreset: string) {
+    const value = PRESETS.find((item) => item.label === nextPreset) ?? PRESETS[0];
+    setPreset(value.label);
+    setCreateDraft({ ...value.config });
+    setCreateApiKey("");
+  }
+
+  function applyEditPreset(nextPreset: string) {
+    const value = PRESETS.find((item) => item.label === nextPreset) ?? PRESETS[0];
+    setEditPreset(value.label);
+    if (value.label !== "Custom") {
+      setDraft({
+        ...value.config,
+        model: draft.model,
+      });
+    }
+  }
+
   if (loading) return <p className="loading-copy">{t("common.loading")}…</p>;
 
   return (
@@ -268,14 +315,6 @@ export function AiProvidersPage() {
         title={t("ai.servicesTitle")}
         technicalTerm={t("terms.provider")}
         description={t("ai.servicesDescription")}
-        primaryAction={(
-          <AppButton
-            onClick={() => setShowCreate((value) => !value)}
-            variant="primary"
-          >
-            {showCreate ? t("common.cancel") : t("common.create")}
-          </AppButton>
-        )}
       />
 
       <Notice className="ai-boundary-banner" title={t("ai.safetyTitle")} tone="info">
@@ -284,44 +323,18 @@ export function AiProvidersPage() {
       {error ? <Notice className="provider-message" tone="danger">{error}</Notice> : null}
       {notice ? <Notice className="provider-message" tone="success">{notice}</Notice> : null}
 
-      {showCreate ? (
-        <form className="panel provider-create-form" onSubmit={handleCreate}>
-          <div className="panel-header"><div><h2>{t("common.create")} {t("ai.provider")}</h2><p>{t("ai.servicesDescription")}</p></div></div>
-          <div className="provider-preset-row">
-            <label>{t("ai.preset")}
-              <select
-                value={preset}
-                onChange={(event) => {
-                  const value = PRESETS.find((item) => item.label === event.target.value) ?? PRESETS[0];
-                  setPreset(value.label);
-                  setCreateDraft({ ...value.config });
-                }}
-              >
-                {PRESETS.map((item) => <option key={item.label}>{item.label}</option>)}
-              </select>
-            </label>
-          </div>
-          <ProviderFields value={createDraft} onChange={setCreateDraft} />
-          {createDraft.secretSource === "credential_manager" ? <div className="provider-key-field">
-            <label>{t("ai.apiKey")} <span>{t("common.optional")}</span>
-              <input autoComplete="new-password" type="password" value={createApiKey} onChange={(event) => setCreateApiKey(event.target.value)} />
-            </label>
-          </div> : null}
-          <div className="form-actions provider-form-actions">
-            <AppButton loading={saving} type="submit" variant="primary">
-              {saving ? t("common.saving") : t("common.create")}
-            </AppButton>
-          </div>
-        </form>
-      ) : null}
-
-      {!showCreate && providers.length === 0 ? (
+      {workbenchMode === "empty" && providers.length === 0 ? (
         <Surface
           className="provider-empty-surface"
           padding="compact"
           variant="outlined"
         >
           <EmptyState
+            action={(
+              <AppButton onClick={beginCreate} variant="primary">
+                {t("ai.createService")}
+              </AppButton>
+            )}
             density="compact"
             description={t("ai.selectServiceDescription")}
             title={t("ai.noServices")}
@@ -329,159 +342,509 @@ export function AiProvidersPage() {
         </Surface>
       ) : null}
 
-      {providers.length > 0 ? <div className="provider-workbench">
-        <section className="panel provider-list-panel">
-          <div className="panel-header"><div><h2>{t("ai.configuredServices")}</h2><p>{t("ai.serviceCount", { count: providers.length })}</p></div></div>
-          <div className="provider-list record-list-pane">
-            {providers.map((provider) => (
-              <button
-                className={provider.id === selectedId ? "selected" : ""}
-                key={provider.id}
-                onClick={() => setSearchParams({ selected: provider.id })}
-                type="button"
-              >
-                <span className={`provider-state provider-state--${provider.enabled ? "enabled" : "disabled"}`}>{provider.enabled ? t("common.enabled") : t("common.disabled")}</span>
-                <strong>{provider.name}</strong>
-                <small>{provider.model}</small>
-                <span className={`key-state ${provider.secretAvailable ? "configured" : ""}`}>{provider.secretAvailable ? t("ai.credentialAvailable") : t("ai.credentialMissing")}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+      {workbenchMode !== "empty" || providers.length > 0 ? (
+        <div className={`provider-workbench ${providers.length === 0 ? "provider-workbench--create-only" : ""}`}>
+          {providers.length > 0 ? (
+            <section className="panel provider-list-panel">
+              <div className="panel-header provider-list-header">
+                <div>
+                  <h2>{t("ai.configuredServices")}</h2>
+                  <p>{t("ai.serviceCount", { count: providers.length })}</p>
+                </div>
+                <AppButton onClick={beginCreate} size="compact" variant="quiet">
+                  {t("ai.newService")}
+                </AppButton>
+              </div>
+              <div className="provider-list record-list-pane">
+                {providers.map((provider) => (
+                  <button
+                    aria-current={provider.id === selectedId && workbenchMode === "detail" ? "true" : undefined}
+                    className={provider.id === selectedId && workbenchMode === "detail" ? "selected" : ""}
+                    key={provider.id}
+                    onClick={() => {
+                      setSearchParams({ selected: provider.id });
+                      setWorkbenchMode("detail");
+                    }}
+                    type="button"
+                  >
+                    <StatusBadge tone={provider.enabled ? "success" : "neutral"}>
+                      {provider.enabled ? t("common.enabled") : t("common.disabled")}
+                    </StatusBadge>
+                    <strong>{provider.name}</strong>
+                    <small>{provider.model}</small>
+                    <span className="provider-list__meta">
+                      {protocolLabel(provider.protocol)} · {provider.secretAvailable ? t("ai.credentialAvailable") : t("ai.credentialMissing")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
-        <div className="provider-detail-stack">
-          {selected ? (
-            <>
-              <form className="panel provider-editor" onSubmit={handleUpdate}>
+          <div className="provider-detail-stack">
+            {workbenchMode === "create" ? (
+              <form className="panel provider-create-form" onSubmit={handleCreate}>
                 <div className="panel-header provider-editor-header">
                   <div>
-                    <span className={`provider-state provider-state--${selected.enabled ? "enabled" : "disabled"}`}>{selected.enabled ? t("common.enabled") : t("common.disabled")}</span>
-                    <h2>{selected.name}</h2>
-                    <p>v{selected.version} · {t("common.updatedAt")} {formatUpdatedAt(selected.updatedAt)}</p>
+                    <p className="eyebrow">{t("ai.newService")}</p>
+                    <h2>{t("ai.createService")}</h2>
+                    <p>{t("ai.createServiceDescription")}</p>
                   </div>
-                  <AppButton
-                    disabled={saving}
-                    onClick={() => void handleToggle()}
-                    variant={selected.enabled ? "danger" : "secondary"}
-                  >
-                    {selected.enabled ? t("ai.disable") : t("ai.enable")}
-                  </AppButton>
                 </div>
-                <ProviderFields value={draft} onChange={setDraft} />
+                <ProviderFields
+                  apiKey={createApiKey}
+                  idPrefix="create-provider"
+                  onApiKeyChange={setCreateApiKey}
+                  onChange={setCreateDraft}
+                  onPresetChange={applyCreatePreset}
+                  presetName={preset}
+                  value={createDraft}
+                />
                 <div className="form-actions provider-form-actions">
+                  <AppButton onClick={cancelCreate} variant="secondary">
+                    {t("common.cancel")}
+                  </AppButton>
                   <AppButton loading={saving} type="submit" variant="primary">
-                    {t("ai.saveConfiguration")}
+                    {saving ? t("common.saving") : t("common.create")}
                   </AppButton>
                 </div>
               </form>
-
-              {selected.secretSource === "credential_manager" ? <section className="panel provider-secret-panel">
-                <div className="panel-header">
-                  <div><h2>{t("ai.apiKey")}</h2><p>Windows Credential Manager</p></div>
-                  <span className={`key-state ${selected.apiKeyConfigured ? "configured" : ""}`}>{selected.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}</span>
-                </div>
-                <form className="provider-secret-form" onSubmit={handleSaveKey}>
-                  <input autoComplete="new-password" placeholder={t("ai.keyPlaceholder")} type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} />
-                  <AppButton disabled={saving || !apiKeyDraft.trim()} type="submit" variant="secondary">{t("ai.saveKey")}</AppButton>
-                  <AppButton disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} variant="danger">{t("ai.clearKey")}</AppButton>
-                </form>
-              </section> : (
-                <Notice tone={selected.secretAvailable ? "success" : "warning"} title={t("ai.credentialSource")}>{selected.secretSource === "environment" ? `${selected.environmentVariable ?? ""} · ${selected.secretAvailable ? t("ai.environmentAvailable") : t("ai.environmentMissing")}` : t("ai.noCredentialRequired")}</Notice>
-              )}
-
-              <section className="panel provider-secret-panel">
-                <div className="panel-header"><div><h2>{t("ai.connectionTest")}</h2><p>{t("ai.connectionTestDescription")}</p></div></div>
-                <div className="form-actions provider-form-actions">
-                  {connectionTest ? <span>{connectionTest.model} · {connectionTest.latencyMs} ms</span> : <span>{t("ai.connectionTestBilling")}</span>}
-                  <AppButton disabled={invoking} onClick={() => void handleTestConnection()} variant="secondary">{t("ai.testConnection")}</AppButton>
-                </div>
-              </section>
-
-              <form className="panel provider-invoke-panel" onSubmit={handleInvoke}>
-                <div className="panel-header">
-                  <div><h2>{t("ai.manualCall")}</h2><p>{t("ai.manualCallDescription")}</p></div>
-                </div>
-                <div className="provider-invoke-fields">
-                  <label>{t("ai.systemMessage")} <span>{t("common.optional")}</span>
-                    <textarea rows={3} value={systemMessage} onChange={(event) => setSystemMessage(event.target.value)} />
-                  </label>
-                  <label>{t("ai.userMessage")} <span className="required">*</span>
-                    <textarea required rows={5} value={userMessage} onChange={(event) => setUserMessage(event.target.value)} placeholder={t("ai.testMessagePlaceholder")} />
-                  </label>
-                </div>
-                <div className="form-actions provider-form-actions">
-                  <span>{selected.enabled ? t("ai.requestReady") : t("ai.enableBeforeCall")}</span>
-                  <AppButton disabled={!selected.enabled} loading={invoking} type="submit" variant="primary">{invoking ? t("ai.invoking") : t("ai.invoke")}</AppButton>
-                </div>
-                {result ? (
-                  <div className="provider-result">
-                    <header><strong>{t("ai.temporaryResponse")}</strong><span>{result.model} · {result.finishReason ?? t("common.unknown")}</span></header>
-                    <pre className="document-scroll-region">{result.content}</pre>
-                    {result.usage ? <small>{t("context.tokenCount", { count: result.usage.totalTokens ?? t("common.unknown") })}</small> : null}
+            ) : selected ? (
+              <>
+                <form className="panel provider-editor" onSubmit={handleUpdate}>
+                  <div className="panel-header provider-editor-header">
+                    <div>
+                      <StatusBadge tone={selected.enabled ? "success" : "neutral"}>
+                        {selected.enabled ? t("common.enabled") : t("common.disabled")}
+                      </StatusBadge>
+                      <h2>{selected.name}</h2>
+                      <p>v{selected.version} · {t("common.updatedAt")} {formatUpdatedAt(selected.updatedAt)}</p>
+                    </div>
+                    <AppButton
+                      disabled={saving}
+                      onClick={() => void handleToggle()}
+                      variant={selected.enabled ? "danger" : "secondary"}
+                    >
+                      {selected.enabled ? t("ai.disable") : t("ai.enable")}
+                    </AppButton>
                   </div>
-                ) : null}
-              </form>
-            </>
-          ) : (
-            <section className="panel provider-detail-empty"><strong>{t("ai.selectService")}</strong><p>{t("ai.selectServiceDescription")}</p></section>
-          )}
+                  <ProviderFields
+                    idPrefix={`provider-${selected.id}`}
+                    onChange={setDraft}
+                    onPresetChange={applyEditPreset}
+                    presetName={editPreset}
+                    value={draft}
+                  />
+                  <div className="form-actions provider-form-actions">
+                    <AppButton loading={saving} type="submit" variant="primary">
+                      {t("ai.saveConfiguration")}
+                    </AppButton>
+                  </div>
+                </form>
+
+                {selected.secretSource === "credential_manager" ? (
+                  <section className="panel provider-secret-panel">
+                    <div className="panel-header">
+                      <div>
+                        <h2>{t("ai.apiKey")}</h2>
+                        <p>{t("ai.credentialManagerDescription")}</p>
+                      </div>
+                      <StatusBadge tone={selected.apiKeyConfigured ? "success" : "warning"}>
+                        {selected.apiKeyConfigured ? t("ai.keyConfigured") : t("ai.keyMissing")}
+                      </StatusBadge>
+                    </div>
+                    <form className="provider-secret-form" onSubmit={handleSaveKey}>
+                      <input
+                        aria-label={t("ai.apiKey")}
+                        autoComplete="new-password"
+                        className="form-control"
+                        placeholder={t("ai.keyPlaceholder")}
+                        type="password"
+                        value={apiKeyDraft}
+                        onChange={(event) => setApiKeyDraft(event.target.value)}
+                      />
+                      <AppButton disabled={saving || !apiKeyDraft.trim()} type="submit" variant="secondary">
+                        {t("ai.saveKey")}
+                      </AppButton>
+                      <AppButton disabled={saving || !selected.apiKeyConfigured} onClick={() => void handleClearKey()} variant="danger">
+                        {t("ai.clearKey")}
+                      </AppButton>
+                    </form>
+                  </section>
+                ) : (
+                  <Notice
+                    tone={selected.secretAvailable ? "success" : "warning"}
+                    title={t("ai.credentialSource")}
+                  >
+                    {selected.secretSource === "environment"
+                      ? `${selected.environmentVariable ?? ""} · ${selected.secretAvailable ? t("ai.environmentAvailable") : t("ai.environmentMissing")}`
+                      : t("ai.localNoCredential")}
+                  </Notice>
+                )}
+
+                <section className="panel provider-diagnostics-panel">
+                  <div className="panel-header">
+                    <div>
+                      <h2>{t("ai.connectionTest")}</h2>
+                      <p>{t("ai.connectionTestDescription")}</p>
+                    </div>
+                    <AppButton disabled={invoking} onClick={() => void handleTestConnection()} variant="secondary">
+                      {t("ai.testConnection")}
+                    </AppButton>
+                  </div>
+                  <div className="provider-diagnostics-result">
+                    {connectionTest ? (
+                      <Notice tone="success">
+                        {connectionTest.model} · {connectionTest.latencyMs} ms
+                      </Notice>
+                    ) : (
+                      <p>{t("ai.connectionTestBilling")}</p>
+                    )}
+                  </div>
+                </section>
+
+                <details className="panel provider-tool-disclosure">
+                  <summary>
+                    <span>
+                      <strong>{t("ai.manualCall")}</strong>
+                      <small>{t("ai.manualCallDescription")}</small>
+                    </span>
+                  </summary>
+                  <form className="provider-invoke-panel" onSubmit={handleInvoke}>
+                    <div className="provider-invoke-fields">
+                      <FormField id="provider-system-message" label={t("ai.systemMessage")}>
+                        <textarea
+                          className="form-control"
+                          id="provider-system-message"
+                          rows={3}
+                          value={systemMessage}
+                          onChange={(event) => setSystemMessage(event.target.value)}
+                        />
+                      </FormField>
+                      <FormField id="provider-user-message" label={t("ai.userMessage")} required>
+                        <textarea
+                          className="form-control"
+                          id="provider-user-message"
+                          required
+                          rows={5}
+                          value={userMessage}
+                          onChange={(event) => setUserMessage(event.target.value)}
+                          placeholder={t("ai.testMessagePlaceholder")}
+                        />
+                      </FormField>
+                    </div>
+                    <div className="form-actions provider-form-actions">
+                      <span>{selected.enabled ? t("ai.requestReady") : t("ai.enableBeforeCall")}</span>
+                      <AppButton disabled={!selected.enabled} loading={invoking} type="submit" variant="secondary">
+                        {invoking ? t("ai.invoking") : t("ai.invoke")}
+                      </AppButton>
+                    </div>
+                    {result ? (
+                      <div className="provider-result">
+                        <header>
+                          <strong>{t("ai.temporaryResponse")}</strong>
+                          <span>{result.model} · {result.finishReason ?? t("common.unknown")}</span>
+                        </header>
+                        <pre className="document-scroll-region">{result.content}</pre>
+                        {result.usage ? <small>{t("context.tokenCount", { count: result.usage.totalTokens ?? t("common.unknown") })}</small> : null}
+                      </div>
+                    ) : null}
+                  </form>
+                </details>
+              </>
+            ) : (
+              <section className="panel provider-detail-empty">
+                <strong>{t("ai.selectService")}</strong>
+                <p>{t("ai.selectServiceDescription")}</p>
+              </section>
+            )}
+          </div>
         </div>
-      </div> : null}
+      ) : null}
     </div>
   );
 }
 
 type ProviderFieldsProps = {
+  idPrefix: string;
   value: AiProviderConfigInput;
+  presetName: string;
+  apiKey?: string;
+  onApiKeyChange?: (value: string) => void;
+  onPresetChange: (value: string) => void;
   onChange: (value: AiProviderConfigInput) => void;
 };
 
-function ProviderFields({ value, onChange }: ProviderFieldsProps) {
+function ProviderFields({
+  idPrefix,
+  value,
+  presetName,
+  apiKey,
+  onApiKeyChange,
+  onPresetChange,
+  onChange,
+}: ProviderFieldsProps) {
   const { t } = useTranslation();
+  const isCustom = presetName === "Custom";
+  const usesCredential = value.authScheme !== "none";
+  const presetOptions = PRESETS.map((item) => ({
+    label: item.label === "Custom" ? t("ai.customPreset") : item.label,
+    value: item.label,
+  }));
+
   return (
-    <div className="form-grid provider-fields">
-      <label>{t("ai.name")} <span className="required">*</span>
-        <input required maxLength={100} value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="OpenAI / DeepSeek / Local Ollama" />
-      </label>
-      <label>{t("ai.model")} <span className="required">*</span>
-        <input required maxLength={200} value={value.model} onChange={(event) => onChange({ ...value, model: event.target.value })} placeholder={t("ai.modelPlaceholder")} />
-      </label>
-      <label className="span-2">{t("ai.baseUrl")} <span className="required">*</span>
-        <input required value={value.baseUrl} onChange={(event) => onChange({ ...value, baseUrl: event.target.value })} placeholder="https://api.example.com/v1" />
-        <small>{t("ai.baseUrlHelp")}</small>
-      </label>
-      <label>{t("ai.protocol")} <span className="required">*</span>
-        <select value={value.protocol} onChange={(event) => onChange({ ...value, protocol: event.target.value as AiProviderConfigInput["protocol"] })}>
-          <option value="openai_chat_completions">OpenAI Chat Completions</option>
-          <option value="openai_responses">OpenAI Responses</option>
-          <option value="anthropic_messages">Anthropic Messages</option>
-          <option value="azure_openai">Azure OpenAI v1</option>
-          <option value="openai_compatible">OpenAI Compatible</option>
-        </select>
-      </label>
-      <label>{t("ai.authScheme")} <span className="required">*</span>
-        <select value={value.authScheme} onChange={(event) => {
-          const authScheme = event.target.value as AiProviderConfigInput["authScheme"];
-          onChange({ ...value, authScheme, secretSource: authScheme === "none" ? "none" : value.secretSource === "none" ? "credential_manager" : value.secretSource, secretRequired: authScheme === "none" ? false : value.secretRequired });
-        }}>
-          <option value="bearer">Bearer Token</option>
-          <option value="api_key">api-key</option>
-          <option value="x_api_key">x-api-key</option>
-          <option value="custom_header">{t("ai.customAuthHeader")}</option>
-          <option value="none">{t("ai.noAuthentication")}</option>
-        </select>
-      </label>
-      <label>{t("ai.credentialSource")} <span className="required">*</span>
-        <select disabled={value.authScheme === "none"} value={value.secretSource} onChange={(event) => onChange({ ...value, secretSource: event.target.value as AiProviderConfigInput["secretSource"] })}>
-          <option value="credential_manager">Windows Credential Manager</option>
-          <option value="environment">{t("ai.environmentVariable")}</option>
-          <option value="none">{t("ai.noCredentialRequired")}</option>
-        </select>
-      </label>
-      <label className="provider-checkbox"><input checked={value.secretRequired} disabled={value.authScheme === "none"} onChange={(event) => onChange({ ...value, secretRequired: event.target.checked })} type="checkbox" /> {t("ai.credentialRequired")}</label>
-      {value.secretSource === "environment" ? <label className="span-2">{t("ai.environmentVariable")} <span className="required">*</span><input required maxLength={128} value={value.environmentVariable ?? ""} onChange={(event) => onChange({ ...value, environmentVariable: event.target.value })} placeholder="DEEPSEEK_API_KEY" /><small>{t("ai.environmentRestartHint")}</small></label> : null}
-      {value.authScheme === "custom_header" ? <label className="span-2">{t("ai.customAuthHeader")} <span className="required">*</span><input required maxLength={128} value={value.customAuthHeader ?? ""} onChange={(event) => onChange({ ...value, customAuthHeader: event.target.value })} placeholder="X-API-Key" /></label> : null}
-      {value.protocol === "anthropic_messages" ? <label className="span-2">{t("ai.apiVersion")}<input maxLength={100} value={value.apiVersion ?? ""} onChange={(event) => onChange({ ...value, apiVersion: event.target.value })} placeholder="2023-06-01" /></label> : null}
+    <div className="provider-fields">
+      <FormSection
+        description={t("ai.serviceTypeDescription")}
+        title={t("ai.serviceType")}
+      >
+        <div className="provider-field-grid provider-field-grid--preset">
+          <SelectField
+            id={`${idPrefix}-preset`}
+            label={t("ai.preset")}
+            onChange={onPresetChange}
+            options={presetOptions}
+            value={presetName}
+          />
+          <div className="provider-preset-summary">
+            <span>{t("ai.technicalSummary")}</span>
+            <strong>{protocolLabel(value.protocol)} · {authLabel(value.authScheme, t)}</strong>
+            <small>{isCustom ? t("ai.customPresetDescription") : t("ai.presetFixedDescription")}</small>
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection
+        description={t("ai.basicSettingsDescription")}
+        title={t("ai.basicSettings")}
+      >
+        <div className="provider-field-grid">
+          <FormField id={`${idPrefix}-name`} label={t("ai.name")} required>
+            <input
+              className="form-control"
+              id={`${idPrefix}-name`}
+              maxLength={100}
+              onChange={(event) => onChange({ ...value, name: event.target.value })}
+              placeholder="OpenAI / DeepSeek / Local Ollama"
+              required
+              value={value.name}
+            />
+          </FormField>
+          <FormField id={`${idPrefix}-model`} label={t("ai.model")} required>
+            <input
+              className="form-control"
+              id={`${idPrefix}-model`}
+              maxLength={200}
+              onChange={(event) => onChange({ ...value, model: event.target.value })}
+              placeholder={t("ai.modelPlaceholder")}
+              required
+              value={value.model}
+            />
+          </FormField>
+          <FormField
+            className="span-2"
+            description={t("ai.baseUrlHelp")}
+            id={`${idPrefix}-base-url`}
+            label={t("ai.baseUrl")}
+            required
+          >
+            <input
+              className="form-control"
+              id={`${idPrefix}-base-url`}
+              onChange={(event) => onChange({ ...value, baseUrl: event.target.value })}
+              placeholder="https://api.example.com/v1"
+              required
+              value={value.baseUrl}
+            />
+          </FormField>
+        </div>
+      </FormSection>
+
+      <FormSection
+        description={t("ai.credentialSettingsDescription")}
+        title={t("ai.credentialSettings")}
+      >
+        {!usesCredential ? (
+          <Notice title={t("ai.noCredentialRequired")} tone="info">
+            {t("ai.localNoCredential")}
+          </Notice>
+        ) : (
+          <div className="provider-field-grid">
+            <SelectField
+              id={`${idPrefix}-credential-source`}
+              label={t("ai.credentialSource")}
+              onChange={(nextValue) => onChange({
+                ...value,
+                secretSource: nextValue as AiProviderConfigInput["secretSource"],
+                secretRequired: nextValue === "none" ? false : value.secretRequired,
+              })}
+              options={[
+                { value: "credential_manager", label: "Windows Credential Manager" },
+                { value: "environment", label: t("ai.environmentVariable") },
+                ...(isCustom
+                  ? [{ value: "none", label: t("ai.noCredentialRequired") }]
+                  : []),
+              ]}
+              required
+              value={value.secretSource}
+            />
+            {isCustom && value.secretSource !== "none" ? (
+              <CheckboxField
+                checked={value.secretRequired}
+                description={t("ai.credentialRequiredDescription")}
+                id={`${idPrefix}-secret-required`}
+                label={t("ai.credentialRequired")}
+                onChange={(checked) => onChange({ ...value, secretRequired: checked })}
+              />
+            ) : isCustom ? (
+              <div className="provider-readonly-setting">
+                <span>{t("ai.credentialRequirement")}</span>
+                <strong>{t("ai.noCredentialRequired")}</strong>
+              </div>
+            ) : (
+              <div className="provider-readonly-setting">
+                <span>{t("ai.credentialRequirement")}</span>
+                <strong>{value.secretRequired ? t("ai.required") : t("common.optional")}</strong>
+              </div>
+            )}
+            {value.secretSource === "environment" ? (
+              <FormField
+                className="span-2"
+                description={t("ai.environmentRestartHint")}
+                id={`${idPrefix}-environment-variable`}
+                label={t("ai.environmentVariable")}
+                required
+              >
+                <input
+                  className="form-control"
+                  id={`${idPrefix}-environment-variable`}
+                  maxLength={128}
+                  onChange={(event) => onChange({ ...value, environmentVariable: event.target.value })}
+                  placeholder="DEEPSEEK_API_KEY"
+                  required
+                  value={value.environmentVariable ?? ""}
+                />
+              </FormField>
+            ) : null}
+            {value.secretSource === "credential_manager" && onApiKeyChange ? (
+              <FormField
+                className="span-2"
+                description={t("ai.credentialManagerDescription")}
+                id={`${idPrefix}-api-key`}
+                label={t("ai.apiKey")}
+              >
+                <input
+                  autoComplete="new-password"
+                  className="form-control"
+                  id={`${idPrefix}-api-key`}
+                  onChange={(event) => onApiKeyChange(event.target.value)}
+                  type="password"
+                  value={apiKey ?? ""}
+                />
+              </FormField>
+            ) : null}
+          </div>
+        )}
+      </FormSection>
+
+      <FormSection
+        description={t("ai.technicalSettingsDescription")}
+        title={t("ai.technicalSettings")}
+      >
+        {isCustom ? (
+          <div className="provider-field-grid">
+            <SelectField
+              id={`${idPrefix}-protocol`}
+              label={t("ai.protocol")}
+              onChange={(nextValue) => onChange({
+                ...value,
+                protocol: nextValue as AiProviderConfigInput["protocol"],
+              })}
+              options={[
+                { value: "openai_chat_completions", label: "OpenAI Chat Completions" },
+                { value: "openai_responses", label: "OpenAI Responses" },
+                { value: "anthropic_messages", label: "Anthropic Messages" },
+                { value: "azure_openai", label: "Azure OpenAI v1" },
+                { value: "openai_compatible", label: "OpenAI Compatible" },
+              ]}
+              required
+              value={value.protocol}
+            />
+            <SelectField
+              id={`${idPrefix}-auth-scheme`}
+              label={t("ai.authScheme")}
+              onChange={(nextValue) => {
+                const authScheme = nextValue as AiProviderConfigInput["authScheme"];
+                onChange({
+                  ...value,
+                  authScheme,
+                  secretSource: authScheme === "none"
+                    ? "none"
+                    : value.secretSource === "none"
+                      ? "credential_manager"
+                      : value.secretSource,
+                  secretRequired: authScheme === "none" ? false : value.secretRequired,
+                });
+              }}
+              options={[
+                { value: "bearer", label: "Bearer Token" },
+                { value: "api_key", label: "api-key" },
+                { value: "x_api_key", label: "x-api-key" },
+                { value: "custom_header", label: t("ai.customAuthHeader") },
+                { value: "none", label: t("ai.noAuthentication") },
+              ]}
+              required
+              value={value.authScheme}
+            />
+            {value.authScheme === "custom_header" ? (
+              <FormField
+                className="span-2"
+                id={`${idPrefix}-custom-auth-header`}
+                label={t("ai.customAuthHeader")}
+                required
+              >
+                <input
+                  className="form-control"
+                  id={`${idPrefix}-custom-auth-header`}
+                  maxLength={128}
+                  onChange={(event) => onChange({ ...value, customAuthHeader: event.target.value })}
+                  placeholder="X-API-Key"
+                  required
+                  value={value.customAuthHeader ?? ""}
+                />
+              </FormField>
+            ) : null}
+            {value.protocol === "anthropic_messages" ? (
+              <FormField
+                className="span-2"
+                id={`${idPrefix}-api-version`}
+                label={t("ai.apiVersion")}
+              >
+                <input
+                  className="form-control"
+                  id={`${idPrefix}-api-version`}
+                  maxLength={100}
+                  onChange={(event) => onChange({ ...value, apiVersion: event.target.value })}
+                  placeholder="2023-06-01"
+                  value={value.apiVersion ?? ""}
+                />
+              </FormField>
+            ) : null}
+          </div>
+        ) : (
+          <div className="provider-technical-summary">
+            <div>
+              <span>{t("ai.protocol")}</span>
+              <strong>{protocolLabel(value.protocol)}</strong>
+            </div>
+            <div>
+              <span>{t("ai.authScheme")}</span>
+              <strong>{authLabel(value.authScheme, t)}</strong>
+            </div>
+            <p>{t("ai.presetFixedDescription")}</p>
+          </div>
+        )}
+      </FormSection>
     </div>
   );
 }
@@ -492,4 +855,46 @@ function configFrom(provider: AiProvider): AiProviderConfigInput {
 
 function normalize(value: AiProviderConfigInput): AiProviderConfigInput {
   return { ...value, name: value.name.trim(), baseUrl: value.baseUrl.trim(), model: value.model.trim(), environmentVariable: value.environmentVariable?.trim() || undefined, customAuthHeader: value.customAuthHeader?.trim() || undefined, apiVersion: value.apiVersion?.trim() || undefined };
+}
+
+function findPresetName(value: AiProviderConfigInput) {
+  return PRESETS.find((preset) => (
+    preset.label !== "Custom"
+    && preset.config.baseUrl === value.baseUrl
+    && preset.config.protocol === value.protocol
+    && preset.config.authScheme === value.authScheme
+  ))?.label ?? "Custom";
+}
+
+function protocolLabel(protocol: AiProviderConfigInput["protocol"]) {
+  switch (protocol) {
+    case "openai_chat_completions":
+      return "OpenAI Chat";
+    case "openai_responses":
+      return "OpenAI Responses";
+    case "anthropic_messages":
+      return "Anthropic Messages";
+    case "azure_openai":
+      return "Azure OpenAI";
+    case "openai_compatible":
+      return "OpenAI Compatible";
+  }
+}
+
+function authLabel(
+  authScheme: AiProviderConfigInput["authScheme"],
+  t: (key: string) => string,
+) {
+  switch (authScheme) {
+    case "bearer":
+      return "Bearer";
+    case "api_key":
+      return "api-key";
+    case "x_api_key":
+      return "x-api-key";
+    case "custom_header":
+      return t("ai.customAuthHeader");
+    case "none":
+      return t("ai.noAuthentication");
+  }
 }

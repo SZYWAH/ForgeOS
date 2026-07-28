@@ -5,6 +5,7 @@
   "scripts": {
     "build": "npm run frontend:build",
     "test": "npm --prefix frontend run test --",
+    "test:visual": "npm --prefix frontend run test:visual --",
     "typecheck": "npm --prefix frontend run typecheck",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
