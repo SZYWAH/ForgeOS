@@ -475,6 +475,21 @@ mod tests {
         (format!("http://{address}/v1"), handle)
     }
 
+    fn request_header<'a>(request: &'a str, expected_name: &str) -> Option<&'a str> {
+        request
+            .split_once("\r\n\r\n")
+            .map(|(headers, _)| headers)
+            .unwrap_or(request)
+            .lines()
+            .skip(1)
+            .find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    name.eq_ignore_ascii_case(expected_name)
+                        .then(|| value.trim())
+                })
+            })
+    }
+
     fn protocol_provider(
         protocol: AiProviderProtocol,
         base_url: String,
@@ -768,13 +783,19 @@ mod tests {
             assert!(request.starts_with(&format!("POST {expected_path} HTTP/1.1")));
             assert!(request.contains("\"model\":\"model\""));
             match auth {
-                AiAuthScheme::Bearer => {
-                    assert!(request.contains("authorization: Bearer test-secret"))
+                AiAuthScheme::Bearer => assert_eq!(
+                    request_header(&request, "authorization"),
+                    Some("Bearer test-secret")
+                ),
+                AiAuthScheme::ApiKey => {
+                    assert_eq!(request_header(&request, "api-key"), Some("test-secret"))
                 }
-                AiAuthScheme::ApiKey => assert!(request.contains("api-key: test-secret")),
                 AiAuthScheme::XApiKey => {
-                    assert!(request.contains("x-api-key: test-secret"));
-                    assert!(request.contains("anthropic-version: 2023-06-01"));
+                    assert_eq!(request_header(&request, "x-api-key"), Some("test-secret"));
+                    assert_eq!(
+                        request_header(&request, "anthropic-version"),
+                        Some("2023-06-01")
+                    );
                     assert!(request.contains("\"system\":\"system\""));
                 }
                 _ => assert!(!request.contains("test-secret")),
