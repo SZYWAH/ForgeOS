@@ -1211,3 +1211,39 @@ D9.4 把已经冻结的 GitHub Project Intelligence 与人工导入闭环交付�
 - MCP 只读，不执行代码、不修改 Git、不写入 ForgeOS 或 GitHub。
 - 本版未签名，SmartScreen 可能显示“未知发布者”。
 - 卸载默认保留 ForgeOS 数据，不提供自动更新器。
+
+# 2026-07-28 — AI 服务工作台与表单视觉修复
+
+## 当前阶段
+
+D9.4.1 统一 AI 服务页的创建、编辑、凭据和诊断界面。本阶段只调整前端构图、控件契约和可访问性，不修改 Provider Domain、SQLite、IPC 或调用行为。
+
+## 完成内容
+
+- AI 服务页改为列表与详情/创建区之间的工作台内切换；无服务时只显示一个紧凑空状态。
+- 新增共享 `FormField`、`SelectField`、`CheckboxField` 和 `FormSection`，统一标签、必填标记、说明、焦点和错误结构。
+- 通用文本输入样式显式排除 checkbox、radio 和按钮，修复 checkbox 被拉伸和文字错位。
+- 常用 Provider 预设只显示必要字段和技术摘要；自定义接口展示完整协议、鉴权和密钥要求。
+- Ollama 与 LM Studio 等本地接口不再显示无意义的密钥配置。
+- 连接诊断使用统一状态反馈，手动调用工具默认折叠，避免抢占首屏。
+- 中英文文案同步更新，Provider 创建与编辑继续复用原有业务 API。
+
+## 无头视觉验收
+
+- 新增仅供测试的 Vite 页面，挂载真实 `AiProvidersPage`、真实 CSS、i18n 和 Tauri 官方 `mockIPC`；测试页不进入生产构建和正式路由。
+- Playwright 固定使用本机 Edge `msedge` Channel 和 `headless: true`，不打开可见窗口，不读取真实 SQLite、Credential Manager 或 AI Provider。
+- 9 个视口/缩放项目覆盖 960×720、1280×820、1920×1080 与 100%、125%、150% device scale。
+- 几何断言覆盖水平溢出、按钮边界、18px Checkbox、标签首行对齐、统一控件高度、唯一主操作和 900px 以下单列。
+- Custom 创建态与已配置服务详情态生成 Windows Edge 截图基线，并完成图像人工检查。
+
+## 验证结果
+
+- Frontend：`npm run typecheck`、13 个 Vitest 文件共 68 项测试、`npm run test:visual` 和 `npm run build` 全部通过；Vite 仅保留既有 Chunk 体积提示。
+- Desktop：`cargo fmt --check`、`cargo check` 与完整 `cargo test` 通过；库测试 106 项通过、1 项本机 Codex Smoke Test按设计忽略，集成测试通过。
+- MCP：格式检查与完整测试通过，3 项只读测试保持。
+- Rust 修改仅位于 `ai_client.rs` 测试模块，修复 HTTP Header 名大小写脆弱断言；生产协议网关、Domain、Migration、IPC 和数据库均无差异。
+- 本轮按要求没有启动可见桌面窗口；原生标题栏视觉记为 `UNVERIFIED`，页面内容由同 Chromium/WebView2 渲染内核的无头 Edge 验收。
+
+## 下一步
+
+D10.0 只形成 GitHub Clone & Reproduction 的架构、安全和交互冻结计划。在用户确认新的架构决策前，不实现 Clone、依赖安装、构建运行、GitHub 写入或第三方代码执行。

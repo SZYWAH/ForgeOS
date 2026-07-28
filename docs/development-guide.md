@@ -297,6 +297,18 @@ D9.1 及后续实现必须先阅读：
 - 最终导入必须是单事务；只允许创建 Project、Repository Evidence 和可选的最新 Release Evidence。
 - 静态分析不得自动创建 Snapshot、Session、Achievement、本地 Repository 或 Commit Evidence。
 
+## Form Control Contract
+
+- 新增或重构的表单必须使用共享 `FormField`、`SelectField`、`CheckboxField` 和 `FormSection`，不得在页面中重新拼接必填标记、说明和错误结构。
+- 必填标记必须与标签文字处于同一行；说明和错误通过 `aria-describedby` 与控件关联。
+- 文本输入的通用选择器必须显式排除 checkbox、radio、button 和 submit，禁止让布尔控件继承文本框宽度与高度。
+- Select 保留原生键盘语义，只通过 Token 统一边框、箭头、焦点和禁用状态；不得自行实现不可访问的下拉菜单。
+- Checkbox 使用独立的控件与标签网格，18px 控件顶部对齐文字首行，完整标签区域可点击。
+- AI 服务预设采用渐进展示：预设固定的协议和鉴权只显示摘要，自定义接口才展示完整技术配置；本地无鉴权服务不得显示密钥字段。
+- 每个表单页面同一时刻最多一个主要操作。空列表不得同时渲染空状态和无意义的详情面板。
+- AI 服务页视觉回归使用 `npm run test:visual`，固定调用本机 Edge 的 headless Channel；禁止测试脚本打开可见窗口或读取真实 Provider、Credential Manager 和 SQLite。
+- 视觉夹具必须复用真实页面、真实 CSS、i18n 和 Tauri `mockIPC`，且只能存在于测试入口，不得注册生产路由或进入正式构建。
+
 ### 文档与代码一致性检查
 
 - 数据库 CHECK 值、Rust 枚举、IPC DTO、前端状态和语言资源必须逐项对应。

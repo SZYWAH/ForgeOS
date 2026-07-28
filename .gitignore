@@ -2,6 +2,8 @@
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 
 # Rust and Tauri builds
 target/
@@ -9,6 +11,9 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/*.exe
 dist-release/
+/forgeos.exe
+/forgeos-mcp.exe
+/uninstall.exe
 
 # Local ForgeOS runtime data
 .data/
